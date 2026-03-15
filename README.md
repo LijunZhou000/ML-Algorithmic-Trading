@@ -87,3 +87,88 @@
 > El presente proyecto tiene como objetivo el desarrollo e implementación de un sistema basado en técnicas de Machine Learning orientado al análisis y detección de patrones en “Swing Charts”, una herramienta ampliamente utilizada en el análisis técnico de los mercados financieros. A partir de datos históricos y en tiempo real, el sistema generará representaciones de “Swing Charts” a partir de “Bar Charts” y aplicará algoritmos de aprendizaje supervisado y no supervisado para identificar configuraciones recurrentes, como dobles máximos, dobles mínimos o rupturas de tendencia.
 > 
 > El desarrollo se llevará a cabo principalmente en Python, utilizando librerías como pandas, scikit-learn y matplotlib, además de entornos de conexión con plataformas de trading como Interactive Brokers API (IBKR). El proyecto busca evaluar la capacidad predictiva de los modelos entrenados y su utilidad en la generación de señales de compra o venta dentro de una estrategia de trading algorítmico. Con ello, se pretende aportar un enfoque innovador que combine la solidez del análisis técnico clásico con la adaptabilidad de las técnicas modernas de inteligencia artificial. 
+
+---
+
+# Asignaturas de las que he sacado conocimientos para el proyecto
+
+:heavy_check_mark: Mucho conocimiento
+:heavy_minus_sign: Algo de conocimiento
+:heavy_multiplication_x: Nada de conocimiento
+
+- Primero
+  - Primer cuatrimestre
+    - Álgebra
+    - Cálculo
+    - Fundamentos de Procesado de Datos
+    - :heavy_check_mark: Programación
+    - Desarrollo de Habilidades Profesionales
+    - Introducción a la Ingeniería de Datos
+  - Segundo cuatrimestre
+    - :heavy_check_mark: Bases de Datos Relacionales y Datos Estructurados
+    - Modelos Matemáticos y Matemática Discreta
+    - Optimización
+    - Señales y Sistemas
+    - Sistemas de Adquisición de Datos
+
+- Segundo
+  - Primer cuatrimestre
+    - Bases de Datos No Relacionales y Distribuidas
+    - Uso Profesional de la Lengua Inglesa
+    - Probabilidad y Señales Aleatorias
+    - :heavy_check_mark: Programación para Big Data
+    - Redes y Servicios de Comunicaciones
+  - Segundo cuatrimestre
+    - Fundamentos de Gestión Empresarial
+    - Inferencia Estadística y Series Temporales
+    - Redes de Sensores
+    - Teoría de la Información
+    - Sistemas de Comunicaciones para Ingeniería de Datos
+    - Tecnologías Web
+
+- Tercero
+  - Primer cuatrimestre
+    - Análisis de Señal
+    - :heavy_check_mark: Aprendizaje Automático
+    - Arquitecturas de Procesado Masivo de Datos
+    - :heavy_check_mark: Computación en la Nube
+    - Desarrollo Profesional del Ingeniero de Datos
+    - Emprendimiento y Modelos de Negocio
+  - Segundo cuatrimestre
+    - :heavy_check_mark: Análisis y Visualización de Datos
+    - Aplicaciones Sectoriales
+    - :heavy_check_mark: Ingeniería Big Data en la Nube
+    - Procesado Avanzado de Señales y Datos
+    - :heavy_check_mark: Técnicas de Soporte a la Decisión
+
+- Cuarto
+  - Primer cuatrimestre
+    - :heavy_check_mark: Proyectos de Ingeniería de Datos y Sistemas
+    - Ciberseguridad y Protección de Datos
+    - Gestión de Proyectos
+    - Marco Ético y Legal
+    - :heavy_check_mark: Ingeniería Web
+  - Segundo cuatrimestre
+    - Herramientas para la Computación y Visualización
+    - Tecnologías de la Información Geoespacial
+    - Electrónica de Consumo
+
+## Contenido exacto de he aplicado de cada asignatura
+
+- Programación
+  - Python
+- Bases de Datos Relacionales y Datos Estructurados
+  - SQL
+- Programación para Big Data
+  - Sklearn
+- Aprendizaje Automático
+- Computación en la Nube
+  - Docker
+- Análisis y Visualización de Datos
+  - Plotly
+- Ingeniería Big Data en la Nube
+- Técnicas de Soporte a la Decisión
+  - Pyomo
+- Proyectos de Ingeniería de Datos y Sistemas
+- Ingeniería Web
+  - React

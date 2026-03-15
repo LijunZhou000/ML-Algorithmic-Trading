@@ -1,0 +1,183 @@
+\documentclass[11pt]{report}
+
+%to allow more levels of sections and paragraphs:
+\setcounter{secnumdepth}{4}
+
+%Packages
+\usepackage[utf8]{inputenc}
+\usepackage[breaklinks=true,hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage[spanish, english]{babel}
+\usepackage{url}
+\usepackage{multirow}
+\usepackage{verbatim} %comentarios
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{textcomp,gensymb}
+\usepackage{colortbl}
+\usepackage{graphicx} % Para escalar la tabla
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{multirow}
+\usepackage{diagbox}
+\usepackage{dashrule}
+\usepackage{pdflscape}
+\usepackage{fancyhdr} % Para personalizar encabezados y pies
+\usepackage[T1]{fontenc}
+
+\usepackage{multicol} 
+
+\usepackage{subfig}
+
+\usepackage{rotating}
+
+\usepackage{pifont}
+
+\usepackage{relsize}
+\usepackage{xcolor,colortbl}
+\usepackage{wrapfig}
+\usepackage{bbm}
+\usepackage[labelfont=bf]{caption}
+\usepackage{tabularx}
+
+\DeclareMathOperator{\arctantwo}{arctan2}
+
+\graphicspath{ {img/} }
+
+\usepackage[document]{ragged2e}
+\usepackage{float}
+\usepackage{listings}
+\usepackage[left=3cm, right=3cm, top = 2.5cm, bottom = 2.5cm, includehead, includefoot]{geometry}
+
+\usepackage{titlesec}
+
+\usepackage{appendix}
+\usepackage{minted}
+\usepackage{afterpage}
+\usepackage{xparse}
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+
+\usepackage{eurosym}
+
+\setlength{\headheight}{32.09pt}
+
+%Config
+\setlength{\parskip}{1em}
+\setlength{\parindent}{0em}
+
+\titleformat*{\section}{\color{black}\bfseries\Large}
+\titleformat{\chapter}[display]
+{\normalfont\bfseries}{}{0pt}{\Huge}
+
+\makeatletter
+    \renewcommand*\@makechapterhead[1]{
+        {\Huge\bfseries #1\par \nobreak\vskip 60\p@}
+    }
+\makeatother
+ 
+\begin{document}
+
+\selectlanguage{spanish}
+
+\renewcommand{\contentsname}{Índice}
+\renewcommand{\partname}{Parte} 
+\renewcommand{\chaptername}{Chapter} 
+
+\renewcommand{\appendixname}{Apéndice} 
+\renewcommand{\figurename}{Figura}
+\renewcommand{\tablename}{Tabla} 
+\renewcommand{\listfigurename}{Índice de figuras} 
+\renewcommand{\glossaryname}{Glosario}
+
+
+\input{intro/cover_orange.tex}
+
+\pagenumbering{gobble} %Quitar numeracion
+
+\null\clearpage % WhitePage
+
+\input{intro/author.tex}
+
+\null\clearpage % WhitePage
+
+\input{intro/cover.tex}
+
+\null\clearpage % WhitePage
+
+
+% Page header and footer
+\pagestyle{fancy}
+
+\fancyhf{}
+\lhead{
+\begin{picture}(0,0)
+    \includegraphics[scale=0.04]{img/logoescuela.jpg}
+\end{picture}{}
+}
+\rhead{\thepage}
+% End
+
+\justifying
+
+
+\input{sections/resumen.tex}
+\clearpage
+
+\input{sections/summary.tex}
+\clearpage
+
+%\input{sections/dedicatoria.tex}
+%\clearpage\null\newpage
+
+\clearpage
+\input{sections/index.tex}
+
+\clearpage\null\newpage
+\input{sections/glosario.tex}
+\clearpage\null\newpage
+
+\pagenumbering{arabic}
+
+%%%%% CUERPO DEL DOCUMENTO %%%%%%%
+
+\input{sections/introducción.tex}
+
+\input{sections/estadoarte}
+
+\input{sections/desarrollo}
+
+\input{sections/resultados.tex}
+
+\input{sections/conclusiones.tex}
+
+\input{sections/aspectos.tex}
+
+\input{sections/presupuesto.tex}
+
+%%%%% ESTILO DEL DOCUMENTO %%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Bibliografía. Usa el ref.bib 
+\clearpage
+
+%\nocite{*}
+
+\Urlmuskip=0mu plus 1mu\relax
+
+\addcontentsline{toc}{chapter}{Bibliografía}
+\bibliography{ref.bib}
+\bibliographystyle{ieeetr}
+
+%% Anexos
+\chapter*{Anexos}% If \appendix doesn't insert a \chapter
+\addcontentsline{toc}{chapter}{Anexos}% Print Appendix in ToC
+\setcounter{section}{0}% Reset numbering for sections
+\renewcommand{\thesection}{\Alph{section}}% Adjust section printing (from here onward)
+
+\input{anexos/anexoA.tex}
+\clearpage
+
+\end{document}

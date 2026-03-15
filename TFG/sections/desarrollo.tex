@@ -1,0 +1,92 @@
+\setlength{\parindent}{0em}
+
+\chapter{Desarrollo}\label{cap3}\thispagestyle{fancy}
+
+\vspace{-1.3cm}
+
+\section{XXXXXXXXXXXX}
+
+Esto es texto normal y corriente. \textbf{Negritaaaaaaa}.
+
+Parrafo sólo separando por un intro del anterior. la justificacion del texto es automatica.
+
+
+\section{Seccion 1}
+
+Esto es una sección dentro del capitulo principal
+
+\subsection{Subsection 1}
+
+Esto es un subsección dentro de la sección 1
+
+\section{Seccion 2}
+
+Esto es una sección 2 dentro del capitulo principal
+
+\subsection{Subsection 2}
+
+Esto es un subsección dentro de la sección 2
+
+\section{Seccion 3}
+
+Ejemplo de tabla (Hay que conocer la sintáxis específica pero existen muchas herramientas online para generarla gráficamente y copiar el código directamente).
+
+\begin{table}[H]
+\caption{Average error comparison of an Algorithm with several methods expressed in centimeters.}
+\label{table1mufaf}
+\begin{center}
+\begin{tabular}{ | c | c | c | c | c | }
+\hline
+Positioning Method & XBee & CC2420 & WiFi & Bluetooth \\
+\hline
+Euclidean Distance & 110.71 & 150.367 &	122.72 & 	150.57 \\
+\hline
+Mahalanobis Distance & 108.33 &	140.05 & 112.12 & 142.58 \\
+\hline
+K-NN & 105.87 & 139.58 & 157.42 &	161.29 \\
+\hline
+Gaussian Kernel & 67.27 & 61.92 & 63.30 & 170.34 \\
+\hline
+Exponential Kernel (This Work)  & 63.05  &  59.49 & 79.73 & 137.15 \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+Esto es un ejemplo de poner una imagen (por defecto las imágenes se almacenan aquí en la carpeta ``img'').
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Machine Learning project chain: data acquisition, cleaning, learning phase and model deployment.}
+    \label{fig_mlp}
+\end{figure}
+
+
+Citar el paper de ResNet sería así \cite{He2015DeepRL}. Tienes que poner el nombre que te aparece en la cita de latex al inicio, este nombre lo puedes modificar por lo que tu quieras para tenerlo controlado.
+
+
+Ejemplo de elementos en diferentes puntos y ecuaciones.
+
+\begin{itemize}
+	\item Classification accuracy is the number of correct predictions made as a ratio of all predictions made.
+	\begin{equation}
+		accuracy = \frac{TP+TN}{TP+FP+TN+FN}
+	\end{equation}
+	Where $TP$ is True Positives, $FP$ False Positives, $TN$ True Negatives and $FN$ False Negatives.
+	\item Logarithmic Loss works by penalizing the false classifications. When working with Log Loss, the classifier must assign probability to each class for all the samples.
+	\begin{equation}
+		LogLoss = -\frac{1}{N}\sum^{N}_{i=1}\sum^{M}_{j=1}y_{ij}log(p_{ij})
+	\end{equation}
+	Where $N$ is the number of samples, $M$ is the number of possible labels, $y_{ij}$ takes value $1$ if label $j$ is the correct classification for instance $i$, and $0$ otherwise and $p_{ij}$ is the model probability of assigning label $j$ to instance $i$.	
+	\item Confusion Matrix gives us a matrix as output and describes the complete performance of the model comparing all the data involved and presenting the correct and incorrect number of asserts and failures between classes.
+    
+	\item Area Under Curve (AUC) is used for binary classification problem. AUC of a classifier is equal to the probability that the classifier will rank a randomly chosen positive example higher than a randomly chosen negative example.
+    
+	\item F1 Score is the Harmonic Mean between precision and recall. The range for F1 Score is $[0,1]$. It tells you how precise your classifier is, as well as how robust it is.
+	\begin{equation}
+		F1 = \frac{2 \cdot precision\cdot recall}{precision + recall}
+	\end{equation}
+    
+\end{itemize}
+

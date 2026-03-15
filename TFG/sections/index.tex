@@ -1,0 +1,21 @@
+\clearpage
+
+\pagenumbering{gobble}
+
+\fancypagestyle{plain}{
+  \thispagestyle{fancy}
+  \renewcommand{\contentsname}{Índice}
+}
+
+\tableofcontents
+
+\clearpage %%% Quita esto si no quieres las figuras
+\renewcommand{\listfigurename}{Listado de figuras}
+\listoffigures
+
+\clearpage %%% Quita esto si no quieres las tablas
+\renewcommand{\listtablename}{Listado de tablas}
+\listoftables
+
+\clearpage
+

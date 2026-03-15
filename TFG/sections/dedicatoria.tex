@@ -1,0 +1,13 @@
+\setlength{\parindent}{0em}
+\pagenumbering{gobble}
+\thispagestyle{fancy}
+
+\noindent% prevent the box to be shifted a bit to the right
+\makebox[\textwidth][r]{% create a box, with it's content aligned to the right
+  \begin{minipage}{.5\textwidth}% create a content half width
+    \section*{Agradecimientos}
+    \justifying
+    \textit{Si quieres poner dedicatoria, descomentar en main.tex.}
+
+  \end{minipage}
+}
