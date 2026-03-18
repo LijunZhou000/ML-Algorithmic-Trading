@@ -1,6 +1,7 @@
 import pandas as pd
 import mplfinance as mpf
 import numpy as np
+import talib as ta
 
 def import_dataset(asset='gc1', format='dia'):
     """
@@ -26,6 +27,9 @@ def import_dataset(asset='gc1', format='dia'):
     df = pd.read_csv(file_path)
     # Normalizar nombres de columnas a minúsculas
     df.columns = df.columns.str.lower()
+    df = df.rename(columns={
+        'vol': 'volume'
+    })
     # Convertir columna de fecha (formato YYYYMMDD) a datetime
     df['dtyyyymmdd'] = pd.to_datetime(df['dtyyyymmdd'], format='%Y%m%d')
     # Asegurar que time tenga 6 dígitos (HHMMSS) y convertir a tipo time
@@ -227,3 +231,199 @@ def compute_order_levels(row, atr_mult_sl=2.0, rr_ratio=2.0):
     else:
         return pd.Series({'entry': np.nan, 'stop': np.nan, 'tp': np.nan})
     return pd.Series({'entry': entry, 'stop': stop, 'tp': tp})
+
+# Media movil simple
+def sma(df, n=20):
+    df[f"sma_{n}"] = df['close'].rolling(n).mean()
+    return df
+# Media movil exponencial
+def ema(df, n=20):
+    df[f"ema_{n}"] = df['close'].ewm(span=n, adjust=False).mean()
+    return df
+
+# Convergencia y divergencia de medias moviles
+def macd(df, n_fast=12, n_slow=26):
+    df['ema_fast'] = df['close'].ewm(span=n_fast, adjust=False).mean()
+    df['ema_slow'] = df['close'].ewm(span=n_slow, adjust=False).mean()
+    df['macd'] = df['ema_fast'] - df['ema_slow']
+    df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+    df['histogram'] = df['macd'] - df['signal']
+    return df
+
+# Índice direccional medio
+def adx(df, n=14):
+    df['adx'] = ta.ADX(df['high'], df['low'], df['close'], timeperiod=n)
+    return df
+
+# Índice de fuerza relativa
+def rsi(df, n=14):
+    df['rsi'] = ta.RSI(df['close'], timeperiod=n)
+    return df
+
+# Estocástico
+def stoch(df, n=14, slowk_period=3, slowd_period=3, slowk_matype=0, slowd_matype=0):
+    df['slowk'], df['slowd'] = ta.STOCH(df['high'], df['low'], df['close'], fastk_period=n, slowk_period=slowk_period, slowd_period=slowd_period, slowk_matype=slowk_matype, slowd_matype=slowd_matype)
+    return df
+
+# Índice de fuerza de elder
+def elder_force_index(df, n=13):
+    df['efi'] = ta.EMA((df['close'] - df['close'].shift(1)) * df['volume'], timeperiod=n)
+    return df
+
+# Bandas de bollinger
+def bollinger_bands(df, n=20, num_std_dev=2):
+    df['bb_middle'] = df['close'].rolling(n).mean()
+    df['bb_std'] = df['close'].rolling(n).std()
+    df['bb_upper'] = df['bb_middle'] + num_std_dev * df['bb_std']
+    df['bb_lower'] = df['bb_middle'] - num_std_dev * df['bb_std']
+    return df
+# Repensar la función anterior
+
+# Rango verdadero medio
+def true_range(df):
+    df['atr'] = ta.TRANGE(df['high'], df['low'], df['close'])
+    return df
+# Repensar la función anterior
+
+# Commodity Channel Index
+def cci(df, n=20):
+    df['cci'] = ta.CCI(df['high'], df['low'], df['close'], timeperiod=n)
+    return df
+
+# Volumen en balance
+def obv(df):
+    df['obv'] = ta.OBV(df['close'], df['volume'])
+    return df
+# Repensar la función anterior
+
+# Volumen relativo
+def vpt(df):
+    df['vpt'] = (df['close'] - df['close'].shift(1)) / df['close'].shift(1) * df['volume']
+    return df
+# Repensar la función anterior
+
+# Acumulación/distribución
+def ad(df):
+    df['ad'] = ta.AD(df['high'], df['low'], df['close'], df['volume'])
+    return df
+# Repensar la función anterior
+
+def generate_features(df, config_json=None):
+    """Genera indicadores técnicos en el DataFrame `df`.
+    `config_json` puede ser un diccionario o un string JSON con configuraciones por indicador,
+    por ejemplo: {'sma': {'n':20}, 'macd': {'n_fast':12,'n_slow':26}}
+    Devuelve el DataFrame con nuevas columnas."""
+    import json
+    cfg = {}
+    if config_json:
+        if isinstance(config_json, str):
+            try:
+                cfg = json.loads(config_json)
+            except Exception as e:
+                raise ValueError('config_json string no es JSON válido: ' + str(e))
+        elif isinstance(config_json, dict):
+            cfg = config_json
+        else:
+            raise ValueError('config_json debe ser dict o JSON string')
+    # helper para obtener parámetros (devuelve dict vacío si no hay configuración)
+    def p(name):
+        return cfg.get(name, {}) if cfg else {}
+    # función auxiliar para llamadas seguras donde se pasan kwargs sólo si existen
+    def _call(func, name, pass_cfg=True):
+        params = p(name)
+        if pass_cfg and params:
+            return func(df, **params)
+        return func(df)
+    # Aplicar indicadores (pasar kwargs sólo cuando la función los acepta)
+    df = df.copy()
+    df = _call(sma, 'sma')
+    df = _call(ema, 'ema')
+    df = _call(macd, 'macd')
+    df = _call(adx, 'adx')
+    df = _call(rsi, 'rsi')
+    df = _call(stoch, 'stoch')
+    df = _call(elder_force_index, 'elder_force_index')
+    df = _call(bollinger_bands, 'bollinger_bands')
+    # true_range en este notebook no recibe kwargs, llamarla directamente
+    df = true_range(df)
+    df = _call(cci, 'cci')
+    df = _call(obv, 'obv', pass_cfg=False)
+    df = _call(vpt, 'vpt', pass_cfg=False)
+    df = _call(ad, 'ad', pass_cfg=False)
+    return df
+
+def resample_ohlcv(df, period="5min"):
+    """
+    Resamplea un dataframe OHLCV al periodo deseado.
+    period puede ser: '1min', '5min', '15min', '30min', '1H', '1D', etc.
+    """
+
+    # Asegurar orden temporal
+    df = df.sort_values("datetime").copy()
+
+    # Asegurar que datetime es datetime64
+    df["datetime"] = pd.to_datetime(df["datetime"])
+
+    # Establecer índice temporal
+    df = df.set_index("datetime")
+
+    # Diccionario OHLCV estándar
+    ohlc_dict = {
+        "open": "first",
+        "high": "max",
+        "low": "min",
+        "close": "last",
+        "volume": "sum",
+        "openint": "last"
+    }
+
+    # Resample usando el periodo elegido
+    df_resampled = df.resample(period).agg(ohlc_dict)
+
+    # Eliminar velas vacías
+    df_resampled = df_resampled.dropna(subset=["open", "high", "low", "close"])
+
+    # Añadir columnas extra
+    df_resampled["ticker"] = df["ticker"].iloc[0]
+    df_resampled["per"] = period
+
+    # Reset index
+    df_resampled = df_resampled.reset_index()
+
+    return df_resampled
+
+# Generar datos ohlcv acumulados diarios a partir de los datos de 5 minutos
+def daily_ohlcv_cummulative(df_5_min):
+    df = df_5_min.copy()
+    
+    # Asegurar orden temporal
+    df = df.sort_values('datetime')
+    
+    # Crear columna de día
+    df['date'] = df['datetime'].dt.date
+    
+    # Open del día (primer valor de cada grupo)
+    df['open_day'] = df.groupby('date')['open'].transform('first')
+    
+    # High acumulado intradía
+    df['high_cum'] = df.groupby('date')['high'].cummax()
+    
+    # Low acumulado intradía
+    df['low_cum'] = df.groupby('date')['low'].cummin()
+    
+    # Volume acumulado intradía
+    df['volume_cum'] = df.groupby('date')['volume'].cumsum()
+    
+    # Open interest (último valor hasta ese momento → ya es el actual)
+    df['openint_cum'] = df['openint']
+    
+    # (Opcional) puedes sobrescribir columnas originales
+    # df['open'] = df['open_day']
+    # df['high'] = df['high_cum']
+    # df['low'] = df['low_cum']
+    # df['volume'] = df['volume_cum']
+    
+    # Limpiar columnas auxiliares si quieres
+    # df = df.drop(columns=['date', 'open_day', 'high_cum', 'low_cum', 'volume_cum'])
+    
+    return df
