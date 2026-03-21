@@ -2,18 +2,24 @@ import talib as ta
 import numpy as np
 import pandas as pd
 import json
+import time
+from tqdm import tqdm
+from collections import OrderedDict
 
 # Media movil simple
 def sma(df, n=20):
+    df = df.copy()
     df[f"sma_{n}"] = df['close'].rolling(n).mean()
     return df
 # Media movil exponencial
 def ema(df, n=20):
+    df = df.copy()
     df[f"ema_{n}"] = df['close'].ewm(span=n, adjust=False).mean()
     return df
 
 # Convergencia y divergencia de medias moviles
 def macd(df, n_fast=12, n_slow=26):
+    df = df.copy()
     df['ema_fast'] = df['close'].ewm(span=n_fast, adjust=False).mean()
     df['ema_slow'] = df['close'].ewm(span=n_slow, adjust=False).mean()
     df['macd'] = df['ema_fast'] - df['ema_slow']
@@ -23,26 +29,31 @@ def macd(df, n_fast=12, n_slow=26):
 
 # Índice direccional medio
 def adx(df, n=14):
+    df = df.copy()
     df['adx'] = ta.ADX(df['high'], df['low'], df['close'], timeperiod=n)
     return df
 
 # Índice de fuerza relativa
 def rsi(df, n=14):
+    df = df.copy()
     df['rsi'] = ta.RSI(df['close'], timeperiod=n)
     return df
 
 # Estocástico
 def stoch(df, n=14, slowk_period=3, slowd_period=3, slowk_matype=0, slowd_matype=0):
+    df = df.copy()
     df['slowk'], df['slowd'] = ta.STOCH(df['high'], df['low'], df['close'], fastk_period=n, slowk_period=slowk_period, slowd_period=slowd_period, slowk_matype=slowk_matype, slowd_matype=slowd_matype)
     return df
 
 # Índice de fuerza de elder
 def elder_force_index(df, n=13):
+    df = df.copy()
     df['efi'] = ta.EMA((df['close'] - df['close'].shift(1)) * df['volume'], timeperiod=n)
     return df
 
 # Bandas de bollinger
 def bollinger_bands(df, n=20, num_std_dev=2):
+    df = df.copy()
     df['bb_middle'] = df['close'].rolling(n).mean()
     df['bb_std'] = df['close'].rolling(n).std()
     df['bb_upper'] = df['bb_middle'] + num_std_dev * df['bb_std']
@@ -51,21 +62,32 @@ def bollinger_bands(df, n=20, num_std_dev=2):
 
 # Rango verdadero medio
 def true_range(df, window=14):
-    df['atr'] = ta.TRANGE(df['high'], df['low'], df['close'])
-    df["range"] = df["high"] - df["low"]
-    df["range_mean"] = df["range"].rolling(window).mean()
+    # pointwise true range (not ATR)
+    df = df.copy()
+    df['true_range'] = ta.TRANGE(df['high'], df['low'], df['close'])
+    df['range'] = df['high'] - df['low']
+    df['range_mean'] = df['range'].rolling(window).mean()
+    return df
+
+def compute_atr(df, period=14):
+    # ATR computed as rolling mean of true_range
+    df = df.copy()
+    if 'true_range' not in df.columns:
+        df = true_range(df, window=period)
+    df['atr'] = df['true_range'].rolling(period).mean()
     return df
 
 # Commodity Channel Index
 def cci(df, n=20):
+    df = df.copy()
     df['cci'] = ta.CCI(df['high'], df['low'], df['close'], timeperiod=n)
     return df
 
 # Volumen en balance
 def obv(
     df,
-    roc_windows=[5, 10],
-    smooth_windows=[10],
+    roc_windows=None,
+    smooth_windows=None,
     zscore_window=20,
     relative_volume_window=20,
     normalize_by="range",  # "range", "close", "none"
@@ -73,6 +95,7 @@ def obv(
     include_direction=True,
     include_delta=True
 ):
+    df = df.copy()
     # OBV clásico
     df['obv'] = ta.OBV(df['close'], df['volume'])
 
@@ -90,6 +113,12 @@ def obv(
         df['obv_norm'] = df['obv'] / df['close']
     else:
         df['obv_norm'] = df['obv']
+
+    # defaults for list args to avoid mutable defaults
+    if roc_windows is None:
+        roc_windows = [5, 10]
+    if smooth_windows is None:
+        smooth_windows = [10]
 
     # OBV ROC
     for w in roc_windows:
@@ -120,27 +149,31 @@ def obv(
 
 # Volumen por precio
 def vpt(df):
+    df = df.copy()
     df['vpt'] = (df['close'] - df['close'].shift(1)) / df['close'].shift(1) * df['volume']
     return df
 
 # Volumen relativo
 def relative_volume(df, window=20):
-    df["volumen_medio"] = df["volume"].rolling(window=window).mean()
-    df["volumen_relativo"] = df["volume"] / df["volumen_medio"]
+    # normalize names to english snake_case
+    df = df.copy()
+    df['avg_volume'] = df['volume'].rolling(window=window).mean()
+    df['relative_volume'] = df['volume'] / df['avg_volume']
     return df
 
 # Acumulación/distribución
 def ad(
     df,
     zscore_window=20,
-    roc_windows=[5, 10],
-    smooth_windows=[10],
+    roc_windows=None,
+    smooth_windows=None,
     relative_volume_window=20,
     normalize_by="range",   # "range", "close", "none"
     include_clv=True,
     include_delta=True,
     include_direction=True
 ):
+    df = df.copy()
     # --- CLV (Close Location Value) ---
     if include_clv:
         df["clv"] = ((df["close"] - df["low"]) - (df["high"] - df["close"])) / \
@@ -156,6 +189,12 @@ def ad(
         df["ad_norm"] = df["ad"] / df["close"]
     else:
         df["ad_norm"] = df["ad"]
+
+    # defaults for list args
+    if roc_windows is None:
+        roc_windows = [5, 10]
+    if smooth_windows is None:
+        smooth_windows = [10]
 
     # --- Rate of Change (momentum del A/D) ---
     for w in roc_windows:
@@ -185,6 +224,7 @@ def ad(
     return df
 
 def mfi(df, window=14):
+    df = df.copy()
     typical_price = (df['high'] + df['low'] + df['close']) / 3
     money_flow = typical_price * df['volume']
 
@@ -197,6 +237,7 @@ def mfi(df, window=14):
     df['mfi'] = 100 - (100 / (1 + (pos_sum / neg_sum)))
     return df
 def cmf(df, window=20):
+    df = df.copy()
     clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / \
           (df['high'] - df['low']).replace(0, np.nan)
 
@@ -206,97 +247,256 @@ def cmf(df, window=20):
     return df
 def vwap(df):
     typical_price = (df['high'] + df['low'] + df['close']) / 3
-    df['vwap'] = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
+    tp_vol = typical_price * df['volume']
+
+    # Resetear por sesión (fecha) y ticker
+    group_keys = []
+    if 'ticker' in df.columns:
+        group_keys.append('ticker')
+    if 'dtyyyymmdd' in df.columns:
+        group_keys.append('dtyyyymmdd')
+
+    if group_keys:
+        df['vwap'] = (
+            tp_vol.groupby([df[k] for k in group_keys], sort=False).cumsum()
+            / df['volume'].groupby([df[k] for k in group_keys], sort=False).cumsum()
+        )
+    else:
+        # fallback: sin info de fecha/ticker, cumsum global
+        df['vwap'] = tp_vol.cumsum() / df['volume'].cumsum()
+
     return df
 def volume_zscore(df, window=20):
+    df = df.copy()
     mean = df['volume'].rolling(window).mean()
     std = df['volume'].rolling(window).std()
     df['volume_z'] = (df['volume'] - mean) / std
     return df
 def volume_delta(df):
+    df = df.copy()
     df['volume_delta'] = df['volume'].diff()
     return df
 def volume_sum(df, window=20):
+    df = df.copy()
     df[f'volume_sum_{window}'] = df['volume'].rolling(window).sum()
     return df
 def volume_by_range(df):
+    df = df.copy()
     df['volume_range'] = df['volume'] / (df['high'] - df['low']).replace(0, np.nan)
     return df
 def volume_by_price(df):
+    df = df.copy()
     df['volume_price'] = df['volume'] / df['close']
     return df
 
 def historical_volatility(df, window=20):
+    df = df.copy()
     returns = np.log(df['close'] / df['close'].shift(1))
     df['hv'] = returns.rolling(window).std() * np.sqrt(252)
     return df
 def atr_normalized(df):
+    df = df.copy()
     df['atr_norm'] = df['atr'] / df['close']
     return df
 def volatility_zscore(df, window=20):
+    df = df.copy()
     mean = df['atr'].rolling(window).mean()
     std = df['atr'].rolling(window).std()
     df['atr_z'] = (df['atr'] - mean) / std
     return df
 def dema(df, span=20):
+    df = df.copy()
     ema = df['close'].ewm(span=span).mean()
     df['dema'] = 2*ema - ema.ewm(span=span).mean()
     return df
 def kama(df, window=10, fast=2, slow=30):
-    close = df['close'].values
+    # Prefer TA-Lib's KAMA for correctness and performance. Fall back to
+    # a safe pandas/numpy implementation if TA-Lib call fails.
+    df = df.copy()
+    try:
+        df['kama'] = ta.KAMA(df['close'], timeperiod=window)
+        return df
+    except Exception:
+        close = df['close'].astype(float).to_numpy()
+        n = len(close)
+        if n == 0:
+            df['kama'] = np.nan
+            return df
 
-    # Efficiency Ratio (ER)
-    change = np.abs(close - np.roll(close, window))
-    volatility = np.abs(np.diff(close))
-    volatility = np.concatenate([[np.nan], volatility]).astype(float)
-    volatility = pd.Series(volatility).rolling(window).sum().values
+        # Efficiency Ratio (ER): abs(close - close.shift(window)) / sum(abs(diff(close)))
+        change = np.abs(close - np.roll(close, window)).astype(float)
+        change[:window] = np.nan
 
-    er = np.where(volatility == 0, 0, change / volatility)
+        vol = np.concatenate([[np.nan], np.abs(np.diff(close))])
+        vol = pd.Series(vol).rolling(window).sum().to_numpy()
 
-    # Smoothing Constant (SC)
-    fast_sc = 2 / (fast + 1)
-    slow_sc = 2 / (slow + 1)
-    sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
+        # avoid division by zero
+        er = np.where(vol == 0, 0.0, change / vol)
 
-    # KAMA calculation (recursive)
-    kama = np.zeros_like(close)
-    kama[0] = close[0]
+        fast_sc = 2.0 / (fast + 1.0)
+        slow_sc = 2.0 / (slow + 1.0)
+        sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
 
-    for i in range(1, len(close)):
-        kama[i] = kama[i-1] + sc[i] * (close[i] - kama[i-1])
+        kama = np.full(n, np.nan, dtype=float)
+        # initialize first value at the end of the warm-up window
+        if n > window:
+            kama[window] = close[window]
+            for i in range(window + 1, n):
+                kama[i] = kama[i - 1] + sc[i] * (close[i] - kama[i - 1])
 
-    df['kama'] = kama
-    return df
+        df['kama'] = kama
+        return df
 def roc(df, window=10):
+    df = df.copy()
     df[f'roc_{window}'] = df['close'].pct_change(window)
     return df
+
+def multi_roc(df, windows=None):
+    df = df.copy()
+    if windows is None:
+        windows = [1, 5, 10, 20]
+    for w in windows:
+        df[f'roc_{w}'] = df['close'].pct_change(w)
+    return df
 def williams_r(df, window=14):
+    df = df.copy()
     highest = df['high'].rolling(window).max()
     lowest = df['low'].rolling(window).min()
-    df['williams_r'] = (highest - df['close']) / (highest - lowest)
+    df['williams_r'] = (highest - df['close']) / (highest - lowest)*-100
     return df
 def cmo(df, window=14):
+    df = df.copy()
     diff = df['close'].diff()
     up = diff.clip(lower=0).rolling(window).sum()
     down = -diff.clip(upper=0).rolling(window).sum()
     df['cmo'] = 100 * (up - down) / (up + down)
     return df
 def vol_vol_ratio(df):
+    df = df.copy()
     df['vol_vol_ratio'] = df['volume'] / df['atr']
     return df
 def vpt_norm(df):
+    df = df.copy()
     df['vpt_norm'] = df['vpt'] / df['close']
     return df
 def tr_direction(df):
+    df = df.copy()
     df['tr_dir'] = np.sign(df['true_range'].diff())
     return df
 def candle_body(df):
+    df = df.copy()
     df['body'] = (df['close'] - df['open']).abs()
     return df
 def wick_ratio(df):
+    df = df.copy()
     upper = df['high'] - df[['close','open']].max(axis=1)
     lower = df[['close','open']].min(axis=1) - df['low']
     df['wick_ratio'] = (upper + lower) / (df['high'] - df['low'])
+    return df
+
+def percent_return_features(df, lags=None, rolling_windows=None):
+    df = df.copy()
+    if lags is None:
+        lags = [1, 5, 10, 20]
+    if rolling_windows is None:
+        rolling_windows = [5, 10, 20]
+    df['return'] = df['close'].pct_change()
+    df['log_return'] = np.log(df['close'] / df['close'].shift(1))
+    for lag in lags:
+        df[f'return_lag_{lag}'] = df['return'].shift(lag)
+    for w in rolling_windows:
+        df[f'return_mean_{w}'] = df['return'].rolling(w).mean()
+        df[f'return_std_{w}'] = df['return'].rolling(w).std()
+        df[f'return_z_{w}'] = (df['return'] - df['return'].rolling(w).mean()) / df['return'].rolling(w).std()
+    return df
+
+def percent_above_below_ma(df, ma_windows=None):
+    df = df.copy()
+    if ma_windows is None:
+        ma_windows = [20, 50]
+    for w in ma_windows:
+        ma = df['close'].rolling(w).mean()
+        df[f'pct_above_ma_{w}'] = (df['close'] - ma) / ma
+    return df
+
+def bollinger_extra(df):
+    # requires bb_upper, bb_lower, bb_middle
+    df = df.copy()
+    if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
+        df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'].replace(0, np.nan)
+        df['bb_percent_b'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower']).replace(0, np.nan)
+    return df
+
+def rolling_moments(df, windows=None):
+    # avoid mutable default argument; set default list inside function
+    df = df.copy()
+    if windows is None:
+        windows = [10, 20]
+    for w in windows:
+        df[f'rolling_skew_{w}'] = df['return'].rolling(w).skew()
+        df[f'rolling_kurt_{w}'] = df['return'].rolling(w).kurt()
+    return df
+
+def rolling_slope(df, window=10, source='close'):
+    df = df.copy()
+    y = df[source].values.astype(float)
+    n = window
+
+    # x fijo: 0..n-1
+    x = np.arange(n, dtype=float)
+    sum_x = x.sum()
+    sum_x2 = (x * x).sum()
+
+    # rolling sum de y
+    y_sum = pd.Series(y).rolling(n).sum().values
+
+    # rolling sum de y*x (pero x se reinicia en cada ventana)
+    yx = pd.Series(y).rolling(n).apply(lambda arr: np.dot(arr, x), raw=True).values
+
+    # fórmula cerrada
+    num = n * yx - sum_x * y_sum
+    den = n * sum_x2 - sum_x * sum_x
+
+    slope = num / den
+    df[f'slope_{window}'] = slope
+    return df
+
+def time_features(df):
+    df = df.copy()
+    if 'datetime' in df.columns:
+        dt_series = pd.to_datetime(df['datetime'])
+        df['hour'] = dt_series.dt.hour
+        df['minute'] = dt_series.dt.minute
+        df['dayofweek'] = dt_series.dt.dayofweek
+        df['is_month_end'] = dt_series.dt.is_month_end
+        return df
+    elif isinstance(df.index, pd.DatetimeIndex):
+        idx = df.index
+        df['hour'] = idx.hour
+        df['minute'] = idx.minute
+        df['dayofweek'] = idx.dayofweek
+        # is_month_end is an index property accessed via .is_month_end
+        try:
+            df['is_month_end'] = idx.is_month_end
+        except Exception:
+            df['is_month_end'] = False
+        return df
+    else:
+        return df
+
+def realized_volatility(df, window=20):
+    # sum of squared intraday returns -> sqrt
+    df = df.copy()
+    ret = df['log_return'] if 'log_return' in df.columns else np.log(df['close'] / df['close'].shift(1))
+    df[f'realized_vol_{window}'] = np.sqrt((ret**2).rolling(window).sum()) * np.sqrt(252 / window)
+    return df
+
+def is_doji(df, threshold=0.1):
+    # small body relative to candle range
+    df = df.copy()
+    body = (df['close'] - df['open']).abs()
+    rng = (df['high'] - df['low']).replace(0, np.nan)
+    df['is_doji'] = (body / rng) < threshold
     return df
 
 def generate_features(df, config_json=None):
@@ -343,6 +543,7 @@ def generate_features(df, config_json=None):
     # Dirección / volatilidad
     df = _call(adx, 'adx')
     df = _call(true_range, 'true_range')
+    df = _call(compute_atr, 'compute_atr')
     df = _call(atr_normalized, 'atr_normalized')
     df = _call(volatility_zscore, 'volatility_zscore')
     df = _call(historical_volatility, 'historical_volatility')
@@ -361,9 +562,17 @@ def generate_features(df, config_json=None):
     df = _call(volume_by_range, 'volume_by_range')
     df = _call(volume_by_price, 'volume_by_price')
     df = _call(vol_vol_ratio, 'vol_vol_ratio')
+    # returns and momentum
+    df = _call(percent_return_features, 'percent_return_features')
+    df = _call(percent_above_below_ma, 'percent_above_below_ma')
+    df = _call(multi_roc, 'multi_roc')
+    df = _call(rolling_moments, 'rolling_moments')
+    df = _call(rolling_slope, 'rolling_slope')
+    df = _call(time_features, 'time_features')
     # Indicadores técnicos adicionales
     df = _call(cci, 'cci')
     df = _call(bollinger_bands, 'bollinger_bands')
+    df = _call(bollinger_extra, 'bollinger_extra')
     df = _call(elder_force_index, 'elder_force_index')
     df = _call(candle_body, 'candle_body')
     df = _call(wick_ratio, 'wick_ratio')
@@ -374,137 +583,185 @@ def generate_features(df, config_json=None):
 
     return df
 
-def resample_ohlcv(df, period="5min"):
+
+def data_quality_report(df, future_horizon=1, verbose=True, top_n=20, clean_infs=False):
+    """Run a set of data-quality checks on `df` and return a report dict.
+
+    The function prints a concise report when `verbose=True` and always
+    returns a dictionary with the computed metrics (useful for programmatic checks).
     """
-    Resamplea un dataframe OHLCV al periodo deseado.
-    period puede ser: '1min', '5min', '15min', '30min', '1H', '1D', etc.
-    """
 
-    # Asegurar orden temporal
-    df = df.sort_values("datetime").copy()
+    df = df.copy()
+    report = {}
+    n_rows, n_cols = df.shape
+    report['rows'] = int(n_rows)
+    report['cols'] = int(n_cols)
 
-    # Asegurar que datetime es datetime64
-    df["datetime"] = pd.to_datetime(df["datetime"])
+    # NaN fractions
+    na_frac = df.isna().mean().sort_values(ascending=False)
+    report['na_fraction'] = na_frac.to_dict()
+    report['top_na'] = na_frac.head(top_n).to_dict()
 
-    # Establecer índice temporal
-    df = df.set_index("datetime")
+    # Constant / zero-variance columns
+    nunique = df.nunique(dropna=False)
+    constant_cols = nunique[nunique <= 1].index.tolist()
+    report['constant_columns'] = constant_cols
 
-    # Diccionario OHLCV estándar
-    ohlc_dict = {
-        "open": "first",
-        "high": "max",
-        "low": "min",
-        "close": "last",
-        "volume": "sum",
-        "openint": "last"
-    }
+    # Infinite values (detect TRUE infinities only). Optionally replace them with NaN.
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    inf_cols = []
+    inf_counts = {}
+    for c in numeric_cols:
+        try:
+            arr = df[c].values
+            has_inf = np.isinf(arr).any()
+            if has_inf:
+                inf_cols.append(c)
+                inf_counts[c] = int(np.isinf(arr).sum())
+                if clean_infs:
+                    # replace infinities with NaN in-place
+                    df[c].replace([np.inf, -np.inf], np.nan, inplace=True)
+        except Exception:
+            continue
+    report['infinite_columns'] = inf_cols
+    report['infinite_counts'] = inf_counts
 
-    # Resample usando el periodo elegido
-    df_resampled = df.resample(period).agg(ohlc_dict)
+    # Fraction of zeros
+    if numeric_cols:
+        zero_frac = (df[numeric_cols] == 0).mean().sort_values(ascending=False)
+        report['top_zero_fraction'] = zero_frac.head(top_n).to_dict()
+    else:
+        report['top_zero_fraction'] = {}
 
-    # Eliminar velas vacías
-    df_resampled = df_resampled.dropna(subset=["open", "high", "low", "close"])
+    # Object/category uniques
+    obj_uniques = df.select_dtypes(include=['object', 'category']).apply(lambda s: int(s.nunique(dropna=False))).to_dict()
+    report['object_unique_counts'] = obj_uniques
 
-    # Añadir columnas extra
-    df_resampled["ticker"] = df["ticker"].iloc[0]
-    df_resampled["per"] = period
+    # Basic describe summary (reduced)
+    try:
+        desc = df.describe().T[['min', '25%', '50%', '75%', 'max']]
+        report['describe'] = desc.to_dict(orient='index')
+    except Exception:
+        report['describe'] = {}
 
-    # Reset index
-    df_resampled = df_resampled.reset_index()
-
-    return df_resampled
-
-# Generar datos ohlcv acumulados diarios a partir de los datos de 5 minutos
-def daily_ohlcv_cummulative(df_5_min):
-    df = df_5_min.copy()
-    
-    # Asegurar orden temporal
-    df = df.sort_values('datetime')
-    
-    # Crear columna de día
-    df['date'] = df['datetime'].dt.date
-    
-    # Open del día (primer valor de cada grupo)
-    df['open_day'] = df.groupby('date')['open'].transform('first')
-    
-    # High acumulado intradía
-    df['high_cum'] = df.groupby('date')['high'].cummax()
-    
-    # Low acumulado intradía
-    df['low_cum'] = df.groupby('date')['low'].cummin()
-    
-    # Volume acumulado intradía
-    df['volume_cum'] = df.groupby('date')['volume'].cumsum()
-    
-    # Open interest (último valor hasta ese momento → ya es el actual)
-    df['openint_cum'] = df['openint']
-    
-    # (Opcional) puedes sobrescribir columnas originales
-    # df['open'] = df['open_day']
-    # df['high'] = df['high_cum']
-    # df['low'] = df['low_cum']
-    # df['volume'] = df['volume_cum']
-    
-    # Limpiar columnas auxiliares si quieres
-    # df = df.drop(columns=['date', 'open_day', 'high_cum', 'low_cum', 'volume_cum'])
-    
-    return df
-
-def prepare_accumulated_ohlcv(df):
-    # 1) copia segura y ordenar
-    df_acc = df.copy()
-    df_acc['datetime'] = pd.to_datetime(df_acc['datetime'])
-    df_acc = df_acc.sort_values('datetime')
-
-    # 2) renombrar OHLCV originales a *_5min (para conservarlos)
-    orig_ohlcv = ['open','high','low','close','volume','openint','ticker','per']
-    rename_to_5min = {c: f"{c}_5min" for c in orig_ohlcv if c in df_acc.columns}
-    df_acc = df_acc.rename(columns=rename_to_5min)
-
-    # 3) mapear las columnas acumuladas a nombres estándar OHLCV
-    map_accum = {
-        'open_day': 'open',
-        'high_cum': 'high',
-        'low_cum': 'low',
-        'volume_cum': 'volume',
-        'openint_cum': 'openint'
-    }
-    df_acc = df_acc.rename(columns={k: v for k, v in map_accum.items() if k in df_acc.columns})
-
-    # 4) asegurarse de que exista 'close' (usar la close_5min si no hay close_cum)
-    if 'close' not in df_acc.columns and 'close_5min' in df_acc.columns:
-        df_acc['close'] = df_acc['close_5min']
-
-    # 5) aplicar generate_features sobre las OHLCV acumuladas
-    # df_dia_cum_accum_features = generate_features(df_acc)
-    return df_acc
-
-def merge_intraday_daily(df_dia_cum_features, df_5_min_features):
-    df_5_min_features = df_5_min_features.copy()
-    df_dia_cum_features = df_dia_cum_features.copy()
-    # columnas a excluir (ohlcv y metadata)
-    exclude = ['open','high','low','close','volume','openint','ticker','per','date']
-
-    # seleccionar sólo features útiles del 5min
-    features_5min = [c for c in df_5_min_features.columns if c not in exclude and c != 'datetime']
-
-    # join manteniendo las OHLCV acumuladas
-    df_final = df_dia_cum_features.join(
-        df_5_min_features.set_index('datetime')[features_5min],
-        on='datetime',
-        rsuffix='_5min'
-    )
-
-    # eliminar duplicados exactos (si una columna _5min es idéntica a la original)
-    for col in list(df_dia_cum_features.columns):
-        col5 = f"{col}_5min"
-        if col5 in df_final.columns:
+    # Correlation with future returns (if close exists)
+    top_corr = {}
+    if 'close' in df.columns:
+        future = df['close'].pct_change(-int(future_horizon))
+        corrs = {}
+        for c in numeric_cols:
             try:
-                if df_final[col].equals(df_final[col5]):
-                    df_final.drop(columns=[col5], inplace=True)
+                mask = df[c].notna() & future.notna()
+                if mask.sum() > 2:
+                    corr = df.loc[mask, c].corr(future[mask])
+                    if np.isfinite(corr):
+                        corrs[c] = abs(float(corr))
             except Exception:
-                pass
+                continue
+        if corrs:
+            s = pd.Series(corrs).sort_values(ascending=False)
+            top_corr = s.head(top_n).to_dict()
+    report['top_corr_with_future'] = top_corr
 
-    # Opcional: revisar resultado
-    # print("Columns:", df_final.columns.tolist())
-    return df_final
+    # Daily-like columns NaN fraction
+    daily_cols = [c for c in df.columns if '_daily' in c]
+    daily_na = {c: float(df[c].isna().mean()) for c in daily_cols}
+    report['daily_columns_na_fraction'] = daily_na
+
+    # Suggestions
+    suggestions = []
+    if len(na_frac) and na_frac.max() > 0.5:
+        suggestions.append('Many columns have >50% NaNs; consider dropping or re-engineering them.')
+    if constant_cols:
+        suggestions.append(f'Drop or fix constant columns: {constant_cols[:10]}')
+    if inf_cols:
+        suggestions.append(f'Columns contain true infinities (use clean_infs=True to replace): {inf_cols[:20]}')
+    if any(c.startswith('slope_') for c in df.columns):
+        suggestions.append('`rolling_slope` may be slow; consider vectorized replacement or numba.')
+    suggestions.append('To avoid fragmentation, build new columns in a dict and `pd.concat` once per group.')
+    report['suggestions'] = suggestions
+
+    if verbose:
+        print('Data Quality Report')
+        print(f' - rows: {n_rows}, cols: {n_cols}')
+        print(' - top NA columns (fraction):')
+        for k, v in list(report['top_na'].items())[:top_n]:
+            print(f'    {k}: {v:.3g}')
+        print(f' - constant columns: {len(constant_cols)}')
+        if top_corr:
+            print(' - top abs correlation with future returns:')
+            for k, v in list(top_corr.items())[:min(10, len(top_corr))]:
+                print(f'    {k}: {v:.3f}')
+        print('\nSuggestions:')
+        for s in suggestions:
+            print(' - ' + s)
+
+    return report
+
+
+def profile_generate_features(df, config_json=None, show_progress=True):
+    """Run feature generation step-by-step and time each feature using tqdm.
+
+    Returns (df, timings) where timings is an ordered dict of {feature_name: seconds}.
+    """
+
+    cfg = {}
+    if config_json:
+        if isinstance(config_json, str):
+            cfg = json.loads(config_json)
+        elif isinstance(config_json, dict):
+            cfg = config_json
+        else:
+            raise ValueError("config_json must be dict or JSON string")
+
+    df = df.copy()
+
+    global_cfg = cfg.get("global", {})
+    def p(name):
+        local = cfg.get(name, {})
+        return {**global_cfg, **local}
+
+    def call_with_params(func, name):
+        params = p(name)
+        if params:
+            return func(df, **params)
+        return func(df)
+
+    steps = [
+        (sma, 'sma'), (ema, 'ema'), (dema, 'dema'), (kama, 'kama'),
+        (macd, 'macd'), (rsi, 'rsi'), (stoch, 'stoch'), (cmo, 'cmo'), (williams_r, 'williams_r'),
+        (adx, 'adx'), (true_range, 'true_range'), (compute_atr, 'compute_atr'), (atr_normalized, 'atr_normalized'), (volatility_zscore, 'volatility_zscore'), (historical_volatility, 'historical_volatility'),
+        (obv, 'obv'), (vpt, 'vpt'), (vpt_norm, 'vpt_norm'), (relative_volume, 'relative_volume'), (ad, 'ad'),
+        (mfi, 'mfi'), (cmf, 'cmf'), (vwap, 'vwap'), (volume_zscore, 'volume_zscore'), (volume_delta, 'volume_delta'),
+        (volume_sum, 'volume_sum'), (volume_by_range, 'volume_by_range'), (volume_by_price, 'volume_by_price'), (vol_vol_ratio, 'vol_vol_ratio'),
+        (percent_return_features, 'percent_return_features'), (percent_above_below_ma, 'percent_above_below_ma'), (multi_roc, 'multi_roc'),
+        (rolling_moments, 'rolling_moments'), (rolling_slope, 'rolling_slope'), (time_features, 'time_features'),
+        (cci, 'cci'), (bollinger_bands, 'bollinger_bands'), (bollinger_extra, 'bollinger_extra'),
+        (elder_force_index, 'elder_force_index'), (candle_body, 'candle_body'), (wick_ratio, 'wick_ratio'), (roc, 'roc')
+    ]
+
+    timings = OrderedDict()
+    iterator = steps if not show_progress else tqdm(steps, desc='Profiling features')
+    for func, name in iterator:
+        if show_progress:
+            iterator.set_description(f"Profiling: {name}")
+        start = time.perf_counter()
+        try:
+            df = call_with_params(func, name)
+        except Exception as e:
+            # record error as negative time (or store exception)
+            timings[name] = {'error': str(e)}
+            continue
+        elapsed = time.perf_counter() - start
+        timings[name] = elapsed
+
+    if show_progress:
+        # print summary
+        print('\nFeature timing (seconds):')
+        for k, v in timings.items():
+            if isinstance(v, dict) and 'error' in v:
+                print(f" - {k}: ERROR -> {v['error']}")
+            else:
+                print(f" - {k}: {v:.4f}s")
+
+    return df, timings
