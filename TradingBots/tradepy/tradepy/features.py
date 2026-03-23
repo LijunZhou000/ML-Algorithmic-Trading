@@ -765,3 +765,6 @@ def profile_generate_features(df, config_json=None, show_progress=True):
                 print(f" - {k}: {v:.4f}s")
 
     return df, timings
+
+# ===== Otro intento =====
+
