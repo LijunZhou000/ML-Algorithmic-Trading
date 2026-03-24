@@ -8,6 +8,14 @@ from keras.optimizers import Adam
 from sklearn.preprocessing import RobustScaler
 from keras.callbacks import EarlyStopping
 import tensorflow as tf
+from tqdm.auto import tqdm # Auto detecta si estás en consola o Jupyter
+import torch.cuda.amp as amp
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+from torch.cuda.amp import autocast, GradScaler 
+import talib as ta
 
 # Funciones de carga, limpieza, resampleo y análisis para futuros
 def import_dataset(asset='gc1', format='min'):
@@ -407,7 +415,7 @@ def add_indicator_features(df, tick_size=0.1):
     # 1. TARGETS CORREGIDOS (Para DF de 30 minutos)
     # ---------------------------------------------------------
     # Shift(-1) = Próximos 30 min | Shift(-2) = Próximos 60 min
-    df['target_ret_30m'] = np.log(df['close'].shift(-1) / df['close'])
+    df['target_ret_30m'] = np.log(df['close'].shift(-2) / df['close'])
     df['target_ret_1h'] = np.log(df['close'].shift(-2) / df['close'])
 
     # ---------------------------------------------------------
@@ -471,6 +479,141 @@ def add_advanced_market_features(df):
 
     return df
 
+def rsi(df, n=14):
+    df = df.copy()
+    df['rsi'] = ta.RSI(df['close'], timeperiod=n)
+    return df
+
+def true_range(df, window=14):
+    # pointwise true range (not ATR)
+    df = df.copy()
+    df['true_range'] = ta.TRANGE(df['high'], df['low'], df['close'])
+    df['range'] = df['high'] - df['low']
+    df['range_mean'] = df['range'].rolling(window).mean()
+    return df
+
+def compute_atr(df, period=14):
+    # ATR computed as rolling mean of true_range
+    df = df.copy()
+    if 'true_range' not in df.columns:
+        df = true_range(df, window=period)
+    df['atr'] = df['true_range'].rolling(period).mean()
+    return df
+
+def atr_normalized(df):
+    df = df.copy()
+    df['atr_norm'] = df['atr'] / df['close']
+    return df
+
+def macd(df, n_fast=12, n_slow=26):
+    df = df.copy()
+    df['ema_fast'] = df['close'].ewm(span=n_fast, adjust=False).mean()
+    df['ema_slow'] = df['close'].ewm(span=n_slow, adjust=False).mean()
+    df['macd'] = df['ema_fast'] - df['ema_slow']
+    df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+    df['histogram'] = df['macd'] - df['signal']
+    return df
+
+def bollinger_bands(df, n=20, num_std_dev=2):
+    df = df.copy()
+    df['bb_middle'] = df['close'].rolling(n).mean()
+    df['bb_std'] = df['close'].rolling(n).std()
+    df['bb_upper'] = df['bb_middle'] + num_std_dev * df['bb_std']
+    df['bb_lower'] = df['bb_middle'] - num_std_dev * df['bb_std']
+    return df
+
+def bollinger_extra(df):
+    # requires bb_upper, bb_lower, bb_middle
+    df = df.copy()
+    if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
+        df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'].replace(0, np.nan)
+        df['bb_percent_b'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower']).replace(0, np.nan)
+    return df
+
+def volume_zscore(df, window=20):
+    df = df.copy()
+    mean = df['volume'].rolling(window).mean()
+    std = df['volume'].rolling(window).std()
+    df['volume_z'] = (df['volume'] - mean) / std
+    return df
+
+def percent_return_features(df, lags=None, rolling_windows=None):
+    df = df.copy()
+    if lags is None:
+        lags = [1, 5, 10, 20]
+    if rolling_windows is None:
+        rolling_windows = [5, 10, 20]
+    df['return'] = df['close'].pct_change()
+    df['log_return'] = np.log(df['close'] / df['close'].shift(1))
+    for lag in lags:
+        df[f'return_lag_{lag}'] = df['return'].shift(lag)
+    for w in rolling_windows:
+        df[f'return_mean_{w}'] = df['return'].rolling(w).mean()
+        df[f'return_std_{w}'] = df['return'].rolling(w).std()
+        df[f'return_z_{w}'] = (df['return'] - df['return'].rolling(w).mean()) / df['return'].rolling(w).std()
+    return df
+
+def ad(
+    df,
+    zscore_window=20,
+    roc_windows=None,
+    smooth_windows=None,
+    relative_volume_window=20,
+    normalize_by="range",   # "range", "close", "none"
+    include_clv=True,
+    include_delta=True,
+    include_direction=True
+):
+    df = df.copy()
+    # --- CLV (Close Location Value) ---
+    if include_clv:
+        df["clv"] = ((df["close"] - df["low"]) - (df["high"] - df["close"])) / \
+                    (df["high"] - df["low"]).replace(0, np.nan)
+
+    # --- A/D clásico ---
+    df["ad"] = (df["clv"] * df["volume"]).cumsum()
+
+    # --- Normalización ---
+    if normalize_by == "range":
+        df["ad_norm"] = df["ad"] / (df["high"] - df["low"]).replace(0, np.nan)
+    elif normalize_by == "close":
+        df["ad_norm"] = df["ad"] / df["close"]
+    else:
+        df["ad_norm"] = df["ad"]
+
+    # defaults for list args
+    if roc_windows is None:
+        roc_windows = [5, 10]
+    if smooth_windows is None:
+        smooth_windows = [10]
+
+    # --- Rate of Change (momentum del A/D) ---
+    for w in roc_windows:
+        df[f"ad_roc_{w}"] = df["ad"].pct_change(w)
+
+    # --- Suavizados ---
+    for w in smooth_windows:
+        df[f"ad_ema_{w}"] = df["ad"].ewm(span=w, adjust=False).mean()
+        df[f"ad_sma_{w}"] = df["ad"].rolling(w).mean()
+
+    # --- Z-score (acumulación/distribución extrema) ---
+    mean = df["ad"].rolling(zscore_window).mean()
+    std = df["ad"].rolling(zscore_window).std()
+    df["ad_z"] = (df["ad"] - mean) / std
+
+    # --- Derivada del A/D ---
+    if include_delta:
+        df["ad_delta"] = df["ad"].diff()
+
+    # --- Dirección del A/D ---
+    if include_direction:
+        df["ad_dir"] = df["ad"].diff().apply(lambda x: 1 if x > 0 else -1 if x < 0 else 0)
+
+    # --- A/D relativo al volumen reciente ---
+    df["ad_rel"] = df["ad"] / df["volume"].rolling(relative_volume_window).sum()
+
+    return df
+
 def generate_features(df, spec):
     df = df.copy()
     
@@ -485,7 +628,18 @@ def generate_features(df, spec):
     
     df = add_advanced_market_features(df)
     
+    df = rsi(df, n=14)
+    df = compute_atr(df, period=14)
+    df = atr_normalized(df)
+    df = macd(df, n_fast=12, n_slow=26)
+    df = bollinger_bands(df, n=20, num_std_dev=2)
+    df = bollinger_extra(df)
+    df = volume_zscore(df, window=20)
+    df = percent_return_features(df, lags=[1, 5, 10, 20], rolling_windows=[5, 10, 20])
+    df = ad(df, zscore_window=20, roc_windows=[5, 10], smooth_windows=[10], normalize_by="range")
+    
     # 4. Limpieza final de NaNs (creados por las medias móviles)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df = df.dropna()
     
     return df
@@ -751,3 +905,692 @@ def run_walk_forward_bin(df, feature_cols, target_col='target_bin',
         'scaler': last_scaler,
         'results': full_results
     }
+    
+
+
+class GoldLSTM(nn.Module):
+    def __init__(self, input_dim, hidden_dim=128, num_layers=2, dropout=0.3):
+        super(GoldLSTM, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        
+        # Capa LSTM
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, 
+                            batch_first=True, dropout=dropout)
+        
+        # Normalización y Dropout
+        self.batch_norm = nn.BatchNorm1d(hidden_dim)
+        self.dropout = nn.Dropout(dropout)
+        
+        # Capas Densas
+        self.fc1 = nn.Linear(hidden_dim, 32)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(32, 1)
+        # self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # x shape: (batch, seq_len, features)
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
+        
+        out, _ = self.lstm(x, (h0, c0))
+        # Tomamos solo el último output de la secuencia (many-to-one)
+        out = out[:, -1, :] 
+        
+        out = self.batch_norm(out)
+        out = self.fc1(out)
+        out = self.relu(out)
+        out = self.dropout(out)
+        out = self.fc2(out)
+        return out
+def run_walk_forward_pytorch(df, feature_cols, target_col='target_bin', 
+                             train_size=40000, test_size=10000, step=10000, 
+                             lookback=20, epochs=15, batch_size=64):
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"🖥️ Ejecutando en: {device}")
+
+    all_predictions = []
+    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
+    
+    for start in range(0, len(df_wf) - train_size - test_size, step):
+        end_train = start + train_size
+        end_test = end_train + test_size
+        
+        # Segmentación y Escalado
+        train_df = df_wf.iloc[start:end_train].copy()
+        test_df = df_wf.iloc[end_train:end_test].copy()
+        
+        scaler = RobustScaler()
+        train_df[feature_cols] = scaler.fit_transform(train_df[feature_cols])
+        test_df[feature_cols] = scaler.transform(test_df[feature_cols])
+        
+        # Crear Tensores (Usando tu función strides)
+        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
+        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
+        
+        # Convertir a Tensores de PyTorch y mover a DEVICE
+        X_train_t = torch.tensor(X_train, dtype=torch.float32).to(device)
+        y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(device)
+        X_test_t = torch.tensor(X_test, dtype=torch.float32).to(device)
+        
+        # DataLoader para entrenamiento eficiente
+        dataset = TensorDataset(X_train_t, y_train_t)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        
+        # Inicializar Modelo, Loss y Optimizer
+        model = GoldLSTM(input_dim=len(feature_cols)).to(device)
+        criterion = nn.BCELoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.0005)
+        
+        # --- Bucle de Entrenamiento ---
+        model.train()
+        for epoch in range(epochs):
+            for batch_X, batch_y in loader:
+                optimizer.zero_grad()
+                outputs = model(batch_X)
+                loss = criterion(outputs, batch_y)
+                loss.backward()
+                optimizer.step()
+        
+        # --- Predicción ---
+        model.eval()
+        with torch.no_grad():
+            probs = model(X_test_t).cpu().numpy().ravel()
+            pred_classes = (probs > 0.5).astype(int)
+        
+        # Recopilar resultados
+        res_df = pd.DataFrame({
+            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
+            'actual': y_test,
+            'pred': pred_classes,
+            'prob_up': probs,
+            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
+        })
+        
+        all_predictions.append(res_df)
+        acc = (pred_classes == y_test).mean()
+        print(f"✅ Ventana {df_wf['datetime'].iloc[start].date()}: Acc {acc:.2%}")
+
+    return pd.concat(all_predictions, ignore_index=True)
+
+
+def run_walk_forward_pytorch_amp(df, feature_cols, target_col='target_bin', 
+                                 train_size=40000, test_size=10000, step=10000, 
+                                 lookback=20, epochs=15, batch_size=256): # Subimos batch_size
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"🖥️ Usando GPU: {torch.cuda.get_device_name(0)} con AMP")
+
+    # Inicializamos el escalador de gradientes para AMP
+    scaler_amp = GradScaler() 
+    all_predictions = []
+    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
+    
+    for start in range(0, len(df_wf) - train_size - test_size, step):
+        end_train = start + train_size
+        end_test = end_train + test_size
+        
+        # --- Preprocesado y Escalado ---
+        train_df = df_wf.iloc[start:end_train].copy()
+        test_df = df_wf.iloc[end_train:end_test].copy()
+        
+        sc = RobustScaler()
+        train_df[feature_cols] = sc.fit_transform(train_df[feature_cols])
+        test_df[feature_cols] = sc.transform(test_df[feature_cols])
+        
+        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
+        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
+        
+        # Tensores con pin_memory para velocidad de transferencia
+        X_train_t = torch.tensor(X_train, dtype=torch.float32).to(device)
+        y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(device)
+        X_test_t = torch.tensor(X_test, dtype=torch.float32).to(device)
+        
+        loader = DataLoader(TensorDataset(X_train_t, y_train_t), batch_size=batch_size, shuffle=True)
+        
+        model = GoldLSTM(input_dim=len(feature_cols)).to(device)
+        optimizer = optim.Adam(model.parameters(), lr=0.0005)
+        criterion = nn.BCEWithLogitsLoss()
+        
+        # --- Bucle Entrenamiento con AMP ---
+        model.train()
+        for epoch in range(epochs):
+            for batch_X, batch_y in loader:
+                optimizer.zero_grad()
+                
+                # Cast automático a Float16 donde sea seguro
+                with autocast():
+                    outputs = model(batch_X)
+                    loss = criterion(outputs, batch_y)
+                
+                # Escalar la pérdida para evitar "gradient underflow"
+                scaler_amp.scale(loss).backward()
+                scaler_amp.step(optimizer)
+                scaler_amp.update()
+        
+        # --- Predicción (Siempre en Float32 para máxima precisión) ---
+        model.eval()
+        with torch.no_grad():
+            logits = model(X_test_t)
+            # Como el modelo ya no tiene Sigmoid, se lo aplicamos aquí manualmente
+            probs = torch.sigmoid(logits).cpu().numpy().ravel() 
+            pred_classes = (probs > 0.5).astype(int)
+        
+        # Guardar resultados
+        res_df = pd.DataFrame({
+            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
+            'actual': y_test,
+            'pred': pred_classes,
+            'prob_up': probs,
+            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
+        })
+        
+        all_predictions.append(res_df)
+        print(f"✅ Ventana {df_wf['datetime'].iloc[start].date()} OK. Acc: {(pred_classes == y_test).mean():.2%}")
+
+    return pd.concat(all_predictions, ignore_index=True), model, sc
+
+def run_walk_forward_tqdm(df, feature_cols, target_col='target_bin', 
+                          train_size=40000, test_size=10000, step=10000, 
+                          lookback=20, epochs=15, batch_size=256):
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    scaler_amp = amp.GradScaler()
+    all_predictions = []
+    
+    # 1. Calculamos el número total de ventanas para la barra de progreso
+    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
+    n_windows = (len(df_wf) - train_size - test_size) // step + 1
+    
+    # --- BARRA DE PROGRESO MAESTRA (Ventanas) ---
+    pbar_windows = tqdm(range(0, len(df_wf) - train_size - test_size, step), 
+                        total=n_windows, desc="🚀 Walk-Forward Progress")
+
+    for start in pbar_windows:
+        end_train = start + train_size
+        end_test = end_train + test_size
+        
+        # Segmentación y Escalado
+        train_df = df_wf.iloc[start:end_train].copy()
+        test_df = df_wf.iloc[end_train:end_test].copy()
+        
+        sc = RobustScaler()
+        train_df[feature_cols] = sc.fit_transform(train_df[feature_cols])
+        test_df[feature_cols] = sc.transform(test_df[feature_cols])
+        
+        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
+        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
+        
+        # Pasar a tensores
+        X_train_t = torch.tensor(X_train, dtype=torch.float32).to(device)
+        y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(device)
+        X_test_t = torch.tensor(X_test, dtype=torch.float32).to(device)
+        
+        loader = DataLoader(TensorDataset(X_train_t, y_train_t), batch_size=batch_size, shuffle=True)
+        model = GoldLSTM(input_dim=len(feature_cols)).to(device)
+        optimizer = optim.Adam(model.parameters(), lr=0.0005)
+        criterion = nn.BCEWithLogitsLoss()
+        
+        # --- Entrenamiento ---
+        model.train()
+        # Puedes añadir descripición dinámica a la pbar maestra
+        pbar_windows.set_postfix({"Window_Start": df_wf['datetime'].iloc[start].date()})
+        
+        for epoch in range(epochs):
+            for batch_X, batch_y in loader:
+                optimizer.zero_grad()
+                with amp.autocast():
+                    outputs = model(batch_X)
+                    loss = criterion(outputs, batch_y)
+                scaler_amp.scale(loss).backward()
+                scaler_amp.step(optimizer)
+                scaler_amp.update()
+        
+        # --- Predicción ---
+        model.eval()
+        with torch.no_grad():
+            logits = model(X_test_t)
+            # Como el modelo ya no tiene Sigmoid, se lo aplicamos aquí manualmente
+            probs = torch.sigmoid(logits).cpu().numpy().ravel() 
+            pred_classes = (probs > 0.5).astype(int)
+        
+        res_df = pd.DataFrame({
+            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
+            'actual': y_test,
+            'pred': pred_classes,
+            'prob_up': probs,
+            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
+        })
+        
+        all_predictions.append(res_df)
+        
+        # Limpiar caché de CUDA para evitar fragmentación en la 3060
+        torch.cuda.empty_cache()
+
+    return pd.concat(all_predictions, ignore_index=True)
+
+def plot_trading_results(df_res):
+    # 1. Calculamos el retorno de la estrategia
+    # Si la probabilidad es > 0.5, compramos (usamos el retorno real)
+    # Si es < 0.5, no hacemos nada (o podrías vender, pero vamos a probar solo largos)
+    df_res['strat_ret'] = df_res.apply(lambda x: x['ret_real'] if x['prob_up'] > 0.5 else 0, axis=1)
+    
+    # 2. Retorno acumulado
+    df_res['cum_strat'] = (1 + df_res['strat_ret']).cumprod()
+    df_res['cum_market'] = (1 + df_res['ret_real']).cumprod()
+    
+    # 3. Gráfico
+    plt.figure(figsize=(15, 7))
+    plt.plot(df_res['datetime'], df_res['cum_strat'], label='Estrategia LSTM', color='gold', lw=2)
+    plt.plot(df_res['datetime'], df_res['cum_market'], label='Mercado (Oro)', color='gray', alpha=0.5)
+    
+    plt.title('Rendimiento Acumulado: LSTM vs Mercado')
+    plt.ylabel('Multiplicador de Capital')
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.show()
+
+    # 4. Estadísticas Pro
+    sharpe = (df_res['strat_ret'].mean() / df_res['strat_ret'].std()) * (252**0.5)
+    print(f"💰 Sharpe Ratio Estimado: {sharpe:.2f}")
+    print(f"📈 Retorno Total Estrategia: {(df_res['cum_strat'].iloc[-1]-1):.2%}")
+    
+def plot_triple_trading_results(df_res, conf_threshold=0.55):
+    """
+    Backtest para modelo Triple (Sell, Neutral, Buy).
+    conf_threshold: Probabilidad mínima para ejecutar una orden.
+    """
+    df_plot = df_res.copy()
+    
+    # 1. Definir la señal basada en la probabilidad más alta y el umbral
+    # Inicializamos a 0 (Neutral)
+    df_plot['signal'] = 0
+    
+    # Condición para BUY: Predicción es 2 Y la probabilidad es > umbral
+    df_plot.loc[(df_plot['pred'] == 2) & (df_plot['prob_buy'] > conf_threshold), 'signal'] = 1
+    
+    # Condición para SELL: Predicción es 0 Y la probabilidad es > umbral
+    df_plot.loc[(df_plot['pred'] == 0) & (df_plot['prob_sell'] > conf_threshold), 'signal'] = -1
+    
+    # 2. Calculamos el retorno de la estrategia
+    # retorno = señal * retorno_real (si señal es -1 y retorno es negativo, ganamos)
+    df_plot['strat_ret'] = df_plot['signal'] * df_plot['ret_real']
+    
+    # 3. Retorno acumulado (Compound interest)
+    df_plot['cum_strat'] = (1 + df_plot['strat_ret']).cumprod()
+    df_plot['cum_market'] = (1 + df_plot['ret_real']).cumprod()
+    
+    # 4. Gráfico
+    plt.figure(figsize=(15, 7))
+    plt.plot(df_plot['datetime'], df_plot['cum_strat'], label=f'Estrategia LSTM Triple (Conf > {conf_threshold})', color='gold', lw=2)
+    plt.plot(df_plot['datetime'], df_plot['cum_market'], label='Mercado (Oro - Buy & Hold)', color='gray', alpha=0.4)
+    
+    plt.title('Backtest: Estrategia Long-Short con LSTM Triple')
+    plt.ylabel('Crecimiento del Capital (Base 1.0)')
+    plt.legend()
+    plt.grid(alpha=0.2)
+    plt.show()
+
+    # 5. Estadísticas Pro
+    # Filtramos solo cuando hubo operación para métricas de trading
+    trades = df_plot[df_plot['signal'] != 0]
+    
+    # Sharpe Ratio (basado en los retornos de 30 min, anualizado)
+    # Asumiendo ~252 días y ~48 velas de 30m por día de trading
+    sharpe = (df_plot['strat_ret'].mean() / df_plot['strat_ret'].std()) * (np.sqrt(252 * 48))
+    
+    print("-" * 30)
+    print(f"💰 NUEVO Sharpe Ratio: {sharpe:.2f}")
+    print(f"📈 Retorno Total: {(df_plot['cum_strat'].iloc[-1]-1):.2%}")
+    print(f"🎯 Win Rate (de los trades): {(trades['strat_ret'] > 0).mean():.2%}")
+    print(f"📊 Ratio de Operatividad: {len(trades) / len(df_plot):.2%} (tiempo en mercado)")
+    print(f"📉 Total de Trades: {len(trades)} de {len(df_plot)} velas")
+    print("-" * 30)
+
+# Uso:
+# plot_triple_trading_results(result_triple, conf_threshold=0.6)
+
+def plot_triple_final_comparison(df_res):
+    df_plot = df_res.copy()
+    
+    # Lógica de señales: Elegimos la dirección con más probabilidad 
+    # SOLO si es mayor que la probabilidad de Neutral
+    df_plot['signal'] = 0
+    df_plot.loc[df_plot['prob_buy'] > df_plot['prob_neutral'], 'signal'] = 1
+    df_plot.loc[df_plot['prob_sell'] > df_plot['prob_neutral'], 'signal'] = -1
+    
+    # Cálculo de retornos
+    df_plot['strat_ret'] = df_plot['signal'] * df_plot['ret_real']
+    df_plot['cum_strat'] = (1 + df_plot['strat_ret']).cumprod()
+    df_plot['cum_market'] = (1 + df_plot['ret_real']).cumprod()
+    
+    # Plot
+    plt.figure(figsize=(15, 7))
+    plt.plot(df_plot['datetime'], df_plot['cum_strat'], label='LSTM Triple (Balanced)', color='cyan', lw=2)
+    plt.plot(df_plot['datetime'], df_plot['cum_market'], label='Oro (Hold)', color='gray', alpha=0.4)
+    plt.title('Backtest Final: Modelo Triple con Umbral de Volatilidad')
+    plt.legend()
+    plt.show()
+    
+    # Sharpe Ratio Anualizado (aprox 252 días * 48 velas de 30m)
+    sharpe = (df_plot['strat_ret'].mean() / df_plot['strat_ret'].std()) * np.sqrt(252 * 48)
+    print(f"💰 Sharpe Ratio Esperado: {sharpe:.2f}")
+
+# plot_triple_final_comparison(result_triple_final)
+
+def analyze_by_hour(df_res):
+    df_res = df_res.copy()
+    df_res['hour'] = pd.to_datetime(df_res['datetime']).dt.hour
+    # A. Mapear clases a direcciones de trading
+    # Clase 0 (Sell) -> -1 | Clase 1 (Neutral) -> 0 | Clase 2 (Buy) -> 1
+    df_res['signal'] = df_res['pred'].map({0: -1, 1: 0, 2: 1})
+
+    # B. Calcular el retorno (Multiplicación simple elemento a elemento)
+    df_res['strat_ret'] = df_res['signal'] * df_res['ret_real']
+
+    # C. Calcular el acumulado (Compound interest)
+    df_res['cum_strat'] = (1 + df_res['strat_ret']).cumprod()
+    # Rendimiento por hora
+    hourly_perf = df_res.groupby('hour')['strat_ret'].sum()
+    
+    plt.figure(figsize=(12, 5))
+    hourly_perf.plot(kind='bar', color='skyblue')
+    plt.axhline(0, color='red', linestyle='--')
+    plt.title('Rendimiento de la Estrategia por Hora del Día (UTC)')
+    plt.ylabel('Retorno Acumulado')
+    plt.xlabel('Hora')
+    plt.show()
+
+def plot_backtest_filtrado(df_res):
+    df_plot = df_res.copy()
+    df_plot['hour'] = pd.to_datetime(df_plot['datetime']).dt.hour
+    
+    # Definimos las "Horas Prohibidas" basándonos en tu gráfico
+    # Vamos a dejar solo las horas con barras azules positivas claras
+    horas_permitidas = [4, 7, 8, 9, 17, 21, 22, 23]
+    
+    df_plot['signal_filtrada'] = 0
+    # Solo operamos si la hora es permitida
+    mask_hora = df_plot['hour'].isin(horas_permitidas)
+    
+    # Aplicamos la lógica de señales solo en esas horas
+    df_plot.loc[mask_hora & (df_plot['prob_buy'] > df_plot['prob_neutral']), 'signal_filtrada'] = 1
+    df_plot.loc[mask_hora & (df_plot['prob_sell'] > df_plot['prob_neutral']), 'signal_filtrada'] = -1
+    
+    # Cálculo de retornos
+    df_plot['strat_ret_filtrada'] = df_plot['signal_filtrada'] * df_plot['ret_real']
+    df_plot['cum_strat_filtrada'] = (1 + df_plot['strat_ret_filtrada']).cumprod()
+    df_plot['cum_market'] = (1 + df_plot['ret_real']).cumprod()
+    
+    # Métricas
+    sharpe = (df_plot['strat_ret_filtrada'].mean() / df_plot['strat_ret_filtrada'].std()) * np.sqrt(252 * 48)
+    
+    plt.figure(figsize=(15, 7))
+    plt.plot(df_plot['datetime'], df_plot['cum_strat_filtrada'], label=f'LSTM Filtrada (Sharpe: {sharpe:.2f})', color='lime', lw=2)
+    plt.plot(df_plot['datetime'], df_plot['cum_market'], label='Oro (Hold)', color='gray', alpha=0.4)
+    plt.title('Backtest con Filtro Horario: Solo Horas de Alta Probabilidad')
+    plt.legend()
+    plt.show()
+    
+    print(f"🚀 Sharpe Ratio con Filtro: {sharpe:.2f}")
+
+def calculate_real_sharpe_binary(df_res):
+    # 1. Aseguramos que la señal sea 1 si prob_up > 0.5, de lo solo Long (0)
+    # Si quieres que sea bi-direccional (Shorts), cambia el 0 por -1
+    df_res['signal'] = np.where(df_res['prob_up'] > 0.5, 1, 0)
+    
+    # 2. Calculamos el retorno usando la columna 'ret_real' de tu tabla
+    df_res['strat_ret'] = df_res['signal'] * df_res['ret_real']
+    
+    # 3. Calculamos medias y desviaciones
+    mean_ret = df_res['strat_ret'].mean()
+    std_ret = df_res['strat_ret'].std()
+    
+    # Evitar división por cero si no hay operaciones
+    if std_ret == 0:
+        return 0
+    
+    # 4. Anualización para 30 min (252 días * 48 velas de 30min al día)
+    sharpe = (mean_ret / std_ret) * np.sqrt(252 * 48)
+    
+    # Extra: Cálculo de Retorno Acumulado para comparar
+    final_cum_strat = (1 + df_res['strat_ret']).cumprod().iloc[-1]
+    
+    print(f"✅ Análisis del Modelo Binario:")
+    print(f"-------------------------------")
+    print(f"💰 Retorno Acumulado Estrategia: {final_cum_strat:.4f}")
+    print(f"📈 Retorno Acumulado Mercado:    {df_res['cum_market'].iloc[-1]:.4f}")
+    
+    return sharpe
+
+# Ejecútala así:
+# print(f"\n📊 El Sharpe Ratio REAL es: {calculate_real_sharpe_binary(df_tu_variable):.4f}")
+
+def calculate_sharpe_triple(df_res):
+    df_calc = df_res.copy()
+    
+    # 1. Creamos la señal: 
+    # Si pred es 2 (Buy) -> 1
+    # Si pred es 0 (Sell) -> -1
+    # Si pred es 1 (Neutral) -> 0
+    df_calc['signal'] = 0
+    df_calc.loc[df_calc['pred'] == 2, 'signal'] = 1
+    df_calc.loc[df_calc['pred'] == 0, 'signal'] = -1
+    
+    # 2. Calculamos el retorno de la estrategia
+    df_calc['strat_ret'] = df_calc['signal'] * df_calc['ret_real']
+    
+    # 3. Cálculo del Sharpe Ratio Anualizado
+    # (252 días * 48 velas de 30 min)
+    mean_ret = df_calc['strat_ret'].mean()
+    std_ret = df_calc['strat_ret'].std()
+    
+    if std_ret == 0: return 0
+    
+    sharpe = (mean_ret / std_ret) * np.sqrt(252 * 48)
+    
+    # Extra: Retorno total acumulado
+    total_ret = (1 + df_calc['strat_ret']).cumprod().iloc[-1] - 1
+    
+    print(f"📈 Resultado Final:")
+    print(f"-------------------")
+    print(f"💰 Sharpe Ratio: {sharpe:.4f}")
+    print(f"🚀 Retorno Total: {total_ret * 100:.2f}%")
+    print(f"⚖️ Operaciones totales: {len(df_calc[df_calc['signal'] != 0])} de {len(df_calc)}")
+    
+    return sharpe
+
+# Llama a la función con tu dataframe:
+# sharpe_final = calculate_sharpe_triple(tu_dataframe_aqui)
+
+def calculate_final_binary_sharpe(df_res):
+    # 1. Definimos la señal: Si la probabilidad de subir es > 50%, compramos.
+    # Si no, nos quedamos fuera (0).
+    df_res['signal'] = (df_res['prob_up'] > 0.5).astype(int)
+    
+    # 2. El retorno es la señal por el retorno real del mercado
+    df_res['strat_ret'] = df_res['signal'] * df_res['ret_real']
+    
+    # 3. Métricas
+    mean_ret = df_res['strat_ret'].mean()
+    std_ret = df_res['strat_ret'].std()
+    
+    # Anualización (252 días * 48 velas de 30min)
+    ann_factor = np.sqrt(252 * 48)
+    sharpe = (mean_ret / std_ret) * ann_factor
+    
+    # Volatilidad anualizada (extra)
+    ann_vol = std_ret * ann_factor
+    
+    print(f"📊 --- RESULTADOS BINARIOS ---")
+    print(f"💰 Sharpe Ratio: {sharpe:.4f}")
+    print(f"📉 Volatilidad Anual: {ann_vol*100:.2f}%")
+    print(f"📈 Retorno Final: {df_res['cum_strat'].iloc[-1]:.4f}")
+    print(f"-------------------------------")
+    
+    return sharpe
+
+# Ejecútalo con:
+
+def apply_time_filter(df_res):
+    df_filtered = df_res.copy()
+    df_filtered['hour'] = pd.to_datetime(df_filtered['datetime']).dt.hour
+    
+    # Basado en tu gráfico: Horas donde el modelo es REALMENTE bueno
+    # Excluimos el bloque de las 12, 13, 14, 15 y 16 que son negativas
+    horas_permitidas = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 17, 18, 19, 20, 21]
+    
+    # Si la hora no está en la lista, la señal pasa a ser 0 (Cash)
+    # df_filtered['signal_final'] = np.where(
+        # (df_filtered['prob_up'] > 0.5) & (df_filtered['hour'].isin(horas_permitidas)), 
+        # 1, 
+        # 0
+    # )
+    # Prueba a ejecutar esto y dime el Sharpe resultante:
+    df_filtered['signal_final'] = np.where(
+        (df_filtered['prob_up'] > 0.53) & (df_filtered['hour'].isin(horas_permitidas)), 
+        1, 
+        0
+    )
+    # Recalculamos retornos
+    df_filtered['strat_ret_filtered'] = df_filtered['signal_final'] * df_filtered['ret_real']
+    
+    # Cálculo de nuevo Sharpe
+    mean = df_filtered['strat_ret_filtered'].mean()
+    std = df_filtered['strat_ret_filtered'].std()
+    new_sharpe = (mean / std) * np.sqrt(252 * 48)
+    
+    print(f"🚀 Sharpe Original: 0.6245")
+    print(f"💎 Sharpe Filtrado: {new_sharpe:.4f}")
+    
+    return df_filtered
+
+def stress_test_with_costs(df_res, tick_val=0.0001): # 0.0001 es aprox 1 tick en retornos
+    df_cost = df_res.copy()
+    
+    # 1. Identificamos cuándo hay una NUEVA operación (cambio de 0 a 1)
+    # Esto es para cobrar la comisión/spread al abrir la posición
+    df_cost['entry'] = ((df_cost['signal_final'] == 1) & (df_cost['signal_final'].shift(1) == 0)).astype(int)
+    
+    # 2. Restamos el coste del tick solo en las velas de entrada
+    # Nota: El tick_val en Oro suele ser 0.1 / precio_promedio (aprox 0.00005 a 0.0001)
+    df_cost['strat_ret_with_costs'] = df_cost['strat_ret_filtered'] - (df_cost['entry'] * tick_val)
+    
+    # 3. Recalculamos Sharpe
+    mean_c = df_cost['strat_ret_with_costs'].mean()
+    std_c = df_cost['strat_ret_with_costs'].std()
+    
+    sharpe_costs = (mean_c / std_c) * np.sqrt(252 * 48)
+    
+    # 4. Retorno acumulado real
+    cum_ret_costs = (1 + df_cost['strat_ret_with_costs']).cumprod().iloc[-1]
+    
+    print(f"🧪 --- STRESS TEST (1 TICK COST) ---")
+    print(f"📉 Sharpe con Costes: {sharpe_costs:.4f}")
+    print(f"💰 Retorno Final tras costes: {cum_ret_costs:.4f}")
+    print(f"🚪 Total de entradas pagadas: {df_cost['entry'].sum()}")
+    print(f"------------------------------------")
+    
+    return sharpe_costs
+
+# Ejecuta y dime el resultado:
+
+def run_backtest_pro(df, tp_ticks=10, sl_ticks=5, tick_size=0.1):
+    df_bt = df.copy()
+    
+    # 1. Definimos objetivos en valor nominal ($)
+    tp_amount = tp_ticks * tick_size
+    sl_amount = sl_ticks * tick_size
+    
+    trade_returns = []
+    
+    # 2. Recorremos el dataframe
+    # Solo entramos si signal_final == 1
+    for i in range(len(df_bt)):
+        if df_bt['signal_final'].iloc[i] == 1:
+            price_entry = df_bt['close'].iloc[i]
+            # Calculamos el movimiento real en $ de esa vela
+            price_move = df_bt['ret_real'].iloc[i] * price_entry
+            
+            # Lógica de salida:
+            if price_move >= tp_amount:
+                # Ganamos el TP menos 1 tick de coste (comisión/spread)
+                trade_returns.append((tp_amount - tick_size) / price_entry)
+            elif price_move <= -sl_amount:
+                # Perdemos el SL más 1 tick de coste
+                trade_returns.append((-sl_amount - tick_size) / price_entry)
+            else:
+                # Si no toca ni SL ni TP, salimos al cierre de la vela (30 min)
+                # Restamos 1 tick de coste por la operación
+                trade_returns.append(df_bt['ret_real'].iloc[i] - (tick_size / price_entry))
+        else:
+            trade_returns.append(0)
+            
+    df_bt['strat_ret_managed'] = trade_returns
+    
+    # 3. Métricas finales
+    mean_r = df_bt['strat_ret_managed'].mean()
+    std_r = df_bt['strat_ret_managed'].std()
+    sharpe = (mean_r / std_r) * np.sqrt(252 * 48) if std_r != 0 else 0
+    
+    print(f"🏆 Resultado con Gestión de Riesgo (TP:{tp_ticks} / SL:{sl_ticks} ticks):")
+    print(f"📊 Sharpe Neto: {sharpe:.4f}")
+    print(f"💰 Retorno Total: {(1 + df_bt['strat_ret_managed']).cumprod().iloc[-1]:.4f}")
+    
+    return df_bt
+
+# Ejecución:
+# result_final_bt = run_backtest_pro(result_filtered, tp_ticks=8, sl_ticks=4)
+
+def run_backtest_managed_with_costs(df, tp_ticks=10, sl_ticks=5, cost_in_ticks=1, tick_val=0.1):
+    df_bt = df.copy()
+    
+    # 1. Convertimos ticks a dólares
+    tp_amount = tp_ticks * tick_val
+    sl_amount = sl_ticks * tick_val
+    cost_amount = cost_in_ticks * tick_val
+    
+    trade_returns = []
+    
+    for i in range(len(df_bt)):
+        # Solo operamos si la señal filtrada es 1 (Long)
+        if df_bt['signal_final'].iloc[i] == 1:
+            price_entry = df_bt['close'].iloc[i]
+            # Movimiento del precio en dólares en esa vela de 30m
+            price_move = df_bt['ret_real'].iloc[i] * price_entry
+            
+            # Lógica de salida:
+            if price_move >= tp_amount:
+                # Éxito: Ganamos el TP pero restamos el coste de ejecución
+                net_gain = tp_amount - cost_amount
+                trade_returns.append(net_gain / price_entry)
+            
+            elif price_move <= -sl_amount:
+                # Fracaso: Perdemos el SL y además pagamos el coste
+                net_loss = -sl_amount - cost_amount
+                trade_returns.append(net_loss / price_entry)
+            
+            else:
+                # No tocó ni TP ni SL: salimos al cierre de la vela
+                # Retorno real de la vela menos el coste
+                net_ret = price_move - cost_amount
+                trade_returns.append(net_ret / price_entry)
+        else:
+            trade_returns.append(0)
+            
+    df_bt['strat_ret_managed'] = trade_returns
+    
+    # Métricas
+    mean_r = df_bt['strat_ret_managed'].mean()
+    std_r = df_bt['strat_ret_managed'].std()
+    sharpe = (mean_r / std_r) * np.sqrt(252 * 48) if std_r != 0 else 0
+    
+    print(f"✅ TP: {tp_ticks} | SL: {sl_ticks} | Coste: {cost_in_ticks} ticks")
+    print(f"📊 Sharpe Neto Final: {sharpe:.4f}")
+    print(f"💰 Retorno Acumulado: {(1 + df_bt['strat_ret_managed']).cumprod().iloc[-1]:.4f}")
+    
+    return df_bt
+
+# PRUEBA DE FUEGO:
+# result_final_costs = run_backtest_managed_with_costs(result_filtered, tp_ticks=10, sl_ticks=5, cost_in_ticks=2)
