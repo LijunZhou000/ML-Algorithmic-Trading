@@ -2,6 +2,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout, BatchNormalization
+from keras.optimizers import Adam
+from sklearn.preprocessing import RobustScaler
+from keras.callbacks import EarlyStopping
+import tensorflow as tf
 
 # Funciones de carga, limpieza, resampleo y análisis para futuros
 def import_dataset(asset='gc1', format='min'):
@@ -511,8 +517,8 @@ def audit_and_clean_dict(df_dict, feature_cols):
     """
     cleaned_dict = {}
     
-    for tf, df in df_dict.items():
-        print(f"--- 🔍 Auditando {tf} ---")
+    for timeframe, df in df_dict.items():
+        print(f"--- 🔍 Auditando {timeframe} ---")
         
         # 1. Detectar Infinitos (común en divisiones por vol_per_tick)
         inf_count = np.isinf(df[feature_cols]).sum().sum()
@@ -531,7 +537,217 @@ def audit_and_clean_dict(df_dict, feature_cols):
             df_cleaned = df.copy()
             print("💎 Datos limpios. Sin NaNs.")
 
-        cleaned_dict[tf] = df_cleaned
+        cleaned_dict[timeframe] = df_cleaned
         print("-" * 25)
         
     return cleaned_dict
+
+def create_lstm_dataset(df, features, target_col, lookback=14):
+    """
+    Crea el dataset para LSTM usando NumPy strides (ultra rápido).
+    """
+    # 1. Convertimos a NumPy array (importante para velocidad)
+    feature_array = df[features].values
+    target_array = df[target_col].values
+    
+    # 2. Calculamos las dimensiones
+    num_samples = len(df) - lookback
+    num_features = len(features)
+    
+    # 3. Magia de NumPy Strides: Creamos ventanas sin bucles
+    # (samples, lookback, features)
+    shape = (num_samples, lookback, num_features)
+    strides = (feature_array.strides[0], feature_array.strides[0], feature_array.strides[1])
+    
+    X = np.lib.stride_tricks.as_strided(feature_array, shape=shape, strides=strides)
+    
+    # 4. El target es simplemente el valor DESPUÉS de la ventana
+    y = target_array[lookback:]
+    
+    return X, y
+
+def build_lstm_model_30m(input_shape):
+    model = Sequential([
+        LSTM(128, input_shape=input_shape, return_sequences=True), # Más neuronas para 30m
+        BatchNormalization(),
+        Dropout(0.3),
+        
+        LSTM(64, return_sequences=False),
+        BatchNormalization(),
+        Dropout(0.3),
+        
+        Dense(32, activation='relu'),
+        Dense(3, activation='softmax') 
+    ])
+    
+    model.compile(
+        optimizer=Adam(learning_rate=0.0005), # LR más bajo para mayor estabilidad
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    return model
+
+def build_lstm_model_bin(input_shape):
+    model = Sequential([
+        LSTM(128, input_shape=input_shape, return_sequences=True),
+        BatchNormalization(),
+        Dropout(0.3),
+        
+        LSTM(64, return_sequences=False),
+        BatchNormalization(),
+        Dropout(0.3),
+        
+        Dense(32, activation='relu'),
+        # Cambiamos a 1 neurona con Sigmoid para clasificación binaria
+        Dense(1, activation='sigmoid') 
+    ])
+    
+    model.compile(
+        optimizer=Adam(learning_rate=0.0005),
+        loss='binary_crossentropy', # Pérdida binaria
+        metrics=['accuracy', tf.keras.metrics.AUC(name='auc')]
+    )
+    return model
+
+def run_walk_forward_gold(df, feature_cols, target_col='target_class', 
+                          train_size=40000, test_size=10000, step=10000, 
+                          lookback=20, epochs=15, batch_size=64):
+    """
+    Ejecuta un esquema de validación Walk-Forward con ventana móvil.
+    """
+
+    all_predictions = []
+    last_model = None
+    last_scaler = None
+    
+    # 1. Asegurar limpieza y orden
+    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
+    
+    # 2. Bucle de Ventanas Móviles
+    for start in range(0, len(df_wf) - train_size - test_size, step):
+        end_train = start + train_size
+        end_test = end_train + test_size
+        
+        # Separación de datos
+        train_df = df_wf.iloc[start:end_train].copy()
+        test_df = df_wf.iloc[end_train:end_test].copy()
+        
+        # --- A) ESCALADO (Fit solo en TRAIN) ---
+        scaler = RobustScaler()
+        train_df[feature_cols] = scaler.fit_transform(train_df[feature_cols])
+        test_df[feature_cols] = scaler.transform(test_df[feature_cols])
+        
+        # --- B) CREAR TENSORES ---
+        # Usamos tu función create_lstm_dataset (debe estar definida globalmente)
+        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
+        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
+        
+        # --- C) MODELO ---
+        # Re-inicializamos para cada ventana para que aprenda el régimen actual
+        input_shape = (X_train.shape[1], X_train.shape[2])
+        model = build_lstm_model_30m(input_shape) # Tu función de arquitectura
+        
+        es = EarlyStopping(monitor='loss', patience=4, restore_best_weights=True)
+        
+        print(f"\n🔄 Entrenando Ventana: {df_wf['datetime'].iloc[start]} --> {df_wf['datetime'].iloc[end_train]}")
+        model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, 
+                  verbose=0, callbacks=[es])
+        
+        # --- D) PREDICCIÓN ---
+        preds = model.predict(X_test)
+        pred_classes = np.argmax(preds, axis=1)
+        
+        # --- E) RECOPILAR RESULTADOS ---
+        # Sincronizamos con las fechas y retornos para el análisis posterior
+        res_df = pd.DataFrame({
+            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
+            'actual': y_test,
+            'pred': pred_classes,
+            'prob_0': preds[:, 0], # Prob Sell
+            'prob_1': preds[:, 1], # Prob Neutral
+            'prob_2': preds[:, 2], # Prob Buy
+            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
+        })
+        
+        all_predictions.append(res_df)
+        last_model = model # Nos quedamos con el último modelo (el más "actual")
+        last_scaler = scaler
+        
+        acc = (pred_classes == y_test).mean()
+        print(f"✅ Ventana completada. Acc: {acc:.2%}")
+
+    # Unir todos los resultados
+    full_results = pd.concat(all_predictions, ignore_index=True)
+    
+    return {
+        'model': last_model,
+        'scaler': last_scaler,
+        'results': full_results
+    }
+    
+def run_walk_forward_bin(df, feature_cols, target_col='target_bin', 
+                         train_size=40000, test_size=10000, step=10000, 
+                         lookback=20, epochs=15, batch_size=64):
+    """
+    Ejecuta validación Walk-Forward para clasificación BINARIA (Sube/No sube).
+    """
+    all_predictions = []
+    last_model = None
+    last_scaler = None
+    
+    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
+    
+    for start in range(0, len(df_wf) - train_size - test_size, step):
+        end_train = start + train_size
+        end_test = end_train + test_size
+        
+        train_df = df_wf.iloc[start:end_train].copy()
+        test_df = df_wf.iloc[end_train:end_test].copy()
+        
+        # A) ESCALADO
+        scaler = RobustScaler()
+        train_df[feature_cols] = scaler.fit_transform(train_df[feature_cols])
+        test_df[feature_cols] = scaler.transform(test_df[feature_cols])
+        
+        # B) TENSORES
+        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
+        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
+        
+        # C) MODELO BINARIO
+        input_shape = (X_train.shape[1], X_train.shape[2])
+        model = build_lstm_model_bin(input_shape)
+        
+        es = EarlyStopping(monitor='loss', patience=4, restore_best_weights=True)
+        
+        print(f"\n🔄 Entrenando Ventana Binaria: {df_wf['datetime'].iloc[start]} --> {df_wf['datetime'].iloc[end_train]}")
+        model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, 
+                  verbose=0, callbacks=[es])
+        
+        # D) PREDICCIÓN (Probabilidad 0.0 a 1.0)
+        probs = model.predict(X_test).ravel()
+        # Umbral estándar de 0.5 para la clase predicha
+        pred_classes = (probs > 0.5).astype(int)
+        
+        # E) RESULTADOS
+        res_df = pd.DataFrame({
+            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
+            'actual': y_test,
+            'pred': pred_classes,
+            'prob_up': probs, # Probabilidad de que el precio suba
+            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
+        })
+        
+        all_predictions.append(res_df)
+        last_model = model
+        last_scaler = scaler
+        
+        acc = (pred_classes == y_test).mean()
+        print(f"✅ Ventana completada. Acc: {acc:.2%} | Buy Ratio: {pred_classes.mean():.2%}")
+
+    full_results = pd.concat(all_predictions, ignore_index=True)
+    
+    return {
+        'model': last_model,
+        'scaler': last_scaler,
+        'results': full_results
+    }
