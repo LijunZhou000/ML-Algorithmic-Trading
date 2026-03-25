@@ -2,6 +2,7 @@
 
 # Ignore de datos y logs =========================
 TradingBots/Data
+!TradingBots/Data/futuros_specs.json
 TradingBots/Logs
 
 # Ignore de la web =========================

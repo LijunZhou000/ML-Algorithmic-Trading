@@ -37,25 +37,38 @@ def import_dataset(asset='gc1', format='min'):
     spec = specs[asset[:2].upper()]
     return df, spec
 
-def clean(df, asset='gc1'):
+def clean(df, asset='gc1', break_hour=0):
     df = df.copy()
-    # 1. Eliminar Sábados (Día 5) - Ruido absoluto detectado en el EDA
-    df = df[df['datetime'].dt.weekday != 5]
-    # 2. Definir el inicio de la sesión (Trading Day)
-    # En tus datos el hueco es de 00:00 a 01:00. 
-    # Restamos 1 hora para que la vela de la 01:05 sea la primera del "día"
-    df['trading_date'] = (df['datetime'] - pd.Timedelta(hours=1)).dt.date
-    # 3. Filtrar el ruido del "Break" (15 min antes y 5 min después)
-    # Minutos totales del día:
-    minutes = df['datetime'].dt.hour * 60 + df['datetime'].dt.minute
-    # Filtramos: antes de las 00:00 (cierre) y justo al abrir (01:00)
-    # Esto elimina spreads gigantes que la LSTM no puede predecir
-    mask_noise = (minutes >= 1425) | (minutes == 60) 
-    df = df[~mask_noise]
-    # 4. Eliminar duplicados y asegurar orden temporal
+
+    # 1. Días de la semana: Nos quedamos estrictamente de Lunes (0) a Viernes (4).
+    # Esto elimina los sábados (5) y los domingos residuales (6).
+    df = df[df['datetime'].dt.weekday <= 4]
+
+    # 2. Eliminar la hora del break dinámicamente.
+    # Si le pasas break_hour=0, borrará las 00:00h. Si pasas 23, borrará las 23:00h.
+    df = df[df['datetime'].dt.hour != break_hour]
+
+    # 3. Filtrar ruido alrededor del break (15 min antes y 15 min después).
+    # Calculamos la hora previa y la hora posterior teniendo en cuenta el ciclo de 24h.
+    prev_hour = (break_hour - 1) % 24
+    next_hour = (break_hour + 1) % 24
+    
+    # Máscara para 15 minutos antes del cierre (ej: 22:45 a 22:59)
+    mask_noise_before = (df['datetime'].dt.hour == prev_hour) & (df['datetime'].dt.minute >= 45)
+    
+    # Máscara para 15 minutos después de la apertura (ej: 00:00 a 00:15 o 01:00 a 01:15)
+    mask_noise_after = (df['datetime'].dt.hour == next_hour) & (df['datetime'].dt.minute <= 15)
+    
+    # Aplicamos el filtro para quitar ese ruido
+    df = df[~(mask_noise_before | mask_noise_after)]
+
+    # 4. Definir trading day continuo.
+    df['trading_date'] = df['datetime'].dt.date
+
+    # 5. Eliminar duplicados y asegurar orden temporal continuo.
     df = df.drop_duplicates(subset=['datetime']).sort_values('datetime')
-    # 5. Resetear índice para que la secuencia de la LSTM sea continua
     df = df.reset_index(drop=True)
+
     print(f"Limpieza {asset} completada. Filas restantes: {len(df)}")
     return df
 
@@ -415,7 +428,7 @@ def add_indicator_features(df, tick_size=0.1):
     # 1. TARGETS CORREGIDOS (Para DF de 30 minutos)
     # ---------------------------------------------------------
     # Shift(-1) = Próximos 30 min | Shift(-2) = Próximos 60 min
-    df['target_ret_30m'] = np.log(df['close'].shift(-2) / df['close'])
+    df['target_ret_30m'] = np.log(df['close'].shift(-3) / df['close'])
     df['target_ret_1h'] = np.log(df['close'].shift(-2) / df['close'])
 
     # ---------------------------------------------------------
@@ -1248,9 +1261,6 @@ def plot_triple_trading_results(df_res, conf_threshold=0.55):
     print(f"📉 Total de Trades: {len(trades)} de {len(df_plot)} velas")
     print("-" * 30)
 
-# Uso:
-# plot_triple_trading_results(result_triple, conf_threshold=0.6)
-
 def plot_triple_final_comparison(df_res):
     df_plot = df_res.copy()
     
@@ -1276,8 +1286,6 @@ def plot_triple_final_comparison(df_res):
     # Sharpe Ratio Anualizado (aprox 252 días * 48 velas de 30m)
     sharpe = (df_plot['strat_ret'].mean() / df_plot['strat_ret'].std()) * np.sqrt(252 * 48)
     print(f"💰 Sharpe Ratio Esperado: {sharpe:.2f}")
-
-# plot_triple_final_comparison(result_triple_final)
 
 def analyze_by_hour(df_res):
     df_res = df_res.copy()
@@ -1592,5 +1600,61 @@ def run_backtest_managed_with_costs(df, tp_ticks=10, sl_ticks=5, cost_in_ticks=1
     
     return df_bt
 
-# PRUEBA DE FUEGO:
-# result_final_costs = run_backtest_managed_with_costs(result_filtered, tp_ticks=10, sl_ticks=5, cost_in_ticks=2)
+def plot_universal_backtest(df_res, mode='auto', conf_threshold=0.50, tick_comm=1.0, tick_size=0.1):
+    """
+    Backtest universal para modelos Binarios y Ternarios.
+    mode: 'auto', 'bin' o 'tri'
+    tick_comm: Comisión en ticks por operación (ida y vuelta)
+    """
+    df = df_res.copy()
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    
+    # --- 1. DETECCIÓN AUTOMÁTICA DE MODO ---
+    if mode == 'auto':
+        mode = 'tri' if 'prob_neutral' in df.columns else 'bin'
+    
+    # --- 2. GENERACIÓN DE SEÑALES ---
+    df['signal'] = 0
+    
+    if mode == 'tri':
+        # Modo Ternario: Compra si Buy es la máxima y > umbral. Vende si Sell es la máxima y > umbral.
+        # Asumimos: 2=Buy, 1=Neutral, 0=Sell
+        df.loc[(df['prob_buy'] > df['prob_neutral']) & (df['prob_buy'] > df['prob_sell']) & (df['prob_buy'] > conf_threshold), 'signal'] = 1
+        df.loc[(df['prob_sell'] > df['prob_neutral']) & (df['prob_sell'] > df['prob_buy']) & (df['prob_sell'] > conf_threshold), 'signal'] = -1
+    else:
+        # Modo Binario: Compra si prob_up > umbral
+        df.loc[df['prob_up'] > conf_threshold, 'signal'] = 1
+
+    # --- 3. CÁLCULO DE RETORNOS CON COMISIONES ---
+    # Solo aplicamos comisión cuando la señal CAMBIA (entrada/salida) o simplificado por trade
+    # Aquí restamos la comisión (convertida a retorno decimal) en cada trade ejecutado
+    comm_decimal = (tick_comm * tick_size) / df['close'] 
+    
+    df['strat_ret'] = df['signal'] * df['ret_real']
+    # Restamos comisión solo cuando la señal no es 0
+    df.loc[df['signal'] != 0, 'strat_ret'] = df['strat_ret'] - comm_decimal
+
+    # --- 4. MÉTRICAS Y GRÁFICO ---
+    df['cum_strat'] = (1 + df['strat_ret']).cumprod()
+    df['cum_market'] = (1 + df['ret_real']).cumprod()
+    
+    # Sharpe Anualizado (Ajustado a Intradía 30m/1h)
+    # 252 días * (7 horas de trading activo o 24h según tu data)
+    velas_dia = 48 if (df['datetime'].diff().dt.total_seconds().median() <= 1800) else 24
+    ann_factor = np.sqrt(252 * velas_dia)
+    
+    sharpe = (df['strat_ret'].mean() / df['strat_ret'].std()) * ann_factor
+    
+    plt.figure(figsize=(15, 7))
+    color = 'gold' if mode == 'bin' else 'cyan'
+    plt.plot(df['datetime'], df['cum_strat'], label=f'Estrategia LSTM {mode.upper()} (Sharpe: {sharpe:.2f})', color=color, lw=2)
+    plt.plot(df['datetime'], df['cum_market'], label='Mercado (Hold)', color='gray', alpha=0.4)
+    plt.title(f'Backtest Universal: Modo {mode.upper()} | Confianza > {conf_threshold}')
+    plt.legend()
+    plt.grid(alpha=0.2)
+    plt.show()
+    
+    print(f"✅ Modo detectado: {mode.upper()}")
+    print(f"💰 Sharpe Ratio: {sharpe:.2f}")
+    print(f"🎯 Win Rate: {((df.loc[df['signal'] != 0, 'strat_ret'] > 0).mean()*100):.2f}%")
+    return df
