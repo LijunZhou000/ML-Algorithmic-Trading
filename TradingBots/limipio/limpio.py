@@ -9,13 +9,14 @@ from sklearn.preprocessing import RobustScaler
 from keras.callbacks import EarlyStopping
 import tensorflow as tf
 from tqdm.auto import tqdm # Auto detecta si estás en consola o Jupyter
-import torch.cuda.amp as amp
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from torch.cuda.amp import autocast, GradScaler 
 import talib as ta
+from torch import amp
+import re
 
 # Funciones de carga, limpieza, resampleo y análisis para futuros
 def import_dataset(asset='gc1', format='min'):
@@ -63,7 +64,10 @@ def clean(df, asset='gc1', break_hour=0):
     df = df[~(mask_noise_before | mask_noise_after)]
 
     # 4. Definir trading day continuo.
-    df['trading_date'] = df['datetime'].dt.date
+    if asset == 'gc1':
+        df['trading_date'] = df['datetime'].dt.date
+    else:
+        df['trading_date'] = (df['datetime'] - pd.Timedelta(hours=1)).dt.date
 
     # 5. Eliminar duplicados y asegurar orden temporal continuo.
     df = df.drop_duplicates(subset=['datetime']).sort_values('datetime')
@@ -94,7 +98,8 @@ def resample_ohlcv(df, period="5min"):
         "low": "min",
         "close": "last",
         "volume": "sum",
-        "openint": "last"
+        "openint": "last",
+        "dtyyyymmdd": "first"
     }
 
     # Resample usando el periodo elegido
@@ -106,7 +111,7 @@ def resample_ohlcv(df, period="5min"):
     # Añadir columnas extra
     df_resampled["ticker"] = df["ticker"].iloc[0]
     df_resampled["per"] = period
-
+    
     # Reset index
     df_resampled = df_resampled.reset_index()
 
@@ -138,11 +143,45 @@ def get_multitimeframe_data(df_base, intervals=None):
         
     return df_resampled_dict
 
-def plot_master_market_analysis(df, asset_name="Future", tick_size=0.1, 
-                                price_plots=True, tick_plots=True, max_autocorr=10000):
+def kama(df, window=10, fast=2, slow=30):
+    close = df['close'].values.astype(float)
+
+    # Efficiency Ratio (ER) - cálculo seguro evitando divisiones por cero/NaN
+    change = np.abs(close - np.roll(close, window))
+    volatility = np.abs(np.diff(close))
+    volatility = np.concatenate(([np.nan], volatility)).astype(float)
+    volatility = pd.Series(volatility).rolling(window).sum().values
+
+    # Evitar evaluación del branch 'change / volatility' cuando volatility==0 o NaN
+    er = np.zeros_like(volatility, dtype=float)
+    mask = (volatility != 0) & (~np.isnan(volatility))
+    er[mask] = change[mask] / volatility[mask]
+    er[~mask] = 0.0
+
+    # Smoothing Constant (SC)
+    fast_sc = 2 / (fast + 1)
+    slow_sc = 2 / (slow + 1)
+    sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
+    sc = np.nan_to_num(sc, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # KAMA calculation (recursive) - asegurar dtype float y manejo de valores iniciales
+    kama = np.full(close.shape, np.nan, dtype=float)
+    if len(close) > 0:
+        kama[0] = close[0]
+    for i in range(1, len(close)):
+        # sc[i] ya está saneado (no NaN/inf)
+        kama[i] = kama[i-1] + sc[i] * (close[i] - kama[i-1])
+
+    df['kama'] = kama
+    return df
+
+def plot_master_market_analysis(df, asset_name="Future", tick_size=0.1,
+                                price_plots=True, tick_plots=True, max_autocorr=10000,
+                                first_plot_candles=60*24*365, # int (num velas en la base) o 'all'
+                                show=True, save=False):
     df_diag = df.copy()
     df_diag.columns = df_diag.columns.str.strip().str.lower()
-    
+
     # 1. Preparación de Datetime
     if 'datetime' in df_diag.columns:
         df_diag['datetime'] = pd.to_datetime(df_diag['datetime'])
@@ -155,52 +194,96 @@ def plot_master_market_analysis(df, asset_name="Future", tick_size=0.1,
     df_diag['day_name'] = df_diag.index.day_name()
     df_diag['volatility'] = df_diag['high'] - df_diag['low']
     df_diag['ticks_range'] = df_diag['volatility'] / tick_size
-    
+
     # --- CÁLCULOS AVANZADOS (VWAP & EFICIENCIA) ---
-    # VWAP Intradía (se reinicia cada día)
     df_diag['tp'] = (df_diag['high'] + df_diag['low'] + df_diag['close']) / 3
     df_diag['pv'] = df_diag['tp'] * df_diag['volume']
-    
-    # Agrupamos por fecha para el acumulado diario
+
     date_group = df_diag.groupby(df_diag.index.date)
     df_diag['vwap'] = date_group['pv'].cumsum() / date_group['volume'].cumsum()
-    
-    # Z-Score del VWAP (Desviación)
+
     vwap_std = date_group['tp'].transform(lambda x: x.expanding().std())
     df_diag['vwap_zscore'] = (df_diag['close'] - df_diag['vwap']) / (vwap_std + 0.001)
-    
-    # Efficiency Ratio (Fractalidad a 30 min)
+
     lookback_eff = 30
     net_chg = df_diag['close'].diff(lookback_eff).abs()
     path_chg = df_diag['close'].diff().abs().rolling(window=lookback_eff).sum()
     df_diag['efficiency_ratio'] = net_chg / (path_chg + 0.001)
 
-    # Métricas de Ticks
     df_diag['vol_per_tick'] = df_diag['volume'] / (df_diag['ticks_range'] + 0.1)
     df_diag['intensity'] = df_diag['vol_per_tick']
-    df_diag['speed'] = df_diag['ticks_range'] # Ticks por minuto
+    df_diag['speed'] = df_diag['ticks_range']
 
     days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-    # 3. Definición Dinámica de la Rejilla (Grid)
-    price_rows = 5 if price_plots else 0
-    tick_rows = 6 if tick_plots else 0 # Aumentado para VWAP y Speed
+    price_rows = 6 if price_plots else 0
+    tick_rows = 6 if tick_plots else 0
     total_rows = price_rows + tick_rows
-    
+
     fig = plt.figure(figsize=(18, 4 * total_rows))
     gs = fig.add_gridspec(total_rows, 2)
-    plt.suptitle(f"MASTER DASHBOARD PROFESIONAL: {asset_name}", fontsize=22, y=0.99, fontweight='bold')
+    plt.suptitle(f"MASTER DASHBOARD PROFESIONAL: {asset_name} Future", fontsize=22, y=0.99, fontweight='bold')
 
     row = 0
+
+    df_diag["kama"] = kama(df_diag)['kama']
     
+    # A. Relative Volume (RVOL) - Volumen vs su propia media a esa misma hora
+    hourly_avg_vol = df_diag.groupby('hour')['volume'].transform('mean')
+    df_diag['rvol'] = df_diag['volume'] / (hourly_avg_vol + 0.001)
+
+    # B. Log-Return Variance (Volatilidad Realizada corta)
+    df_diag['log_ret'] = np.log(df_diag['close'] / df_diag['close'].shift(1))
+    df_diag['realized_vol'] = df_diag['log_ret'].rolling(window=10).std()
+    
+    # C. Aceleración de Ticks (Cambio en la velocidad)
+    df_diag['speed'] = df_diag['ticks_range']
+    df_diag['tick_acceleration'] = df_diag['speed'].diff()
+
     # --- SECCIÓN DE PRECIO ---
     if price_plots:
-        # Fila 1: Precio Diario
+        # Fila 1: Precio Diario (selección de cuántas velas mostrar)
         ax0 = fig.add_subplot(gs[row, :])
         df_daily = df_diag['close'].resample('D').last().dropna()
-        ax0.plot(df_daily.index, df_daily.values, color='#1a508b', linewidth=1.5)
-        ax0.set_title("Evolución del Precio (Cierre Diario)")
+
+        # Interpretación de first_plot_candles
+        if isinstance(first_plot_candles, str) and first_plot_candles == 'all':
+            df_daily_to_plot = df_daily
+        else:
+            try:
+                n_candles = int(first_plot_candles)
+            except Exception:
+                n_candles = 60*24*365
+
+            # estimar duración de cada vela
+            idx_diff = df_diag.index.to_series().diff().median()
+            median_minutes = idx_diff.total_seconds() / 60.0 if not pd.isna(idx_diff) else 1.0
+            candles_per_day = max(1.0, (24 * 60) / median_minutes)
+            days = int(np.ceil(n_candles / candles_per_day))
+            df_daily_to_plot = df_daily.tail(days)
+
+        # --- PLOT PRECIO DIARIO ---
+        ax0.plot(df_daily_to_plot.index, df_daily_to_plot.values,
+                 color='#1a508b', linewidth=1.5, label='Cierre Diario')
+
+        # --- KAMA SEMANAL (sin ffill, solo puntos reales) ---
+        kama_weekly = df_diag['kama'].resample('W').last().dropna()
+
+        # Filtrar KAMA al mismo rango temporal que df_daily_to_plot
+        kama_weekly_visible = kama_weekly.loc[
+            (kama_weekly.index >= df_daily_to_plot.index.min()) &
+            (kama_weekly.index <= df_daily_to_plot.index.max())
+        ]
+
+        # Plot: línea entre puntos semanales + marcadores
+        ax0.plot(kama_weekly_visible.index, kama_weekly_visible.values,
+                 color='orange', linewidth=1.5, marker='o',
+                 label='KAMA semanal')
+
+        ax0.set_title("Evolución del Precio (Cierre Diario) y KAMA")
+        ax0.legend()
         row += 1
+
 
         # Fila 2: Volumen y Frecuencia
         ax1 = fig.add_subplot(gs[row, 0])
@@ -246,6 +329,22 @@ def plot_master_market_analysis(df, asset_name="Future", tick_size=0.1,
         df_gap['gap'] = df_gap['open'] - df_gap['close'].shift(1)
         sns.histplot(df_gap['gap'].dropna(), kde=True, color='purple', ax=ax_gap)
         ax_gap.set_title("Distribución de Gaps")
+        row += 1
+        
+        # Fila 2: RVOL y Realized Vol
+        # Construir subset de minuto que cubra el mismo rango que df_daily_to_plot
+        start_dt = df_daily_to_plot.index.min()
+        end_dt = df_daily_to_plot.index.max() + pd.Timedelta(days=1)
+        df_min_to_plot = df_diag.loc[start_dt:end_dt]
+
+        ax_rvol = fig.add_subplot(gs[row, 0])
+        sns.lineplot(data=df_min_to_plot, x=df_min_to_plot.index, y='rvol', ax=ax_rvol, color='green')
+        ax_rvol.axhline(1, color='red', linestyle='--')
+        ax_rvol.set_title("Relative Volume (RVOL > 1 es inusual)")
+
+        ax_rvol2 = fig.add_subplot(gs[row, 1])
+        sns.lineplot(data=df_min_to_plot, x=df_min_to_plot.index, y='realized_vol', ax=ax_rvol2, color='darkred')
+        ax_rvol2.set_title("Realized Volatility (Log-Return Std)")
         row += 1
 
     # --- SECCIÓN DE TICKS & MICROESTRUCTURA ---
@@ -293,9 +392,22 @@ def plot_master_market_analysis(df, asset_name="Future", tick_size=0.1,
         sns.histplot(df_diag['vwap_zscore'].dropna(), kde=True, ax=ax_vwap, color='teal')
         ax_vwap.set_title("Z-Score del VWAP (Desviación del Precio Justo)")
         row += 1
+        
+        ax_acc = fig.add_subplot(gs[row, :])
+        df_diag.groupby('hour')['tick_acceleration'].mean().plot(kind='bar', ax=ax_acc, color='salmon')
+        ax_acc.set_title("Aceleración Media de Ticks por Hora")
+        row += 1
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.97])
-    plt.show()
+    if save:
+        plt.savefig(f"../Data/{asset_name}_master_analysis.png", dpi=300)
+        print(f"📸 Gráficos guardados como: {asset_name}_master_analysis.png")
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    
     # return df_diag
     
 def daily_ohlcv_cummulative(df_5_min):
@@ -340,6 +452,7 @@ def apply_cumulative_stats_to_dict(df_dict):
         print(f"✅ Procesados acumulados diarios para: {tf_key}")
         
     return processed_dict
+
 # Feature engineering avanzada para futuros
 def add_time_features(df):
     """
@@ -677,36 +790,45 @@ def process_full_dictionary(df_dict, spec):
         
     return processed_features_dict
 
+def audit_single_df(df, feature_cols):
+    """
+    Audita y limpia un único DataFrame:
+    - Reemplaza infinitos por NaN
+    - Dropea filas con NaNs en las columnas de features
+    - Devuelve el DataFrame limpio
+    """
+    df = df.copy()
+
+    # 1. Detectar infinitos
+    inf_count = np.isinf(df[feature_cols]).sum().sum()
+    if inf_count > 0:
+        print(f"⚠️ Encontrados {inf_count} infinitos → reemplazando por NaN")
+        df[feature_cols] = df[feature_cols].replace([np.inf, -np.inf], np.nan)
+
+    # 2. Detectar NaNs
+    nan_count = df[feature_cols].isna().sum().sum()
+    if nan_count > 0:
+        print(f"⚠️ Encontrados {nan_count} NaNs → dropna en features")
+        df = df.dropna(subset=feature_cols)
+        print(f"   → Filas restantes: {len(df)}")
+    else:
+        print("💎 Sin NaNs en features")
+
+    return df
+
+
 def audit_and_clean_dict(df_dict, feature_cols):
     """
-    Escanea el diccionario buscando NaNs e Infinitos en las columnas de interés.
-    Limpia y reporta el estado de cada DataFrame.
+    Aplica audit_single_df() a cada DataFrame del diccionario.
     """
     cleaned_dict = {}
-    
+
     for timeframe, df in df_dict.items():
-        print(f"--- 🔍 Auditando {timeframe} ---")
-        
-        # 1. Detectar Infinitos (común en divisiones por vol_per_tick)
-        inf_count = np.isinf(df[feature_cols]).sum().sum()
-        if inf_count > 0:
-            print(f"⚠️ ¡Atención! Encontrados {inf_count} valores infinitos. Reemplazando por NaN...")
-            df[feature_cols] = df[feature_cols].replace([np.inf, -np.inf], np.nan)
+        print(f"\n--- 🔍 Auditando {timeframe} ---")
+        cleaned_df = audit_single_df(df, feature_cols)
+        cleaned_dict[timeframe] = cleaned_df
+        print("-" * 30)
 
-        # 2. Detectar NaNs
-        nan_count = df[feature_cols].isna().sum().sum()
-        if nan_count > 0:
-            print(f"⚠️ Encontrados {nan_count} valores NaN (probablemente por rolling windows).")
-            # Dropeamos las filas que no tengan las features completas
-            df_cleaned = df.dropna(subset=feature_cols)
-            print(f"✅ Filas restantes tras dropna: {len(df_cleaned)}")
-        else:
-            df_cleaned = df.copy()
-            print("💎 Datos limpios. Sin NaNs.")
-
-        cleaned_dict[timeframe] = df_cleaned
-        print("-" * 25)
-        
     return cleaned_dict
 
 def create_lstm_dataset(df, features, target_col, lookback=14):
@@ -733,318 +855,89 @@ def create_lstm_dataset(df, features, target_col, lookback=14):
     
     return X, y
 
-def build_lstm_model_30m(input_shape):
-    model = Sequential([
-        LSTM(128, input_shape=input_shape, return_sequences=True), # Más neuronas para 30m
-        BatchNormalization(),
-        Dropout(0.3),
-        
-        LSTM(64, return_sequences=False),
-        BatchNormalization(),
-        Dropout(0.3),
-        
-        Dense(32, activation='relu'),
-        Dense(3, activation='softmax') 
-    ])
-    
-    model.compile(
-        optimizer=Adam(learning_rate=0.0005), # LR más bajo para mayor estabilidad
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    return model
-
-def build_lstm_model_bin(input_shape):
-    model = Sequential([
-        LSTM(128, input_shape=input_shape, return_sequences=True),
-        BatchNormalization(),
-        Dropout(0.3),
-        
-        LSTM(64, return_sequences=False),
-        BatchNormalization(),
-        Dropout(0.3),
-        
-        Dense(32, activation='relu'),
-        # Cambiamos a 1 neurona con Sigmoid para clasificación binaria
-        Dense(1, activation='sigmoid') 
-    ])
-    
-    model.compile(
-        optimizer=Adam(learning_rate=0.0005),
-        loss='binary_crossentropy', # Pérdida binaria
-        metrics=['accuracy', tf.keras.metrics.AUC(name='auc')]
-    )
-    return model
-
-def run_walk_forward_gold(df, feature_cols, target_col='target_class', 
-                          train_size=40000, test_size=10000, step=10000, 
-                          lookback=20, epochs=15, batch_size=64):
-    """
-    Ejecuta un esquema de validación Walk-Forward con ventana móvil.
-    """
-
-    all_predictions = []
-    last_model = None
-    last_scaler = None
-    
-    # 1. Asegurar limpieza y orden
-    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
-    
-    # 2. Bucle de Ventanas Móviles
-    for start in range(0, len(df_wf) - train_size - test_size, step):
-        end_train = start + train_size
-        end_test = end_train + test_size
-        
-        # Separación de datos
-        train_df = df_wf.iloc[start:end_train].copy()
-        test_df = df_wf.iloc[end_train:end_test].copy()
-        
-        # --- A) ESCALADO (Fit solo en TRAIN) ---
-        scaler = RobustScaler()
-        train_df[feature_cols] = scaler.fit_transform(train_df[feature_cols])
-        test_df[feature_cols] = scaler.transform(test_df[feature_cols])
-        
-        # --- B) CREAR TENSORES ---
-        # Usamos tu función create_lstm_dataset (debe estar definida globalmente)
-        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
-        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
-        
-        # --- C) MODELO ---
-        # Re-inicializamos para cada ventana para que aprenda el régimen actual
-        input_shape = (X_train.shape[1], X_train.shape[2])
-        model = build_lstm_model_30m(input_shape) # Tu función de arquitectura
-        
-        es = EarlyStopping(monitor='loss', patience=4, restore_best_weights=True)
-        
-        print(f"\n🔄 Entrenando Ventana: {df_wf['datetime'].iloc[start]} --> {df_wf['datetime'].iloc[end_train]}")
-        model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, 
-                  verbose=0, callbacks=[es])
-        
-        # --- D) PREDICCIÓN ---
-        preds = model.predict(X_test)
-        pred_classes = np.argmax(preds, axis=1)
-        
-        # --- E) RECOPILAR RESULTADOS ---
-        # Sincronizamos con las fechas y retornos para el análisis posterior
-        res_df = pd.DataFrame({
-            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
-            'actual': y_test,
-            'pred': pred_classes,
-            'prob_0': preds[:, 0], # Prob Sell
-            'prob_1': preds[:, 1], # Prob Neutral
-            'prob_2': preds[:, 2], # Prob Buy
-            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
-        })
-        
-        all_predictions.append(res_df)
-        last_model = model # Nos quedamos con el último modelo (el más "actual")
-        last_scaler = scaler
-        
-        acc = (pred_classes == y_test).mean()
-        print(f"✅ Ventana completada. Acc: {acc:.2%}")
-
-    # Unir todos los resultados
-    full_results = pd.concat(all_predictions, ignore_index=True)
-    
-    return {
-        'model': last_model,
-        'scaler': last_scaler,
-        'results': full_results
-    }
-    
-def run_walk_forward_bin(df, feature_cols, target_col='target_bin', 
-                         train_size=40000, test_size=10000, step=10000, 
-                         lookback=20, epochs=15, batch_size=64):
-    """
-    Ejecuta validación Walk-Forward para clasificación BINARIA (Sube/No sube).
-    """
-    all_predictions = []
-    last_model = None
-    last_scaler = None
-    
-    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
-    
-    for start in range(0, len(df_wf) - train_size - test_size, step):
-        end_train = start + train_size
-        end_test = end_train + test_size
-        
-        train_df = df_wf.iloc[start:end_train].copy()
-        test_df = df_wf.iloc[end_train:end_test].copy()
-        
-        # A) ESCALADO
-        scaler = RobustScaler()
-        train_df[feature_cols] = scaler.fit_transform(train_df[feature_cols])
-        test_df[feature_cols] = scaler.transform(test_df[feature_cols])
-        
-        # B) TENSORES
-        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
-        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
-        
-        # C) MODELO BINARIO
-        input_shape = (X_train.shape[1], X_train.shape[2])
-        model = build_lstm_model_bin(input_shape)
-        
-        es = EarlyStopping(monitor='loss', patience=4, restore_best_weights=True)
-        
-        print(f"\n🔄 Entrenando Ventana Binaria: {df_wf['datetime'].iloc[start]} --> {df_wf['datetime'].iloc[end_train]}")
-        model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, 
-                  verbose=0, callbacks=[es])
-        
-        # D) PREDICCIÓN (Probabilidad 0.0 a 1.0)
-        probs = model.predict(X_test).ravel()
-        # Umbral estándar de 0.5 para la clase predicha
-        pred_classes = (probs > 0.5).astype(int)
-        
-        # E) RESULTADOS
-        res_df = pd.DataFrame({
-            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
-            'actual': y_test,
-            'pred': pred_classes,
-            'prob_up': probs, # Probabilidad de que el precio suba
-            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
-        })
-        
-        all_predictions.append(res_df)
-        last_model = model
-        last_scaler = scaler
-        
-        acc = (pred_classes == y_test).mean()
-        print(f"✅ Ventana completada. Acc: {acc:.2%} | Buy Ratio: {pred_classes.mean():.2%}")
-
-    full_results = pd.concat(all_predictions, ignore_index=True)
-    
-    return {
-        'model': last_model,
-        'scaler': last_scaler,
-        'results': full_results
-    }
-    
-
-
-class GoldLSTM(nn.Module):
-    def __init__(self, input_dim, hidden_dim=128, num_layers=2, dropout=0.3):
-        super(GoldLSTM, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        
-        # Capa LSTM
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, 
-                            batch_first=True, dropout=dropout)
-        
-        # Normalización y Dropout
-        self.batch_norm = nn.BatchNorm1d(hidden_dim)
-        self.dropout = nn.Dropout(dropout)
-        
-        # Capas Densas
-        self.fc1 = nn.Linear(hidden_dim, 32)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(32, 1)
-        # self.sigmoid = nn.Sigmoid()
+class GoldLSTM_Bin_Default(nn.Module):
+    def __init__(self, input_dim, output_dim=1, hidden_dim=128, dropout=0.3):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2, batch_first=True, dropout=dropout)
+        self.bn = nn.BatchNorm1d(hidden_dim)
+        self.fc = nn.Linear(hidden_dim, 32)
+        self.relu = nn.LeakyReLU(0.1)
+        self.out = nn.Linear(32, output_dim)
 
     def forward(self, x):
-        # x shape: (batch, seq_len, features)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
-        
-        out, _ = self.lstm(x, (h0, c0))
-        # Tomamos solo el último output de la secuencia (many-to-one)
-        out = out[:, -1, :] 
-        
-        out = self.batch_norm(out)
-        out = self.fc1(out)
-        out = self.relu(out)
-        out = self.dropout(out)
-        out = self.fc2(out)
-        return out
-def run_walk_forward_pytorch(df, feature_cols, target_col='target_bin', 
-                             train_size=40000, test_size=10000, step=10000, 
-                             lookback=20, epochs=15, batch_size=64):
+        _, (hn, _) = self.lstm(x)
+        out = self.bn(hn[-1])
+        out = self.relu(self.fc(out))
+        return self.out(out)
     
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🖥️ Ejecutando en: {device}")
+class GoldLSTM_Triple_Default(nn.Module):
+    def __init__(self, input_dim, output_dim=3, hidden_dim=128, num_layers=2, dropout=0.3):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+        self.bn = nn.BatchNorm1d(hidden_dim)
+        self.fc1 = nn.Linear(hidden_dim, 32)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(32, output_dim)
+
+    def forward(self, x):
+        _, (hn, _) = self.lstm(x)
+        out = self.bn(hn[-1])
+        out = self.relu(self.fc1(out))
+        return self.fc2(out)
+    
+
+def get_return_col_value(col_name):
+    match = re.search(r'(\d+)', col_name)
+    return match.group(1) if match else "30"
+
+def run_gold_master_workflow(df, feature_cols, suffix, model_class=None, target_col='target_bin', 
+                                  train_size=40000, test_size=10000, step=10000, 
+                                  lookback=20, epochs=15, batch_size=256):
+    
+    device = torch.device("cuda")
+    scaler_amp = amp.GradScaler('cuda')
+    
+    # 1. DETECCIÓN DE MODO Y SELECCIÓN DE MODELO AUTOMÁTICA
+    num_classes = df[target_col].nunique()
+    is_binary = (num_classes == 2)
+    output_dim = 1 if is_binary else 3
+    
+    if model_class is None:
+        model_class = GoldLSTM_Bin_Default if is_binary else GoldLSTM_Triple_Default
+        print(f"🤖 Auto-seleccionado: {'Binario' if is_binary else 'Triple'} Model")
+
+    # Configuración de Loss y Pesos
+    if is_binary:
+        criterion = nn.BCEWithLogitsLoss()
+        target_dtype = torch.float32
+    else:
+        # Tus pesos específicos para el Oro
+        weights = torch.tensor([2.5, 1.0, 2.5], dtype=torch.float32).to(device)
+        criterion = nn.CrossEntropyLoss(weight=weights)
+        target_dtype = torch.long
 
     all_predictions = []
     df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
-    
-    for start in range(0, len(df_wf) - train_size - test_size, step):
-        end_train = start + train_size
-        end_test = end_train + test_size
-        
-        # Segmentación y Escalado
-        train_df = df_wf.iloc[start:end_train].copy()
-        test_df = df_wf.iloc[end_train:end_test].copy()
-        
-        scaler = RobustScaler()
-        train_df[feature_cols] = scaler.fit_transform(train_df[feature_cols])
-        test_df[feature_cols] = scaler.transform(test_df[feature_cols])
-        
-        # Crear Tensores (Usando tu función strides)
-        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
-        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
-        
-        # Convertir a Tensores de PyTorch y mover a DEVICE
-        X_train_t = torch.tensor(X_train, dtype=torch.float32).to(device)
-        y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(device)
-        X_test_t = torch.tensor(X_test, dtype=torch.float32).to(device)
-        
-        # DataLoader para entrenamiento eficiente
-        dataset = TensorDataset(X_train_t, y_train_t)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-        
-        # Inicializar Modelo, Loss y Optimizer
-        model = GoldLSTM(input_dim=len(feature_cols)).to(device)
-        criterion = nn.BCELoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.0005)
-        
-        # --- Bucle de Entrenamiento ---
-        model.train()
-        for epoch in range(epochs):
-            for batch_X, batch_y in loader:
-                optimizer.zero_grad()
-                outputs = model(batch_X)
-                loss = criterion(outputs, batch_y)
-                loss.backward()
-                optimizer.step()
-        
-        # --- Predicción ---
-        model.eval()
-        with torch.no_grad():
-            probs = model(X_test_t).cpu().numpy().ravel()
-            pred_classes = (probs > 0.5).astype(int)
-        
-        # Recopilar resultados
-        res_df = pd.DataFrame({
-            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
-            'actual': y_test,
-            'pred': pred_classes,
-            'prob_up': probs,
-            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
-        })
-        
-        all_predictions.append(res_df)
-        acc = (pred_classes == y_test).mean()
-        print(f"✅ Ventana {df_wf['datetime'].iloc[start].date()}: Acc {acc:.2%}")
+    # suffix = get_return_col_value(target_col)
 
-    return pd.concat(all_predictions, ignore_index=True)
+    # Verificar que exista la columna de retornos esperada (p. ej. target_ret_30m)
+    # desired_ret_col = f'target_ret_{suffix}m'
+    # if desired_ret_col not in df_wf.columns:
+    #     # Buscar columnas candidatas con el patrón target_ret_{N}m
+    #     candidates = [c for c in df_wf.columns if re.match(r'target_ret_(\d+)m', c)]
+    #     if candidates:
+    #         # Elegir la primera candidata disponible como fallback
+    #         chosen = candidates[0]
+    #         new_suffix = re.search(r'(\d+)', chosen).group(1)
+    #         print(f"⚠️ Columna esperada '{desired_ret_col}' no encontrada. Usando '{chosen}' en su lugar.")
+    #         suffix = new_suffix
+    #     else:
+    #         available = [c for c in df_wf.columns if 'target_ret' in c]
+    #         raise KeyError(f"Esperada columna '{desired_ret_col}' no encontrada y no hay columnas 'target_ret_*' disponibles. Columnas disponibles: {available}")
 
-
-def run_walk_forward_pytorch_amp(df, feature_cols, target_col='target_bin', 
-                                 train_size=40000, test_size=10000, step=10000, 
-                                 lookback=20, epochs=15, batch_size=256): # Subimos batch_size
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🖥️ Usando GPU: {torch.cuda.get_device_name(0)} con AMP")
-
-    # Inicializamos el escalador de gradientes para AMP
-    scaler_amp = GradScaler() 
-    all_predictions = []
-    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
-    
-    for start in range(0, len(df_wf) - train_size - test_size, step):
-        end_train = start + train_size
-        end_test = end_train + test_size
-        
-        # --- Preprocesado y Escalado ---
+    for start in tqdm(range(0, len(df_wf) - train_size - test_size, step), desc="Gold Workflow"):
+        # ... [Lógica de Split y Escalado idéntica a las anteriores] ...
+        end_train, end_test = start + train_size, start + train_size + test_size
         train_df = df_wf.iloc[start:end_train].copy()
         test_df = df_wf.iloc[end_train:end_test].copy()
         
@@ -1055,107 +948,24 @@ def run_walk_forward_pytorch_amp(df, feature_cols, target_col='target_bin',
         X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
         X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
         
-        # Tensores con pin_memory para velocidad de transferencia
         X_train_t = torch.tensor(X_train, dtype=torch.float32).to(device)
-        y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(device)
-        X_test_t = torch.tensor(X_test, dtype=torch.float32).to(device)
+        y_train_t = torch.tensor(y_train, dtype=target_dtype).to(device)
+        if is_binary: y_train_t = y_train_t.unsqueeze(1)
         
+        X_test_t = torch.tensor(X_test, dtype=torch.float32).to(device)
         loader = DataLoader(TensorDataset(X_train_t, y_train_t), batch_size=batch_size, shuffle=True)
         
-        model = GoldLSTM(input_dim=len(feature_cols)).to(device)
+        # Inicializar modelo pasándole el output_dim detectado
+        model = model_class(input_dim=len(feature_cols), output_dim=output_dim).to(device)
         optimizer = optim.Adam(model.parameters(), lr=0.0005)
-        criterion = nn.BCEWithLogitsLoss()
-        
-        # --- Bucle Entrenamiento con AMP ---
-        model.train()
-        for epoch in range(epochs):
-            for batch_X, batch_y in loader:
-                optimizer.zero_grad()
-                
-                # Cast automático a Float16 donde sea seguro
-                with autocast():
-                    outputs = model(batch_X)
-                    loss = criterion(outputs, batch_y)
-                
-                # Escalar la pérdida para evitar "gradient underflow"
-                scaler_amp.scale(loss).backward()
-                scaler_amp.step(optimizer)
-                scaler_amp.update()
-        
-        # --- Predicción (Siempre en Float32 para máxima precisión) ---
-        model.eval()
-        with torch.no_grad():
-            logits = model(X_test_t)
-            # Como el modelo ya no tiene Sigmoid, se lo aplicamos aquí manualmente
-            probs = torch.sigmoid(logits).cpu().numpy().ravel() 
-            pred_classes = (probs > 0.5).astype(int)
-        
-        # Guardar resultados
-        res_df = pd.DataFrame({
-            'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
-            'actual': y_test,
-            'pred': pred_classes,
-            'prob_up': probs,
-            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
-        })
-        
-        all_predictions.append(res_df)
-        print(f"✅ Ventana {df_wf['datetime'].iloc[start].date()} OK. Acc: {(pred_classes == y_test).mean():.2%}")
-
-    return pd.concat(all_predictions, ignore_index=True), model, sc
-
-def run_walk_forward_tqdm(df, feature_cols, target_col='target_bin', 
-                          train_size=40000, test_size=10000, step=10000, 
-                          lookback=20, epochs=15, batch_size=256):
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    scaler_amp = amp.GradScaler()
-    all_predictions = []
-    
-    # 1. Calculamos el número total de ventanas para la barra de progreso
-    df_wf = df.copy().sort_values('datetime').reset_index(drop=True)
-    n_windows = (len(df_wf) - train_size - test_size) // step + 1
-    
-    # --- BARRA DE PROGRESO MAESTRA (Ventanas) ---
-    pbar_windows = tqdm(range(0, len(df_wf) - train_size - test_size, step), 
-                        total=n_windows, desc="🚀 Walk-Forward Progress")
-
-    for start in pbar_windows:
-        end_train = start + train_size
-        end_test = end_train + test_size
-        
-        # Segmentación y Escalado
-        train_df = df_wf.iloc[start:end_train].copy()
-        test_df = df_wf.iloc[end_train:end_test].copy()
-        
-        sc = RobustScaler()
-        train_df[feature_cols] = sc.fit_transform(train_df[feature_cols])
-        test_df[feature_cols] = sc.transform(test_df[feature_cols])
-        
-        X_train, y_train = create_lstm_dataset(train_df, feature_cols, target_col, lookback)
-        X_test, y_test = create_lstm_dataset(test_df, feature_cols, target_col, lookback)
-        
-        # Pasar a tensores
-        X_train_t = torch.tensor(X_train, dtype=torch.float32).to(device)
-        y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1).to(device)
-        X_test_t = torch.tensor(X_test, dtype=torch.float32).to(device)
-        
-        loader = DataLoader(TensorDataset(X_train_t, y_train_t), batch_size=batch_size, shuffle=True)
-        model = GoldLSTM(input_dim=len(feature_cols)).to(device)
-        optimizer = optim.Adam(model.parameters(), lr=0.0005)
-        criterion = nn.BCEWithLogitsLoss()
         
         # --- Entrenamiento ---
         model.train()
-        # Puedes añadir descripición dinámica a la pbar maestra
-        pbar_windows.set_postfix({"Window_Start": df_wf['datetime'].iloc[start].date()})
-        
         for epoch in range(epochs):
-            for batch_X, batch_y in loader:
+            for bx, by in loader:
                 optimizer.zero_grad()
-                with amp.autocast():
-                    outputs = model(batch_X)
-                    loss = criterion(outputs, batch_y)
+                with amp.autocast('cuda'):
+                    loss = criterion(model(bx), by)
                 scaler_amp.scale(loss).backward()
                 scaler_amp.step(optimizer)
                 scaler_amp.update()
@@ -1164,24 +974,25 @@ def run_walk_forward_tqdm(df, feature_cols, target_col='target_bin',
         model.eval()
         with torch.no_grad():
             logits = model(X_test_t)
-            # Como el modelo ya no tiene Sigmoid, se lo aplicamos aquí manualmente
-            probs = torch.sigmoid(logits).cpu().numpy().ravel() 
-            pred_classes = (probs > 0.5).astype(int)
+            if is_binary:
+                probs = torch.sigmoid(logits).cpu().numpy().ravel()
+                preds = (probs > 0.5).astype(int)
+                res_dict = {'prob_up': probs}
+            else:
+                probs = torch.softmax(logits, dim=1).cpu().numpy()
+                preds = np.argmax(probs, axis=1)
+                res_dict = {'prob_0': probs[:,0], 'prob_1': probs[:,1], 'prob_2': probs[:,2]}
         
+        # --- Recopilar ---
         res_df = pd.DataFrame({
             'datetime': df_wf['datetime'].iloc[end_train + lookback : end_test].values,
-            'actual': y_test,
-            'pred': pred_classes,
-            'prob_up': probs,
-            'ret_real': df_wf['target_ret_30m'].iloc[end_train + lookback : end_test].values
+            'actual': y_test, 'pred': preds, **res_dict,
+            'ret_real': df_wf[f'target_ret_{suffix}m'].iloc[end_train + lookback : end_test].values
         })
-        
         all_predictions.append(res_df)
-        
-        # Limpiar caché de CUDA para evitar fragmentación en la 3060
         torch.cuda.empty_cache()
 
-    return pd.concat(all_predictions, ignore_index=True)
+    return pd.concat(all_predictions, ignore_index=True), model, sc
 
 def plot_trading_results(df_res):
     # 1. Calculamos el retorno de la estrategia
