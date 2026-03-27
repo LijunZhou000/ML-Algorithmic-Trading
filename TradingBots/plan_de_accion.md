@@ -22,3 +22,49 @@
 5. Operar cada x minutos, calcular sl y tp
 6. Añadir de momento lógica para que si hay dos predicciones seguidas de long o short para un futuro mantener la posición o ampliar, actualizar sl y tp si es necesario
 7. Cerrar todas las posiciones antes del break
+
+```mermaid
+graph TD
+    subgraph "1. CAPA DE DATOS (DATA LAKE)"
+        A[Datos OHLCV 1m/30m/60m] --> B[Limpieza y Wavelet Denoising]
+        B --> C[Feature Engineering: 149+ Cols]
+        C --> C1[Física: Entropía de Shannon]
+        C --> C2[Inferencia: Test ADF / Hurst]
+    end
+
+    subgraph "2. SEGMENTACIÓN DE RÉGIMEN (UNSUPERVISED)"
+        C --> D[HMM - Hidden Markov Model]
+        D --> D1{Estados de Mercado}
+        D1 -->|Estado 0| E1[Rango/Ruido]
+        D1 -->|Estado 1| E2[Tendencia Alcista]
+        D1 -->|Estado 2| E3[Tendencia Bajista]
+    end
+
+    subgraph "3. NÚCLEO DE PREDICCIÓN (DEEP LEARNING)"
+        C --> F[GoldAttentionGRU_Triple]
+        E2 & E3 -->|Bias de Régimen| F
+        F --> G[Probabilidades: Buy, Neutral, Sell]
+    end
+
+    subgraph "4. ORQUESTADOR DE MLOPS (BATCH RUNS)"
+        G --> H[Filtro de Confianza Dinámico]
+        H --> I[Subrun 1: All Features]
+        I --> J[Filtrado VIF / Mutual Information]
+        J --> K[Subrun 2: Top Features]
+    end
+
+    subgraph "5. MOTOR DE BACKTESTING & ESTRÉS"
+        K --> L[BacktestEngine]
+        L --> M[Simulación de CAOS]
+        M --> M1[Lag: Poisson]
+        M --> M2[Slippage: T-Student]
+        M --> N[Monte Carlo: 100 Iteraciones]
+    end
+
+    subgraph "6. REGISTRO Y MONITOREO"
+        N --> O[MLflow / JSON Registry]
+        O --> P{¿Sharpe > Target?}
+        P -->|SÍ| Q[MODELO CHAMPION]
+        P -->|NO| R[Re-tuning Hyperparams]
+    end
+```

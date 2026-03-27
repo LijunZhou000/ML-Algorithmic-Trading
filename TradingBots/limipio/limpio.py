@@ -912,7 +912,8 @@ def run_gold_master_workflow(df, feature_cols, suffix, model_class=None, target_
         target_dtype = torch.float32
     else:
         # Tus pesos específicos para el Oro
-        weights = torch.tensor([2.5, 1.0, 2.5], dtype=torch.float32).to(device)
+        # weights = torch.tensor([2.5, 1.0, 2.5], dtype=torch.float32).to(device)
+        weights = torch.tensor([1.5, 3.0, 1.5], dtype=torch.float32).to(device)
         criterion = nn.CrossEntropyLoss(weight=weights)
         target_dtype = torch.long
 
