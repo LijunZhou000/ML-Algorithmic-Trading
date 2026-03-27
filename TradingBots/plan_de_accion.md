@@ -68,3 +68,55 @@ graph TD
         P -->|NO| R[Re-tuning Hyperparams]
     end
 ```
+
+```mermaid
+graph TD
+    %% Nodo Principal (Root)
+    Root[📂 TradingBots]
+
+    %% Directorios
+    subgraph Core ["Núcleo de Ejecución"]
+        tradepy[📂 tradepy]
+    end
+
+    subgraph Pipeline ["Flujo de Datos"]
+        Ingest[📂 Ingest]
+        Data[📂 Data]
+        limpio[📂 limpio]
+        Features[📂 Features]
+    end
+
+    subgraph ML ["Inteligencia y Validación"]
+        Models[📂 Models]
+        Optimizacion[📂 Optimizacion]
+        Backtest[📂 Backtest]
+    end
+
+    subgraph Ops ["Soporte y Operación"]
+        Operation[📂 Operation]
+        Logs[📂 Logs]
+        Metrics[📂 Metrics]
+    end
+
+    %% Relaciones solicitadas
+    Ingest -->|descarga| Data
+    Data -->|pre-procesado| limpio
+    limpio -->|ingeniería| Features
+    
+    %% Tradepy como orquestador
+    tradepy --> Ingest
+    tradepy --> Models
+    tradepy --> Backtest
+    tradepy --> Operation
+
+    %% Otras conexiones lógicas
+    Features --> Models
+    Models --> Optimizacion
+    Optimizacion --> Backtest
+    Backtest --> Metrics
+    Operation --> Logs
+
+    %% Estilos (para que parezcan carpetas)
+    style Root fill:#f9f,stroke:#333,stroke-width:4px
+    style tradepy fill:#bbf,stroke:#333,stroke-width:2px
+```
