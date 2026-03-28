@@ -6,78 +6,71 @@ import inspect
 
 # Media movil simple
 def sma(df, n=20):
-    df = df.copy()
-    df[f"sma_{n}"] = df['close'].rolling(n).mean()
-    return df
+    return {f"sma_{n}": df['close'].rolling(n).mean()}
 # Media movil exponencial
 def ema(df, n=20):
-    df = df.copy()
-    df[f"ema_{n}"] = df['close'].ewm(span=n, adjust=False).mean()
-    return df
+    return {f"ema_{n}": df['close'].ewm(span=n, adjust=False).mean()}
 
 # Convergencia y divergencia de medias moviles
 def macd(df, n_fast=12, n_slow=26):
-    df = df.copy()
-    df['ema_fast'] = df['close'].ewm(span=n_fast, adjust=False).mean()
-    df['ema_slow'] = df['close'].ewm(span=n_slow, adjust=False).mean()
-    df['macd'] = df['ema_fast'] - df['ema_slow']
-    df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
-    df['histogram'] = df['macd'] - df['signal']
-    return df
+    ema_fast = df['close'].ewm(span=n_fast, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=n_slow, adjust=False).mean()
+    macd_s = ema_fast - ema_slow
+    signal = macd_s.ewm(span=9, adjust=False).mean()
+    histogram = macd_s - signal
+    return {
+        'ema_fast': ema_fast,
+        'ema_slow': ema_slow,
+        'macd': macd_s,
+        'signal': signal,
+        'histogram': histogram,
+    }
 
 # Índice direccional medio
 def adx(df, n=14):
-    df = df.copy()
-    df['adx'] = ta.ADX(df['high'], df['low'], df['close'], timeperiod=n)
-    return df
+    return {'adx': pd.Series(ta.ADX(df['high'], df['low'], df['close'], timeperiod=n), index=df.index)}
 
 # Índice de fuerza relativa
 def rsi(df, n=14):
-    df = df.copy()
-    df['rsi'] = ta.RSI(df['close'], timeperiod=n)
-    return df
+    return {'rsi': pd.Series(ta.RSI(df['close'], timeperiod=n), index=df.index)}
 
 # Estocástico
 def stoch(df, n=14, slowk_period=3, slowd_period=3, slowk_matype=0, slowd_matype=0):
-    df = df.copy()
-    df['slowk'], df['slowd'] = ta.STOCH(df['high'], df['low'], df['close'], fastk_period=n, slowk_period=slowk_period, slowd_period=slowd_period, slowk_matype=slowk_matype, slowd_matype=slowd_matype)
-    return df
+    slowk, slowd = ta.STOCH(df['high'], df['low'], df['close'], fastk_period=n, slowk_period=slowk_period, slowd_period=slowd_period, slowk_matype=slowk_matype, slowd_matype=slowd_matype)
+    return {'slowk': pd.Series(slowk, index=df.index), 'slowd': pd.Series(slowd, index=df.index)}
 
 # Índice de fuerza de elder
 def elder_force_index(df, n=13):
-    df = df.copy()
-    df['efi'] = ta.EMA((df['close'] - df['close'].shift(1)) * df['volume'], timeperiod=n)
-    return df
+    efi = ta.EMA((df['close'] - df['close'].shift(1)) * df['volume'], timeperiod=n)
+    return {'efi': pd.Series(efi, index=df.index)}
 
 # Bandas de bollinger
 def bollinger_bands(df, n=20, num_std_dev=2):
-    df = df.copy()
-    df['bb_middle'] = df['close'].rolling(n).mean()
-    df['bb_std'] = df['close'].rolling(n).std()
-    df['bb_upper'] = df['bb_middle'] + num_std_dev * df['bb_std']
-    df['bb_lower'] = df['bb_middle'] - num_std_dev * df['bb_std']
-    return df
+    middle = df['close'].rolling(n).mean()
+    std = df['close'].rolling(n).std()
+    return {
+        'bb_middle': middle,
+        'bb_std': std,
+        'bb_upper': middle + num_std_dev * std,
+        'bb_lower': middle - num_std_dev * std,
+    }
 
 # Rango verdadero medio
 def true_range(df, window=14):
     # pointwise true range (not ATR)
-    df = df.copy()
-    df['true_range'] = ta.TRANGE(df['high'], df['low'], df['close'])
-    df['range'] = df['high'] - df['low']
-    df['range_mean'] = df['range'].rolling(window).mean()
-    return df
+    tr = ta.TRANGE(df['high'], df['low'], df['close'])
+    rng = df['high'] - df['low']
+    rng_mean = rng.rolling(window).mean()
+    return {'true_range': pd.Series(tr, index=df.index), 'range': rng, 'range_mean': rng_mean}
 
 def compute_atr(df, period=14):
     # ATR computed as rolling mean of true_range.
-    df = df.copy()
-    df["atr"] = df['true_range'].ewm(span=period, adjust=False).mean()
-    return df
+    atr = df['true_range'].ewm(span=period, adjust=False).mean()
+    return {'atr': atr}
 
 # Commodity Channel Index
 def cci(df, n=20):
-    df = df.copy()
-    df['cci'] = ta.CCI(df['high'], df['low'], df['close'], timeperiod=n)
-    return df
+    return {'cci': pd.Series(ta.CCI(df['high'], df['low'], df['close'], timeperiod=n), index=df.index)}
 
 # Volumen en balance
 def obv(
@@ -92,74 +85,60 @@ def obv(
     include_delta=True,
     session_key=None,
 ):
-    df = df.copy()
-    df['obv'] = ta.OBV(df['close'], df['volume'])
+    obv_s = pd.Series(ta.OBV(df['close'], df['volume']), index=df.index)
+    out = {'obv': obv_s}
 
-    # OBV manual optional preserved as per original API
     if include_manual:
-        df['obv_manual'] = (
-            (df['close'].diff() > 0).astype(int) * df['volume']
-            - (df['close'].diff() < 0).astype(int) * df['volume']
-        )
+        manual = ((df['close'].diff() > 0).astype(int) * df['volume'] - (df['close'].diff() < 0).astype(int) * df['volume'])
         if session_key is not None or 'trading_date' in df.columns:
-            df['obv_manual'] = df['obv_manual'].groupby(df['trading_date']).cumsum()
+            manual = manual.groupby(df['trading_date']).cumsum()
         else:
-            df['obv_manual'] = df['obv_manual'].cumsum()
+            manual = manual.cumsum()
+        out['obv_manual'] = pd.Series(manual, index=df.index)
 
-    # Normalizaciones
-    if normalize_by == "range":
-        df['obv_norm'] = df['obv'] / (df['high'] - df['low']).replace(0, np.nan)
-    elif normalize_by == "close":
-        df['obv_norm'] = df['obv'] / df['close']
+    if normalize_by == 'range':
+        out['obv_norm'] = obv_s / (df['high'] - df['low']).replace(0, np.nan)
+    elif normalize_by == 'close':
+        out['obv_norm'] = obv_s / df['close']
     else:
-        df['obv_norm'] = df['obv']
+        out['obv_norm'] = obv_s
 
-    # defaults for list args to avoid mutable defaults
     if roc_windows is None:
-        roc_windows = [5, 10]
+        roc_windows = [5,10]
     if smooth_windows is None:
         smooth_windows = [10]
 
-    # OBV ROC
     for w in roc_windows:
-        df[f'obv_roc_{w}'] = df['obv'].pct_change(w)
-
-    # Suavizados
+        out[f'obv_roc_{w}'] = obv_s.pct_change(w)
     for w in smooth_windows:
-        df[f'obv_ema_{w}'] = df['obv'].ewm(span=w, adjust=False).mean()
-        df[f'obv_sma_{w}'] = df['obv'].rolling(w).mean()
+        out[f'obv_ema_{w}'] = obv_s.ewm(span=w, adjust=False).mean()
+        out[f'obv_sma_{w}'] = obv_s.rolling(w).mean()
 
-    # Z-score
-    mean = df['obv'].rolling(zscore_window).mean()
-    std = df['obv'].rolling(zscore_window).std()
-    df['obv_z'] = (df['obv'] - mean) / std
+    mean = obv_s.rolling(zscore_window).mean()
+    std = obv_s.rolling(zscore_window).std()
+    out['obv_z'] = (obv_s - mean) / std
 
-    # Dirección del OBV
     if include_direction:
-        df['obv_dir'] = df['obv'].diff().apply(lambda x: 1 if x > 0 else -1 if x < 0 else 0)
+        out['obv_dir'] = np.sign(obv_s.diff())
 
-    # OBV relativo al volumen
-    df['obv_rel'] = df['obv'] / df['volume'].rolling(relative_volume_window).sum()
+    out['obv_rel'] = obv_s / df['volume'].rolling(relative_volume_window).sum()
 
-    # Derivada del OBV
     if include_delta:
-        df['obv_delta'] = df['obv'].diff()
+        out['obv_delta'] = obv_s.diff()
 
-    return df
+    # wrap as Series
+    return {k: pd.Series(v, index=df.index) for k,v in out.items()}
 
 # Volumen por precio
 def vpt(df):
-    df = df.copy()
-    df['vpt'] = (df['close'] - df['close'].shift(1)) / df['close'].shift(1) * df['volume']
-    return df
+    vpt_s = (df['close'] - df['close'].shift(1)) / df['close'].shift(1) * df['volume']
+    return {'vpt': vpt_s}
 
 # Volumen relativo
 def relative_volume(df, window=20):
     # normalize names to english snake_case
-    df = df.copy()
-    df['avg_volume'] = df['volume'].rolling(window=window).mean()
-    df['relative_volume'] = df['volume'] / df['avg_volume']
-    return df
+    avg = df['volume'].rolling(window=window).mean()
+    return {'avg_volume': avg, 'relative_volume': df['volume'] / avg}
 
 # Acumulación/distribución
 def ad(
@@ -174,155 +153,109 @@ def ad(
     include_direction=True,
     session_key=None,
 ):
-    df = df.copy()
-    # --- CLV (Close Location Value) ---
+    out = {}
     if include_clv:
-        df["clv"] = ((df["close"] - df["low"]) - (df["high"] - df["close"])) / \
-                    (df["high"] - df["low"]).replace(0, np.nan)
-
-    # --- A/D clásico (session-aware) ---
-    df["ad"] = (df["clv"] * df["volume"]).cumsum()
-
-    # --- Normalización ---
-    if normalize_by == "range":
-        df["ad_norm"] = df["ad"] / (df["high"] - df["low"]).replace(0, np.nan)
-    elif normalize_by == "close":
-        df["ad_norm"] = df["ad"] / df["close"]
+        clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low']).replace(0, np.nan)
+        out['clv'] = clv
     else:
-        df["ad_norm"] = df["ad"]
+        clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low']).replace(0, np.nan)
 
-    # defaults for list args
+    ad_s = (clv * df['volume']).cumsum()
+    out['ad'] = ad_s
+
+    if normalize_by == 'range':
+        out['ad_norm'] = ad_s / (df['high'] - df['low']).replace(0, np.nan)
+    elif normalize_by == 'close':
+        out['ad_norm'] = ad_s / df['close']
+    else:
+        out['ad_norm'] = ad_s
+
     if roc_windows is None:
-        roc_windows = [5, 10]
+        roc_windows = [5,10]
     if smooth_windows is None:
         smooth_windows = [10]
 
-    # --- Rate of Change (momentum del A/D) ---
     for w in roc_windows:
-        df[f"ad_roc_{w}"] = df["ad"].pct_change(w)
-
-    # --- Suavizados ---
+        out[f'ad_roc_{w}'] = ad_s.pct_change(w)
     for w in smooth_windows:
-        df[f"ad_ema_{w}"] = df["ad"].ewm(span=w, adjust=False).mean()
-        df[f"ad_sma_{w}"] = df['ad'].rolling(w).mean()
+        out[f'ad_ema_{w}'] = ad_s.ewm(span=w, adjust=False).mean()
+        out[f'ad_sma_{w}'] = ad_s.rolling(w).mean()
 
-    # --- Z-score (acumulación/distribución extrema) ---
-    mean = df["ad"].rolling(zscore_window).mean()
-    std = df["ad"].rolling(zscore_window).std()
-    df["ad_z"] = (df["ad"] - mean) / std
+    mean = ad_s.rolling(zscore_window).mean()
+    std = ad_s.rolling(zscore_window).std()
+    out['ad_z'] = (ad_s - mean) / std
 
-    # --- Derivada del A/D ---
     if include_delta:
-        df["ad_delta"] = df["ad"].diff()
-
-    # --- Dirección del A/D ---
+        out['ad_delta'] = ad_s.diff()
     if include_direction:
-        df["ad_dir"] = df["ad"].diff().apply(lambda x: 1 if x > 0 else -1 if x < 0 else 0)
+        out['ad_dir'] = np.sign(ad_s.diff())
 
-    # --- A/D relativo al volumen reciente ---
-    df["ad_rel"] = df["ad"] / df["volume"].rolling(relative_volume_window).sum()
+    out['ad_rel'] = ad_s / df['volume'].rolling(relative_volume_window).sum()
 
-    return df
+    return {k: pd.Series(v, index=df.index) for k,v in out.items()}
 
 def mfi(df, window=14):
-    df = df.copy()
     typical_price = (df['high'] + df['low'] + df['close']) / 3
     money_flow = typical_price * df['volume']
-
     positive_flow = money_flow.where(typical_price > typical_price.shift(1), 0)
     negative_flow = money_flow.where(typical_price < typical_price.shift(1), 0)
-
     pos_sum = positive_flow.rolling(window).sum()
     neg_sum = negative_flow.rolling(window).sum()
-
-    df['mfi'] = 100 - (100 / (1 + (pos_sum / neg_sum)))
-    return df
+    mfi_s = 100 - (100 / (1 + (pos_sum / neg_sum)))
+    return {'mfi': mfi_s}
 def cmf(df, window=20):
-    df = df.copy()
-    clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / \
-          (df['high'] - df['low']).replace(0, np.nan)
-
+    clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low']).replace(0, np.nan)
     money_flow_volume = clv * df['volume']
-
-    df['cmf'] = money_flow_volume.rolling(window).sum() / df['volume'].rolling(window).sum()
-    return df
+    cmf_s = money_flow_volume.rolling(window).sum() / df['volume'].rolling(window).sum()
+    return {'cmf': cmf_s}
 def vwap(df):
     typical_price = (df['high'] + df['low'] + df['close']) / 3
     tp_vol = typical_price * df['volume']
-
-    # Resetear por sesión (fecha) y ticker
     group_keys = []
     if 'ticker' in df.columns:
         group_keys.append('ticker')
     if 'dtyyyymmdd' in df.columns:
         group_keys.append('dtyyyymmdd')
-
     if group_keys:
-        df['vwap'] = (
-            tp_vol.groupby([df[k] for k in group_keys], sort=False).cumsum()
-            / df['volume'].groupby([df[k] for k in group_keys], sort=False).cumsum()
-        )
+        vwap_s = tp_vol.groupby([df[k] for k in group_keys], sort=False).cumsum() / df['volume'].groupby([df[k] for k in group_keys], sort=False).cumsum()
     else:
-        # fallback: sin info de fecha/ticker, cumsum global
-        df['vwap'] = tp_vol.cumsum() / df['volume'].cumsum()
-
-    return df
+        vwap_s = tp_vol.cumsum() / df['volume'].cumsum()
+    return {'vwap': vwap_s}
 def volume_zscore(df, window=20):
-    df = df.copy()
     mean = df['volume'].rolling(window).mean()
     std = df['volume'].rolling(window).std()
-    df['volume_z'] = (df['volume'] - mean) / std
-    return df
+    return {'volume_z': (df['volume'] - mean) / std}
 def volume_delta(df):
-    df = df.copy()
-    df['volume_delta'] = df['volume'].diff()
-    return df
+    return {'volume_delta': df['volume'].diff()}
 def volume_sum(df, window=20):
-    df = df.copy()
-    df[f'volume_sum_{window}'] = df['volume'].rolling(window).sum()
-    return df
+    return {f'volume_sum_{window}': df['volume'].rolling(window).sum()}
 def volume_by_range(df):
-    df = df.copy()
-    df['volume_range'] = df['volume'] / (df['high'] - df['low']).replace(0, np.nan)
-    return df
+    return {'volume_range': df['volume'] / (df['high'] - df['low']).replace(0, np.nan)}
 def volume_by_price(df):
-    df = df.copy()
-    df['volume_price'] = df['volume'] / df['close']
-    return df
+    return {'volume_price': df['volume'] / df['close']}
 
 def historical_volatility(df, window=20):
-    df = df.copy()
     returns = np.log(df['close'] / df['close'].shift(1))
-    df['hv'] = returns.rolling(window).std() * np.sqrt(252)
-    return df
+    return {f'hv': returns.rolling(window).std() * np.sqrt(252)}
 def atr_normalized(df):
-    df = df.copy()
-    df['atr_norm'] = df['atr'] / df['close']
-    return df
+    return {'atr_norm': df['atr'] / df['close']}
 def volatility_zscore(df, window=20):
-    df = df.copy()
     mean = df['atr'].rolling(window).mean()
     std = df['atr'].rolling(window).std()
-    df['atr_z'] = (df['atr'] - mean) / std
-    return df
+    return {'atr_z': (df['atr'] - mean) / std}
 def dema(df, span=20):
-    df = df.copy()
     ema = df['close'].ewm(span=span).mean()
-    df['dema'] = 2*ema - ema.ewm(span=span).mean()
-    return df
+    return {'dema': 2*ema - ema.ewm(span=span).mean()}
 def kama(df, window=10, fast=2, slow=30):
     # Prefer TA-Lib's KAMA for correctness and performance. Fall back to
     # a safe pandas/numpy implementation if TA-Lib call fails.
-    df = df.copy()
     try:
-        df['kama'] = ta.KAMA(df['close'], timeperiod=window)
-        return df
+        return {'kama': pd.Series(ta.KAMA(df['close'], timeperiod=window), index=df.index)}
     except Exception:
         close = df['close'].astype(float).to_numpy()
         n = len(close)
         if n == 0:
-            df['kama'] = np.nan
-            return df
+            return {'kama': pd.Series(np.full(0, np.nan), index=df.index)}
 
         # Efficiency Ratio (ER): abs(close - close.shift(window)) / sum(abs(diff(close)))
         change = np.abs(close - np.roll(close, window)).astype(float)
@@ -345,55 +278,38 @@ def kama(df, window=10, fast=2, slow=30):
             for i in range(window + 1, n):
                 kama[i] = kama[i - 1] + sc[i] * (close[i] - kama[i - 1])
 
-        df['kama'] = kama
-        return df
+        return {'kama': pd.Series(kama, index=df.index)}
 def roc(df, window=10):
-    df = df.copy()
-    df[f'roc_{window}'] = df['close'].pct_change(window)
-    return df
+    return {f'roc_{window}': df['close'].pct_change(window)}
 
 def multi_roc(df, windows=None):
-    df = df.copy()
     if windows is None:
-        windows = [1, 5, 10, 20]
+        windows = [1,5,10,20]
+    out = {}
     for w in windows:
-        df[f'roc_{w}'] = df['close'].pct_change(w)
-    return df
+        out[f'roc_{w}'] = df['close'].pct_change(w)
+    return out
 def williams_r(df, window=14):
-    df = df.copy()
     highest = df['high'].rolling(window).max()
     lowest = df['low'].rolling(window).min()
-    df['williams_r'] = (highest - df['close']) / (highest - lowest)*-100
-    return df
+    return {'williams_r': (highest - df['close']) / (highest - lowest) * -100}
 def cmo(df, window=14):
-    df = df.copy()
     diff = df['close'].diff()
     up = diff.clip(lower=0).rolling(window).sum()
     down = -diff.clip(upper=0).rolling(window).sum()
-    df['cmo'] = 100 * (up - down) / (up + down)
-    return df
+    return {'cmo': 100 * (up - down) / (up + down)}
 def vol_vol_ratio(df):
-    df = df.copy()
-    df['vol_vol_ratio'] = df['volume'] / df['atr']
-    return df
+    return {'vol_vol_ratio': df['volume'] / df['atr']}
 def vpt_norm(df):
-    df = df.copy()
-    df['vpt_norm'] = df['vpt'] / df['close']
-    return df
+    return {'vpt_norm': df['vpt'] / df['close']}
 def tr_direction(df):
-    df = df.copy()
-    df['tr_dir'] = np.sign(df['true_range'].diff())
-    return df
+    return {'tr_dir': np.sign(df['true_range'].diff())}
 def candle_body(df):
-    df = df.copy()
-    df['body'] = (df['close'] - df['open']).abs()
-    return df
+    return {'body': (df['close'] - df['open']).abs()}
 def wick_ratio(df):
-    df = df.copy()
     upper = df['high'] - df[['close','open']].max(axis=1)
     lower = df[['close','open']].min(axis=1) - df['low']
-    df['wick_ratio'] = (upper + lower) / (df['high'] - df['low'])
-    return df
+    return {'wick_ratio': (upper + lower) / (df['high'] - df['low'])}
 
 def percent_return_features(df, return_horizon_min, sampling_minutes, lags=None, rolling_windows=None, ):
     """Create short- and multi-horizon return features.
@@ -401,83 +317,70 @@ def percent_return_features(df, return_horizon_min, sampling_minutes, lags=None,
     - `sampling_minutes` is the minutes per sample (1 for 1-min, 30 for 30-min, etc.)
     - `return_horizon_min` is the horizon in minutes for the horizon return feature.
     """
-    df = df.copy()
     if lags is None:
         lags = [1, 5, 10, 20]
     if rolling_windows is None:
         rolling_windows = [5, 10, 20]
-    df['return'] = df['close'].pct_change()
-    df['log_return'] = np.log(df['close'] / df['close'].shift(1))
+    ret = df['close'].pct_change()
+    log_ret = np.log(df['close'] / df['close'].shift(1))
 
     # horizon shift computed from minutes and sampling rate
     horizon_shift = int(return_horizon_min / max(1, int(sampling_minutes)))
 
+    out = {'return': ret, 'log_return': log_ret}
     if horizon_shift >= 1:
-        df[f'return_horizon_{return_horizon_min}m'] = df['close'].pct_change(horizon_shift)
-        df[f'log_return_horizon_{return_horizon_min}m'] = np.log(df['close'] / df['close'].shift(horizon_shift))
-
+        out[f'return_horizon_{return_horizon_min}m'] = df['close'].pct_change(horizon_shift)
+        out[f'log_return_horizon_{return_horizon_min}m'] = np.log(df['close'] / df['close'].shift(horizon_shift))
     for lag in lags:
-        df[f'return_lag_{lag}'] = df['return'].shift(lag)
+        out[f'return_lag_{lag}'] = ret.shift(lag)
     for w in rolling_windows:
-        df[f'return_mean_{w}'] = df['return'].rolling(w).mean()
-        df[f'return_std_{w}'] = df['return'].rolling(w).std()
-        df[f'return_z_{w}'] = (df['return'] - df['return'].rolling(w).mean()) / df['return'].rolling(w).std()
-    return df
+        out[f'return_mean_{w}'] = ret.rolling(w).mean()
+        out[f'return_std_{w}'] = ret.rolling(w).std()
+        out[f'return_z_{w}'] = (ret - ret.rolling(w).mean()) / ret.rolling(w).std()
+    return {k: pd.Series(v, index=df.index) for k,v in out.items()}
 
 def percent_above_below_ma(df, ma_windows=None):
-    df = df.copy()
     if ma_windows is None:
         ma_windows = [20, 50]
+    out = {}
     for w in ma_windows:
         ma = df['close'].rolling(w).mean()
-        df[f'pct_above_ma_{w}'] = (df['close'] - ma) / ma
-    return df
+        out[f'pct_above_ma_{w}'] = (df['close'] - ma) / ma
+    return out
 
 def bollinger_extra(df):
     # requires bb_upper, bb_lower, bb_middle
-    df = df.copy()
-    if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
-        df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'].replace(0, np.nan)
-        df['bb_percent_b'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower']).replace(0, np.nan)
-    return df
+    out = {}
+    if 'bb_upper' in df.columns and 'bb_lower' in df.columns and 'bb_middle' in df.columns:
+        out['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'].replace(0, np.nan)
+        out['bb_percent_b'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower']).replace(0, np.nan)
+    return out
 
 def rolling_moments(df, windows=None):
     # avoid mutable default argument; set default list inside function
-    df = df.copy()
     if windows is None:
         windows = [10, 20]
+    out = {}
     for w in windows:
-        df[f'rolling_skew_{w}'] = df['return'].rolling(w).skew()
-        df[f'rolling_kurt_{w}'] = df['return'].rolling(w).kurt()
-    return df
+        out[f'rolling_skew_{w}'] = df['return'].rolling(w).skew()
+        out[f'rolling_kurt_{w}'] = df['return'].rolling(w).kurt()
+    return out
 
 def rolling_slope(df, window=10, source='close'):
-    df = df.copy()
-
-    # Vectorized slope calculation (fast path)
     y = df[source].values.astype(float)
     n = window
-
-    # x = [0, 1, ..., n-1]
     x = np.arange(n, dtype=float)
-    sum_x = x.sum()
+    x = x - x.mean()
     sum_x2 = (x * x).sum()
-
-    # Rolling sums
-    y_sum = pd.Series(y).rolling(n).sum().values
-    yx = pd.Series(y).rolling(n).apply(lambda arr: np.dot(arr, x), raw=True).values
-
-    # Slope formula
-    num = n * yx - sum_x * y_sum
-    den = n * sum_x2 - sum_x * sum_x
-
-    slope = num / den
-    df[f'slope_{window}'] = slope
-
-    return df
+    kernel = x[::-1]
+    from numpy.lib.stride_tricks import sliding_window_view
+    windows = sliding_window_view(y, n)
+    slopes = windows @ kernel / sum_x2
+    result = np.full(len(y), np.nan)
+    result[n - 1:] = slopes
+    return {f'slope_{window}': pd.Series(result, index=df.index)}
 
 def time_features(df, break_hour=21):
-    df = df.copy()
     if 'datetime' in df.columns:
         dt_series = pd.to_datetime(df['datetime'])
         df['hour'] = dt_series.dt.hour
@@ -510,7 +413,9 @@ def time_features(df, break_hour=21):
         df['is_london'] = df['datetime'].dt.hour.isin(range(8, 17)).astype(int)
         df['is_ny'] = df['datetime'].dt.hour.isin(range(13, 22)).astype(int)
         df['is_overlap'] = ((df['is_london'] == 1) & (df['is_ny'] == 1)).astype(int)
-        return df
+        # collect created columns and return as dict
+        keys = ['hour','minute','dayofweek','day','month','is_month_end','hour_sin','hour_cos','minute_sin','minute_cos','dow_sin','dow_cos','day_sin','day_cos','month_sin','month_cos','is_prev_break_hour','is_post_break_hour','is_NY_open_hour','week_of_month','seconds_since_midnight','session_progress','is_london','is_ny','is_overlap']
+        return {k: df[k] for k in keys}
     elif isinstance(df.index, pd.DatetimeIndex):
         idx = df.index
         df['hour'] = idx.hour
@@ -548,84 +453,94 @@ def time_features(df, break_hour=21):
         df['is_ny'] = df['datetime'].dt.hour.isin(range(13, 22)).astype(int)
         df['is_overlap'] = ((df['is_london'] == 1) & (df['is_ny'] == 1)).astype(int)
 
-        return df
+        keys = ['hour','minute','dayofweek','day','month','is_month_end','hour_sin','hour_cos','minute_sin','minute_cos','dow_sin','dow_cos','day_sin','day_cos','month_sin','month_cos','is_prev_break_hour','is_post_break_hour','is_NY_open_hour','week_of_month','seconds_since_midnight','session_progress','is_london','is_ny','is_overlap']
+        return {k: df[k] for k in keys}
     else:
         return df
 
 def realized_volatility(df, window=20):
     # sum of squared intraday returns -> sqrt
-    df = df.copy()
     ret = df['log_return'] if 'log_return' in df.columns else np.log(df['close'] / df['close'].shift(1))
-    df[f'realized_vol_{window}'] = np.sqrt((ret**2).rolling(window).sum()) * np.sqrt(252 / window)
-    return df
+    return {f'realized_vol_{window}': np.sqrt((ret**2).rolling(window).sum()) * np.sqrt(252 / window)}
 
 def is_doji(df, threshold=0.1):
     # small body relative to candle range
-    df = df.copy()
     body = (df['close'] - df['open']).abs()
     rng = (df['high'] - df['low']).replace(0, np.nan)
-    df['is_doji'] = (body / rng) < threshold
-    df['is_doji'] = df['is_doji'].astype(float)
-    return df
+    return {'is_doji': (body / rng < threshold).astype(float)}
 
 def add_tick_features(df, tick_size=0.1):
-    df = df.copy()
 
     # Ensure base cols exist
     if 'open' not in df.columns or 'close' not in df.columns or 'high' not in df.columns or 'low' not in df.columns:
-        return df
+        return {}
 
     # compute basic micro-structure if missing
     if 'body' not in df.columns:
-        df['body'] = (df['close'] - df['open']).abs()
+        body = (df['close'] - df['open']).abs()
+    else:
+        body = df['body']
 
     # absolute ticks
-    df['body_ticks'] = (df['close'] - df['open']) / float(tick_size)
-    df['range_ticks'] = (df['high'] - df['low']) / float(tick_size)
-    df['upper_wick_ticks'] = (df['high'] - df[['open', 'close']].max(axis=1)) / float(tick_size)
-    df['lower_wick_ticks'] = (df[['open', 'close']].min(axis=1) - df['low']) / float(tick_size)
+    body_ticks = (df['close'] - df['open']) / float(tick_size)
+    range_ticks = (df['high'] - df['low']) / float(tick_size)
+    upper_wick_ticks = (df['high'] - df[['open','close']].max(axis=1)) / float(tick_size)
+    lower_wick_ticks = (df[['open','close']].min(axis=1) - df['low']) / float(tick_size)
 
     # proportions (safe denom)
-    denom = df['range_ticks'].replace(0, np.nan)
-    df['body_pct'] = df['body_ticks'].abs() / (denom + 1e-8)
-    df['upper_wick_pct'] = df['upper_wick_ticks'] / (denom + 1e-8)
-    df['lower_wick_pct'] = df['lower_wick_ticks'] / (denom + 1e-8)
+    denom = range_ticks.replace(0, np.nan)
+    body_pct = body_ticks.abs() / (denom + 1e-8)
+    upper_wick_pct = upper_wick_ticks / (denom + 1e-8)
+    lower_wick_pct = lower_wick_ticks / (denom + 1e-8)
 
     # close location within candle [0..1]
     rng = (df['high'] - df['low']).replace(0, np.nan)
-    df['close_location'] = (df['close'] - df['low']) / (rng + 1e-8)
+    close_location = (df['close'] - df['low']) / (rng + 1e-8)
 
     # distances in ticks to intra-day aggregates (fall back to NaN if missing)
     if 'high_cum' in df.columns:
-        df['dist_high_cum_ticks'] = (df['high_cum'] - df['close']) / float(tick_size)
+        dist_high_cum_ticks = (df['high_cum'] - df['close']) / float(tick_size)
     else:
-        df['dist_high_cum_ticks'] = np.nan
+        dist_high_cum_ticks = np.nan
 
     if 'low_cum' in df.columns:
-        df['dist_low_cum_ticks'] = (df['close'] - df['low_cum']) / float(tick_size)
+        dist_low_cum_ticks = (df['close'] - df['low_cum']) / float(tick_size)
     else:
-        df['dist_low_cum_ticks'] = np.nan
+        dist_low_cum_ticks = np.nan
 
     if 'open_day' in df.columns:
-        df['dist_open_day_ticks'] = (df['close'] - df['open_day']) / float(tick_size)
+        dist_open_day_ticks = (df['close'] - df['open_day']) / float(tick_size)
     else:
-        df['dist_open_day_ticks'] = np.nan
+        dist_open_day_ticks = np.nan
 
     # volume dynamics (safe denominators)
-    df['vol_per_tick'] = df['volume'] / (df['range_ticks'].abs() + 1.0)
-    df['vol_vs_body'] = df['volume'] / (df['body_ticks'].abs() + 1.0)
+    vol_per_tick = df['volume'] / (range_ticks.abs() + 1.0)
+    vol_vs_body = df['volume'] / (body_ticks.abs() + 1.0)
     if 'volume_cum' in df.columns:
-        df['vol_weight_intraday'] = df['volume'] / (df['volume_cum'] + 1.0)
+        vol_weight_intraday = df['volume'] / (df['volume_cum'] + 1.0)
     else:
-        df['vol_weight_intraday'] = np.nan
+        vol_weight_intraday = np.nan
 
-    return df
+    out = {
+        'body_ticks': body_ticks,
+        'range_ticks': range_ticks,
+        'upper_wick_ticks': upper_wick_ticks,
+        'lower_wick_ticks': lower_wick_ticks,
+        'body_pct': body_pct,
+        'upper_wick_pct': upper_wick_pct,
+        'lower_wick_pct': lower_wick_pct,
+        'close_location': close_location,
+        'dist_high_cum_ticks': dist_high_cum_ticks,
+        'dist_low_cum_ticks': dist_low_cum_ticks,
+        'dist_open_day_ticks': dist_open_day_ticks,
+        'vol_per_tick': vol_per_tick,
+        'vol_vs_body': vol_vs_body,
+        'vol_weight_intraday': vol_weight_intraday,
+        'body': body,
+    }
+    return {k: pd.Series(v, index=df.index) if not isinstance(v, (float, int)) else pd.Series([v]*len(df), index=df.index) for k,v in out.items()}
 
 def generate_features(df, config_json=None, dropna_strategy='any'):
-    """Genera indicadores técnicos en el DataFrame `df`.
-    `config_json` puede ser un diccionario o un string JSON con configuraciones por indicador,
-    por ejemplo: {'sma': {'n':20}, 'macd': {'n_fast':12,'n_slow':26}}
-    Devuelve el DataFrame con nuevas columnas."""
     cfg = {}
     if config_json:
         if isinstance(config_json, str):
@@ -635,142 +550,162 @@ def generate_features(df, config_json=None, dropna_strategy='any'):
         else:
             raise ValueError("config_json debe ser dict o JSON string")
 
-    # parámetros globales
     global_cfg = cfg.get("global", {})
-    # allow override of dropna strategy from global config
     if 'dropna_strategy' in global_cfg and (dropna_strategy == 'any' or dropna_strategy is None):
         dropna_strategy = global_cfg.get('dropna_strategy')
 
-    # helper para obtener parámetros del indicador
     def p(name):
-        local = cfg.get(name, {})
-        return {**global_cfg, **local}  # local override
+        return {**global_cfg, **cfg.get(name, {})}
 
-    # función auxiliar
-    def _call(func, name, pass_cfg=True):
+    # Copia única al inicio
+    base = df.copy()
+    # Acumulador de todas las columnas nuevas: {col_name: Series}
+    buf = {}
+
+    def _snapshot():
+        """Materializa buf sobre base y limpia buf. Necesario antes de
+        funciones que leen columnas producidas por funciones anteriores."""
+        nonlocal base
+        if buf:
+            base = pd.concat([base, pd.DataFrame(buf, index=base.index)], axis=1)
+            buf.clear()
+
+    def _call(func, name):
         params = p(name)
-        # inject session_key by default for session-aware functions
         session_funcs = {'compute_atr', 'obv', 'ad', 'rolling_slope'}
-        if name in session_funcs:
-            if 'session_key' not in params:
-                params = {**params, 'session_key': 'trading_date'}
-        # Only pass kwargs accepted by the function to avoid TypeError
-        if pass_cfg and params:
+        if name in session_funcs and 'session_key' not in params:
+            params = {**params, 'session_key': 'trading_date'}
+        try:
+            sig = inspect.signature(func)
+            has_varkw = any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in sig.parameters.values()
+            )
+            allowed = params if has_varkw else {
+                k: v for k, v in params.items() if k in sig.parameters
+            }
+        except Exception:
+            allowed = params
+
+        result = func(base, **allowed) if allowed else func(base)
+
+        # Normalizar distintos tipos de retorno a un mapping col->Series/array
+        out_items = {}
+        if isinstance(result, pd.DataFrame):
+            for col in result.columns:
+                out_items[col] = result[col]
+        elif isinstance(result, dict):
+            out_items = result
+        elif isinstance(result, pd.Series):
+            name = result.name or 'value'
+            out_items[name] = result
+        else:
+            # intento best-effort: si es array 1D con longitud correcta
             try:
-                sig = inspect.signature(func)
-                has_varkw = any(
-                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
-                )
-                if has_varkw:
-                    allowed = params
-                else:
-                    allowed = {k: v for k, v in params.items() if k in sig.parameters}
+                arr = np.asarray(result)
+                if arr.ndim == 1 and arr.shape[0] == len(base):
+                    out_items['value'] = arr
             except Exception:
-                # If signature inspection fails, fall back to passing params (best-effort)
-                allowed = params
+                out_items = {}
 
-            if allowed:
-                return func(df, **allowed)
-        return func(df)
-    # Aplicar indicadores (se aplican en un orden lógico)
-    df = df.copy()
-    # Tendencia / medias
-    df = _call(sma, 'sma')
-    df = _call(ema, 'ema')
-    df = _call(dema, 'dema')
-    df = _call(kama, 'kama')
-    # Momentum / osciladores
-    df = _call(macd, 'macd')
-    df = _call(rsi, 'rsi')
-    df = _call(stoch, 'stoch')
-    df = _call(cmo, 'cmo')
-    df = _call(williams_r, 'williams_r')
-    # Dirección / volatilidad
-    df = _call(adx, 'adx')
-    df = _call(true_range, 'true_range')
-    df = _call(compute_atr, 'compute_atr')
-    df = _call(atr_normalized, 'atr_normalized')
-    df = _call(volatility_zscore, 'volatility_zscore')
-    df = _call(historical_volatility, 'historical_volatility')
-    # Volumen y derivados
-    df = _call(obv, 'obv')
-    df = _call(vpt, 'vpt')
-    df = _call(vpt_norm, 'vpt_norm')
-    df = _call(relative_volume, 'relative_volume')
-    df = _call(ad, 'ad')
-    df = _call(mfi, 'mfi')
-    df = _call(cmf, 'cmf')
-    df = _call(vwap, 'vwap')
-    df = _call(volume_zscore, 'volume_zscore')
-    df = _call(volume_delta, 'volume_delta')
-    df = _call(volume_sum, 'volume_sum')
-    df = _call(volume_by_range, 'volume_by_range')
-    df = _call(volume_by_price, 'volume_by_price')
-    df = _call(vol_vol_ratio, 'vol_vol_ratio')
-    # returns and momentum
-    df = _call(percent_return_features, 'percent_return_features')
-    df = _call(percent_above_below_ma, 'percent_above_below_ma')
-    df = _call(multi_roc, 'multi_roc')
-    df = _call(rolling_moments, 'rolling_moments')
-    df = _call(rolling_slope, 'rolling_slope')
-    df = _call(time_features, 'time_features')
-    # Indicadores técnicos adicionales
-    df = _call(cci, 'cci')
-    df = _call(bollinger_bands, 'bollinger_bands')
-    df = _call(bollinger_extra, 'bollinger_extra')
-    df = _call(elder_force_index, 'elder_force_index')
-    df = _call(candle_body, 'candle_body')
-    df = _call(wick_ratio, 'wick_ratio')
-    df = _call(roc, 'roc')
-    # additional small utilities
-    df = _call(tr_direction, 'tr_direction')
-    df = _call(is_doji, 'is_doji')
-    df = _call(realized_volatility, 'realized_volatility')
-    # Normalizaciones / utilidades finales
-    df = _call(atr_normalized, 'atr_normalized')
-    df = _call(volatility_zscore, 'volatility_zscore')
-    df = _call(add_tick_features, 'add_tick_features')
-    # replace infinities with NaN before applying dropna strategy
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        # Acumular solo columnas nuevas
+        for col, series in out_items.items():
+            if col in base.columns or col in buf:
+                continue
+            if not isinstance(series, pd.Series):
+                try:
+                    series = pd.Series(series, index=base.index)
+                except Exception:
+                    # skip incompatible shapes
+                    continue
+            buf[col] = series.values  # almacenar valores crudos (más ligero)
 
-    # dropna strategy options:
-    # - 0 / None / False -> do not drop any rows
-    # - 'all' -> drop rows where all values are NaN
-    # - float between 0 and 1 -> minimum fraction of non-NA columns required
-    # - int >= 1 -> minimum number of non-NA columns required
+    # ── Grupo 1: sin dependencias entre sí ──────────────────────────────
+    _call(sma, 'sma')
+    _call(ema, 'ema')
+    _call(dema, 'dema')
+    _call(kama, 'kama')
+    _call(macd, 'macd')
+    _call(rsi, 'rsi')
+    _call(stoch, 'stoch')
+    _call(cmo, 'cmo')
+    _call(williams_r, 'williams_r')
+    _call(adx, 'adx')
+    _call(true_range, 'true_range')       # → atr, tr_direction
+    _call(vpt, 'vpt')                     # → vpt_norm
+    _call(obv, 'obv')
+    _call(relative_volume, 'relative_volume')
+    _call(ad, 'ad')
+    _call(mfi, 'mfi')
+    _call(cmf, 'cmf')
+    _call(vwap, 'vwap')
+    _call(volume_zscore, 'volume_zscore')
+    _call(volume_delta, 'volume_delta')
+    _call(volume_sum, 'volume_sum')
+    _call(volume_by_range, 'volume_by_range')
+    _call(volume_by_price, 'volume_by_price')
+    _call(bollinger_bands, 'bollinger_bands')   # → bollinger_extra
+    _call(percent_return_features, 'percent_return_features')  # → 'return', 'log_return'
+    _call(time_features, 'time_features')
+    _call(candle_body, 'candle_body')           # → 'body' para add_tick_features
+    _call(historical_volatility, 'historical_volatility')
+    _call(cci, 'cci')
+    _call(elder_force_index, 'elder_force_index')
+    _call(wick_ratio, 'wick_ratio')
+    _call(is_doji, 'is_doji')
+
+    _snapshot()  # ← materializar antes del grupo 2
+
+    # ── Grupo 2: leen columnas del grupo 1 ──────────────────────────────
+    _call(compute_atr, 'compute_atr')          # necesita true_range
+    _call(vpt_norm, 'vpt_norm')                # necesita vpt
+    _call(bollinger_extra, 'bollinger_extra')  # necesita bb_upper/lower/middle
+    _call(rolling_moments, 'rolling_moments')  # necesita 'return'
+    _call(realized_volatility, 'realized_volatility')  # necesita 'log_return'
+    _call(percent_above_below_ma, 'percent_above_below_ma')
+    _call(multi_roc, 'multi_roc')
+    _call(rolling_slope, 'rolling_slope')
+    _call(tr_direction, 'tr_direction')        # necesita true_range
+
+    _snapshot()  # ← materializar antes del grupo 3
+
+    # ── Grupo 3: leen atr (grupo 2) ─────────────────────────────────────
+    _call(atr_normalized, 'atr_normalized')
+    _call(volatility_zscore, 'volatility_zscore')
+    _call(vol_vol_ratio, 'vol_vol_ratio')
+    _call(roc, 'roc')
+    _call(add_tick_features, 'add_tick_features')  # necesita body, range_ticks
+
+    _snapshot()  # ← concat final
+
+    base.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    # ── dropna ───────────────────────────────────────────────────────────
     try:
         if dropna_strategy in (0, '0', None, False):
             pass
         elif isinstance(dropna_strategy, str) and dropna_strategy.lower() == 'all':
-            df = df.dropna(how='all')
-            df = df.reset_index(drop=True)
+            base = base.dropna(how='all').reset_index(drop=True)
         elif isinstance(dropna_strategy, str) and dropna_strategy.lower() == 'any':
-            df = df.dropna(how='any')
-            df = df.reset_index(drop=True)
+            base = base.dropna(how='any').reset_index(drop=True)
         elif isinstance(dropna_strategy, float) and 0 < dropna_strategy < 1:
-            thresh = int(np.ceil(df.shape[1] * float(dropna_strategy)))
-            df = df.dropna(thresh=thresh)
-            df = df.reset_index(drop=True)
+            thresh = int(np.ceil(base.shape[1] * float(dropna_strategy)))
+            base = base.dropna(thresh=thresh).reset_index(drop=True)
         elif isinstance(dropna_strategy, int) and dropna_strategy >= 1:
-            df = df.dropna(thresh=int(dropna_strategy))
-            df = df.reset_index(drop=True)
+            base = base.dropna(thresh=int(dropna_strategy)).reset_index(drop=True)
         else:
-            # try to coerce numeric-like strings
             val = float(dropna_strategy)
             if 0 < val < 1:
-                thresh = int(np.ceil(df.shape[1] * val))
-                df = df.dropna(thresh=thresh)
+                thresh = int(np.ceil(base.shape[1] * val))
+                base = base.dropna(thresh=thresh)
             elif val == 0:
                 pass
             else:
-                df = df.dropna(thresh=int(val))
-                df = df.reset_index(drop=True)
+                base = base.dropna(thresh=int(val)).reset_index(drop=True)
     except Exception:
-        # safe fallback: remove rows that are all-NaN
-        df = df.dropna(how='all')
-        df = df.reset_index(drop=True)
+        base = base.dropna(how='all').reset_index(drop=True)
 
-    return df
+    return base
 
 def data_quality_report(
     df,
