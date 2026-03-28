@@ -24,6 +24,58 @@
 7. Cerrar todas las posiciones antes del break
 
 ```mermaid
+---
+title: Arquitectura actual
+---
+graph TD
+    subgraph "0. Selección de Activo y Specs"
+        A1[Asset] --> A
+        A2[Specs: Minutos, Horizonte] --> A
+    end
+
+    subgraph "1. CAPA DE DATOS (DATA LAKE)"
+        A[Datos OHLCV 1m] --> B[Limpieza y Wavelet Denoising]
+        B --> C[Resampling a 30m/60m y calculo de features acumuladas]
+        C --> D[Feature Engineering: 149+ Cols]
+        D --> E[Definición de los targets: Binario Buy/Sell o Trinario Buy/Neutral/Sell]
+    end
+
+    subgraph "2. Entrenamiento y Validación"
+        D --> F[Definir modelos: LSTM, GRU, etc.]
+        F --> G[Entrenamiento con walk foward con moving window]
+        G --> H[Validación con métricas: Accuracy, Precision, Recall, etc.]
+        H --> I[Busqueda de top features con SHAP y VIF]
+        I --> J[Re-entrenamiento con top features]
+        J --> H
+        H --> I[Validación con métricas: Sharpe, Max Drawdown, etc.]
+        I --> J[Selección de modelos y umbrales de confianza]
+        J --> K[Modelos finalistas para backtesting]
+        J --> K
+    end
+
+    subgraph "3. MOTOR DE BACKTESTING & ESTRÉS"
+        K --> L[BacktestEngine]
+        L --> M[Simulación de CAOS]
+        M --> M1[Lag: Poisson]
+        M --> M2[Slippage: T-Student]
+        M --> N[Monte Carlo: 100 Iteraciones]
+    end
+
+    subgraph "4. Operacion en Vivo"
+        N --> O[Pipeline de Datos en Vivo]
+        O --> P[Predicciones cada x minutos]
+        P --> Q[Gestión de Posiciones: Apertura, SL, TP, etc.]
+        Q --> R[Monitoreo y Alertas]
+    end
+
+    subgraph "5. REGISTRO Y MONITOREO"
+        R --> S[Json registrando cada decisión]
+        N --> T[Json con datos usados para cada predicción]
+    end
+```
+
+Arquitectura a futuro
+```mermaid
 graph TD
     subgraph "1. CAPA DE DATOS (DATA LAKE)"
         A[Datos OHLCV 1m/30m/60m] --> B[Limpieza y Wavelet Denoising]

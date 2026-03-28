@@ -33,6 +33,10 @@ def import_dataset(asset='gc1', format='min'):
     # Unir fecha y hora en una sola columna de tipo datetime
     df['datetime'] = pd.to_datetime(df['dtyyyymmdd'].astype(str) + ' ' + df['time'].astype(str))
     df = df.sort_values('datetime')
+    if asset == 'gc1':
+        df['datetime'] = df['datetime'] - pd.Timedelta(hours=3)
+    else:
+        df['datetime'] = df['datetime'] - pd.Timedelta(hours=2)
     print(f"Dataset '{asset}' imported with {len(df)} rows")
     specs = pd.read_json("../Data/futuros_specs.json")
     spec = specs[asset[:2].upper()]

@@ -1,33 +1,15 @@
 import pandas as pd
+import numpy as np
+import pywt
 
-def import_dataset(asset='gc1', format='dia'):
-    """
-    Importa un dataset de texto y normaliza las columnas de fecha y hora.
-
-    Parámetros:
-    - asset (str): prefijo del archivo de activo (ej. 'gc1').
-    - format (str): sufijo de formato de archivo (ej. 'dia' o 'min').
-
-    El archivo esperado está en `../data/{asset}{format}.txt` y debe contener
-    al menos las columnas 'DTYYYYMMDD' y 'TIME'.
-
-    El proceso realiza:
-    1. Lectura del CSV.
-    2. Conversión de 'DTYYYYMMDD' a tipo datetime.
-    3. Normalización de 'TIME' (relleno a 6 dígitos) y conversión a time.
-    4. Creación de la columna 'DATETIME' uniendo fecha y hora.
-
-    Retorna:
-    - pd.DataFrame con las columnas originales y la nueva columna 'DATETIME'.
-    """
+# Funciones de carga, limpieza, resampleo y análisis para futuros
+def import_dataset(asset='gc1', format='min'):
     file_path = f'../Data/{asset}{format}.txt'
     df = pd.read_csv(file_path)
-    # Normalizar nombres de columnas a minúsculas
     df.columns = df.columns.str.lower()
     df = df.rename(columns={
         'vol': 'volume'
     })
-    # Convertir columna de fecha (formato YYYYMMDD) a datetime
     df['dtyyyymmdd'] = pd.to_datetime(df['dtyyyymmdd'], format='%Y%m%d')
     # Asegurar que time tenga 6 dígitos (HHMMSS) y convertir a tipo time
     df['time'] = df['time'].astype(str).str.zfill(6)
@@ -35,30 +17,117 @@ def import_dataset(asset='gc1', format='dia'):
     # Unir fecha y hora en una sola columna de tipo datetime
     df['datetime'] = pd.to_datetime(df['dtyyyymmdd'].astype(str) + ' ' + df['time'].astype(str))
     df = df.sort_values('datetime')
-    return df
-
-def load_future(asset='gc1', format='all'):
-    """_summary_
-
-    Args:
-        asset (str, optional): _description_. Defaults to 'gc1'.
-        format (str, optional): _description_. Defaults to 'all'.
-
-    Raises:
-        ValueError: _description_
-
-    Returns:
-        _type_: _description_
-    """
-    if format == 'all':
-        df_dia = import_dataset(asset, 'dia')
-        df_min = import_dataset(asset, 'min')
-    elif format == 'dia':
-        df_dia = import_dataset(asset, 'dia')
-    elif format == 'min':
-        df_min = import_dataset(asset, 'min')
+    if asset == 'gc1':
+        df['datetime'] = df['datetime'] - pd.Timedelta(hours=3)
     else:
-        raise ValueError("Formato no reconocido. Use 'dia', 'min' o 'all'.")
+        df['datetime'] = df['datetime'] - pd.Timedelta(hours=2)
+    print(f"Dataset '{asset}' imported with {len(df)} rows")
     specs = pd.read_json("../Data/futuros_specs.json")
     spec = specs[asset[:2].upper()]
-    return spec, df_dia if format in ['dia', 'all'] else None, df_min if format in ['min', 'all'] else None
+    return df, spec
+
+def clean(df, asset='gc1', break_hour=21):
+    df = df.copy()
+
+    # 1. Días de la semana: Lunes a viernes y domingos. Elimino los sábados
+    df = df[df['datetime'].dt.weekday != 5]
+
+    # 2. Eliminar la hora del break dinámicamente.
+    df = df[df['datetime'].dt.hour != break_hour]
+
+    # 3. Filtrar ruido alrededor del break (15 min antes y 15 min después).
+    # Calculamos la hora previa y la hora posterior teniendo en cuenta el ciclo de 24h.
+    prev_hour = (break_hour - 1) % 24
+    next_hour = (break_hour + 1) % 24
+    
+    # Máscara para 15 minutos antes del cierre (ej: 22:45 a 22:59)
+    mask_noise_before = (df['datetime'].dt.hour == prev_hour) & (df['datetime'].dt.minute >= 45)
+    
+    # Máscara para 15 minutos después de la apertura (ej: 00:00 a 00:15 o 01:00 a 01:15)
+    mask_noise_after = (df['datetime'].dt.hour == next_hour) & (df['datetime'].dt.minute <= 15)
+    
+    # Aplicamos el filtro para quitar ese ruido
+    df = df[~(mask_noise_before | mask_noise_after)]
+
+    # 4. Definir trading day continuo.
+    df['trading_date'] = (df['datetime'] + pd.Timedelta(hours=2)).dt.date
+
+    # 5. Eliminar duplicados y asegurar orden temporal continuo.
+    df = df.drop_duplicates(subset=['datetime']).sort_values('datetime')
+    df = df.reset_index(drop=True)
+
+    print(f"Limpieza {asset} completada. Filas restantes: {len(df)}")
+    return df
+
+def wavelet_denoising(x, wavelet='db4', level=1):
+    # Descomponer la señal
+    coeffs = pywt.wavedec(x, wavelet, mode='per')
+    # Aplicar umbral para eliminar ruido (detalles de alta frecuencia)
+    sigma = (1/0.6745) * np.median(np.abs(coeffs[-level] - np.median(coeffs[-level])))
+    uthresh = sigma * np.sqrt(2 * np.log(len(x)))
+    coeffs[1:] = [pywt.threshold(i, value=uthresh, mode='hard') for i in coeffs[1:]]
+    # Reconstruir
+    y = pywt.waverec(coeffs, wavelet, mode='per')
+
+    # Ajustar longitud
+    if len(y) > len(x):
+        y = y[:len(x)]
+    elif len(y) < len(x):
+        y = np.pad(y, (0, len(x) - len(y)), mode='edge')
+
+    return y
+
+def resample_ohlcv(df, period="5min"):
+    """
+    Resamplea un dataframe OHLCV al periodo deseado.
+    period puede ser: '1min', '5min', '15min', '30min', '1H', '1D', etc.
+    """
+
+    # Asegurar orden temporal
+    df = df.sort_values("datetime").copy()
+
+    # Asegurar que datetime es datetime64
+    df["datetime"] = pd.to_datetime(df["datetime"])
+
+    # Establecer índice temporal
+    df = df.set_index("datetime")
+
+    # Diccionario OHLCV estándar
+    ohlc_dict = {
+        "open": "first",
+        "high": "max",
+        "low": "min",
+        "close": "last",
+        "volume": "sum",
+        "openint": "last",
+        "dtyyyymmdd": "first"
+    }
+
+    # Resample usando el periodo elegido
+    df_resampled = df.resample(period).agg(ohlc_dict)
+
+    # Eliminar velas vacías
+    df_resampled = df_resampled.dropna(subset=["open", "high", "low", "close"])
+
+    # Añadir columnas extra
+    df_resampled["ticker"] = df["ticker"].iloc[0]
+    df_resampled["per"] = period
+    
+    # Reset index
+    df_resampled = df_resampled.reset_index()
+
+    return df_resampled
+
+def daily_ohlcv_cummulative(df_min):
+    df = df_min.copy()
+    df = df.sort_values('datetime')
+    # Usamos el desplazamiento de 1 hora que definimos en la limpieza
+    df['trading_date'] = (df['datetime'] - pd.Timedelta(hours=1)).dt.date
+    
+    # Ahora agrupamos por 'trading_date' en lugar de 'date'
+    df['open_day'] = df.groupby('trading_date')['open'].transform('first')
+    df['high_cum'] = df.groupby('trading_date')['high'].cummax()
+    df['low_cum'] = df.groupby('trading_date')['low'].cummin()
+    df['volume_cum'] = df.groupby('trading_date')['volume'].cumsum()
+    
+    return df
