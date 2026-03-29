@@ -11,6 +11,10 @@ import torch
 import torch.nn as nn
 import joblib  # ← para cargar el scaler
 from ib_async import *
+from tradepy.load import import_dataset, clean, wavelet_denoising, resample_ohlcv, daily_ohlcv_cummulative
+from tradepy.features import generate_features
+import os
+from ib_async import util
 
 # ==================== LOGGING (preparado para Grafana + Alertmanager) ====================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -19,16 +23,16 @@ logger = logging.getLogger(__name__)
 # ==================== CLI ====================
 parser = argparse.ArgumentParser(description="Bot intraday async PyTorch + ATR trailing + risk + scaler")
 parser.add_argument('--symbol', type=str, required=True)
-parser.add_argument('--expiration', type=str, default='')
+# parser.add_argument('--expiration', type=str, default='')
 parser.add_argument('--client-id', type=int, required=True)
 parser.add_argument('--model-path', type=str, required=True, help='Ej: models/lstm_gc.pth')
 args = parser.parse_args()
 
 SYMBOL = args.symbol
-EXPIRATION = args.expiration
+# EXPIRATION = args.expiration
 CLIENT_ID = args.client_id
 MODEL_PATH = args.model_path
-PREDICCION_CADA_MINUTOS = 5
+PREDICCION_CADA_MINUTOS = 60
 
 # ==================== CONFIG RIESGO + ATR ====================
 MAX_DAILY_LOSS_USD = -1000.0
@@ -52,6 +56,30 @@ JSON_POS = Path(f'posiciones_{SYMBOL}.json')
 JSON_BARS = Path(f'bars_{SYMBOL}.json')
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+async def get_active_future_contract(ib, symbol):
+    # OJO: exchange='NYMEX' y secType='FUT'
+    template = Future(
+        symbol=symbol,
+        exchange='COMEX',
+        currency='USD'
+    )
+    cds = await ib.reqContractDetailsAsync(template)
+    if not cds:
+        raise ValueError(f"No se encontraron contratos para {symbol}")
+
+    contracts = [c.contract for c in cds]
+    tickers = await ib.reqTickersAsync(*contracts)
+
+    best_contract = None
+    max_vol = -1
+    for ticker in tickers:
+        vol = ticker.volume or 0
+        print(f"Contrato: {ticker.contract.localSymbol} | Vol: {vol}")
+        if vol > max_vol:
+            max_vol = vol
+            best_contract = ticker.contract
+
+    return best_contract
 
 # ==================== MODELO LSTM (exacta a la del retrain) ====================
 class LSTMModel(nn.Module):
@@ -92,13 +120,37 @@ def calculate_atr(df: pd.DataFrame, period: int = ATR_PERIOD):
     return tr.rolling(window=period).mean()
 
 # ==================== PREDICCIÓN PyTorch + SCALER ====================
-def generar_prediccion(df: pd.DataFrame, model: LSTMModel, scaler) -> Tuple[Literal['BUY', 'SELL', 'HOLD'], float]:
+def generar_prediccion(df: pd.DataFrame, model: LSTMModel, scaler, minutes: int, json_config_path, return_horizon_min: int, spec: dict) -> Tuple[Literal['BUY', 'SELL', 'HOLD'], float]:
     if len(df) < 60:
         return 'HOLD', 0.0
 
     # === Features exactas con las que se entrenó (5 columnas) ===
-    feature_cols = ['open', 'high', 'low', 'close', 'volume']
-    seq = df[feature_cols].iloc[-60:].values.astype(float)
+    df = df.copy()
+    df["close"] = wavelet_denoising(df['close'].values.copy())
+    df_resampled = resample_ohlcv(df, period=f"{minutes}min")
+    df_cumulative = daily_ohlcv_cummulative(df_resampled)
+    with open(json_config_path) as f:
+        config = json.load(f)
+
+    config["global"]["sampling_minutes"] = minutes
+    config["global"]["return_horizon_min"] = return_horizon_min
+    config["global"]["tick_size"] = spec["tick_size"]
+    
+    df_final = generate_features(df_cumulative, config_json=config, dropna_strategy='any')
+    exclude_cols_triple = [
+        # Identificadores / temporales no cíclicos
+        "datetime", "dtyyyymmdd", "trading_date", "ticker", "per", "openint",
+
+        # OHLCV raw (el modelo no debería ver precios absolutos)
+        "open", "high", "low", "close", "volume",
+
+        # Targets
+        "target_bin", f"target_logret_{minutes}", f"target_ret_{minutes}", f"target_ticks_{minutes}"
+    ]
+
+    feature_cols = [c for c in df.columns if c not in exclude_cols_triple]
+
+    seq = df_final[feature_cols].iloc[-60:].values.astype(float)
 
     # Aplicar scaler (el mismo que guardaste al entrenar)
     scaled = scaler.transform(seq)
@@ -118,8 +170,8 @@ def generar_prediccion(df: pd.DataFrame, model: LSTMModel, scaler) -> Tuple[Lite
     return 'HOLD', confidence
 
 # ==================== CHECK MARGEN + DAILY LOSS + DRAWDOWN ====================
-async def check_margin_and_risk(ib: IB, daily_start_nlv, max_equity) -> Tuple[bool, float, float]:
-    summary = await ib.accountSummary()
+async def check_margin_and_risk(ib, daily_start_nlv, max_equity) -> Tuple[bool, float, float]:
+    summary = await ib.accountSummaryAsync()
     excess_liquidity = float(next((v.value for v in summary if v.tag == 'ExcessLiquidity'), 0))
     maint_margin_req = float(next((v.value for v in summary if v.tag == 'MaintMarginReq'), 0))
     nlv = float(next((v.value for v in summary if v.tag == 'NetLiquidation'), 0))
@@ -147,54 +199,190 @@ async def check_margin_and_risk(ib: IB, daily_start_nlv, max_equity) -> Tuple[bo
 
     return True, daily_start_nlv, max_equity
 
-async def close_all_positions(ib: IB, contract: Contract):
+async def close_all_positions(ib, contract):
     positions = ib.positions()
     pos = next((p for p in positions if p.contract.conId == contract.conId), None)
     if pos and pos.position != 0:
         action = 'SELL' if pos.position > 0 else 'BUY'
-        await ib.placeOrder(contract, MarketOrder(action, abs(pos.position), tif='DAY'))
+        ib.placeOrder(contract, MarketOrder(action, abs(pos.position), tif='DAY'))
 
 # ==================== MAIN ASYNC (TODO INTEGRADO) ====================
 async def main():
     ib = IB()
-    await ib.connect('127.0.0.1', 7497, clientId=CLIENT_ID, readonly=False)
+    await ib.connectAsync('127.0.0.1', 7497, clientId=CLIENT_ID, readonly=False)
     logger.info(f"✅ Conectado {SYMBOL} (clientId {CLIENT_ID})")
 
     async def ensure_connected():
         if not ib.isConnected():
-            logger.warning("⚠️ Reconectando...")
-            await ib.connect('127.0.0.1', 7497, clientId=CLIENT_ID, readonly=False)
+            # logger.warning("⚠️ Reconectando...")
+            await ib.connectAsync('127.0.0.1', 7497, clientId=CLIENT_ID, readonly=False)
 
-    # Contrato
-    contract = Future(symbol=SYMBOL, lastTradeDateOrContractMonth=EXPIRATION,
-                      exchange='CME', currency='USD')
-    contracts = await ib.qualifyContracts(contract)
-    contract = contracts[0]
-    logger.info(f"✅ Contrato: {contract.localSymbol} {contract.lastTradeDateOrContractMonth}")
+    # # Contrato
+    # contract = Future(symbol=SYMBOL, lastTradeDateOrContractMonth=EXPIRATION,
+    #                   exchange='CME', currency='USD')
+    # contracts = await ib.qualifyContracts(contract)
+    # contract = contracts[0]
+    # logger.info(f"✅ Contrato: {contract.localSymbol} {contract.lastTradeDateOrContractMonth}")
+    logger.info(f"Buscando contrato con más volumen para {SYMBOL}...")
+    contract = await get_active_future_contract(ib, SYMBOL)
+    
+    if not contract:
+        logger.error("No se pudo determinar el contrato activo.")
+        return
+
+    logger.info(f"✅ Contrato seleccionado: {contract.localSymbol} (Vence: {contract.lastTradeDateOrContractMonth})")
 
     # Cierre de sesión
-    details = (await ib.reqContractDetails(contract))[0]
+    details = (await ib.reqContractDetailsAsync(contract))[0]
     tz = pytz.timezone(details.timeZoneId)
     trading_hours = details.tradingHours
     now_ex = datetime.datetime.now(tz)
     today = now_ex.date()
     closes = []
+    def parse_ib_datetime(s: str, tz):
+        s = s.strip()
+        if ':' in s:
+            return datetime.datetime.strptime(s, '%Y%m%d:%H%M').replace(tzinfo=tz)
+        return None
+
+    closes = []
+
     for seg in trading_hours.split(';'):
-        if ':' not in seg: continue
+        seg = seg.strip()
+        if not seg or ':' not in seg:
+            continue
+
         d_str, hours = seg.split(':', 1)
-        if datetime.datetime.strptime(d_str, '%Y%m%d').date() == today and hours.upper() != 'CLOSED':
-            for r in hours.split(','):
-                _, c_str = r.split('-')
-                c_time = datetime.datetime.strptime(c_str, '%H%M').time()
-                closes.append(datetime.datetime.combine(today, c_time, tzinfo=tz))
+        seg_date = datetime.datetime.strptime(d_str, '%Y%m%d').date()
+
+        if hours.upper() == 'CLOSED':
+            continue
+
+        for r in hours.split(','):
+            r = r.strip()
+            if '-' not in r:
+                continue
+
+            open_str, close_str = r.split('-', 1)
+
+            if ':' in close_str:
+                close_dt = datetime.datetime.strptime(close_str, '%Y%m%d:%H%M').replace(tzinfo=tz)
+            else:
+                close_time = datetime.datetime.strptime(close_str, '%H%M').time()
+                close_dt = datetime.datetime.combine(seg_date, close_time, tzinfo=tz)
+
+            if close_dt.date() >= today:
+                closes.append(close_dt)
+
     session_close = max(closes) if closes else now_ex + datetime.timedelta(hours=24)
 
     # Cargar modelo PyTorch + SCALER
-    model = LSTMModel(input_size=5).to(DEVICE)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
-    scaler_path = MODEL_PATH.replace('.pth', '_scaler.joblib')
-    scaler = joblib.load(scaler_path)
-    logger.info(f"✅ Modelo PyTorch + Scaler cargados → {MODEL_PATH} | {scaler_path}")
+    # Separamos la carga del scaler de la instancia del modelo para poder
+    # inferir `input_dim` desde el scaler guardado (scaler.n_features_in_).
+    def load_model_artifacts(folder_path, model_class=None, **model_params):
+        """
+        Carga el escalador y, opcionalmente, el modelo.
+        - Si `model_class` es None, devuelve (None, scaler).
+        - Si se proporciona `model_class` y `model_params`, instancia y carga el modelo.
+        """
+        # 1. Cargar el escalador
+        scaler_path = os.path.join(folder_path, "scaler.pkl")
+        if os.path.exists(scaler_path):
+            scaler = joblib.load(scaler_path)
+            print("✅ Escalador cargado.")
+        else:
+            raise FileNotFoundError("No se encontró el archivo del escalador.")
+
+        # Si no pidieron el modelo, devolvemos solo el scaler
+        if model_class is None:
+            return None, scaler
+
+        # 2. Instanciar la clase del modelo con los parámetros proporcionados
+        model = model_class(**model_params)
+
+        # 3. Cargar los pesos (.pth)
+        model_path = os.path.join(folder_path, "model.pth")
+        if os.path.exists(model_path):
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model.load_state_dict(torch.load(model_path, map_location=device))
+            model.to(device)
+            model.eval()  # IMPORTANTE: Poner el modelo en modo evaluación
+            print(f"✅ Modelo cargado y puesto en modo EVAL en {device}.")
+        else:
+            raise FileNotFoundError("No se encontró el archivo model.pth.")
+
+        return model, scaler
+
+    # --- EJEMPLO DE USO Y VERIFICACIÓN ---
+    class GoldAttentionGRU_Triple(nn.Module):
+        def __init__(self, input_dim, output_dim=3, hidden_dim=256, num_layers=2, dropout=0.3):
+            super().__init__()
+            # Usamos Bidirectional para que el modelo vea la estructura de la serie temporal en ambos sentidos
+            self.gru = nn.GRU(input_dim, hidden_dim, num_layers, 
+                              batch_first=True, dropout=dropout, bidirectional=True)
+            
+            # Mecanismo de Atención: mapea el estado oculto a una puntuación de importancia
+            self.attention = nn.Sequential(
+                nn.Linear(hidden_dim * 2, hidden_dim),
+                nn.Tanh(),
+                nn.Linear(hidden_dim, 1)
+            )
+            
+            # Normalización post-atención para estabilizar el entrenamiento triple
+            self.bn = nn.BatchNorm1d(hidden_dim * 2)
+            
+            # Capas densas para clasificar en 3 categorías
+            self.fc = nn.Sequential(
+                nn.Linear(hidden_dim * 2, 64),
+                nn.LeakyReLU(0.1),
+                nn.Dropout(dropout),
+                nn.Linear(64, output_dim) # output_dim = 3
+            )
+    
+        def forward(self, x):
+            # 1. Pasar por GRU: out shape [batch, seq_len, hidden_dim * 2]
+            gru_out, _ = self.gru(x)
+            
+            # 2. Calcular pesos de atención para cada paso de la secuencia
+            # energy shape: [batch, seq_len, 1]
+            energy = self.attention(gru_out)
+            weights = torch.softmax(energy, dim=1)
+            
+            # 3. Vector de contexto (Suma ponderada de todos los estados temporales)
+            # context shape: [batch, hidden_dim * 2]
+            context = torch.sum(weights * gru_out, dim=1)
+            
+            # 4. Clasificación final
+            out = self.bn(context)
+            logits = self.fc(out)
+            
+            return logits # Retorna logits (CrossEntropyLoss se encarga del Softmax internamente)
+    # Primero cargamos solo el scaler para poder inferir el `input_dim`
+    _model_tmp, scaler = load_model_artifacts(folder_path=MODEL_PATH, model_class=None)
+
+    input_dim = getattr(scaler, 'n_features_in_', None)
+    if input_dim is None:
+        if hasattr(scaler, 'scale_'):
+            input_dim = scaler.scale_.shape[0]
+        elif hasattr(scaler, 'mean_'):
+            input_dim = scaler.mean_.shape[0]
+        else:
+            raise RuntimeError('No se pudo inferir input_dim desde el scaler; pásalo manualmente.')
+
+    params = {
+        'input_dim': int(input_dim),
+        'output_dim': 3,
+        'hidden_dim': 256,
+        'num_layers': 2,
+        'dropout': 0.3
+    }
+
+    model, scaler = load_model_artifacts(
+        folder_path=MODEL_PATH,
+        model_class=GoldAttentionGRU_Triple,
+        **params
+    )
+    logger.info(f"✅ Modelo PyTorch + Scaler cargados → {MODEL_PATH}")
 
     # Estado
     daily_start_nlv = None
@@ -207,7 +395,7 @@ async def main():
 
     df_bars = load_bars_cache()
     if df_bars.empty:
-        bars = await ib.reqHistoricalData(contract, '', DURACION_HISTORICO, TIMEFRAME,
+        bars = await ib.reqHistoricalDataAsync(contract, '', DURACION_HISTORICO, TIMEFRAME,
                                           'TRADES', True, 1, keepUpToDate=True)
         df_bars = util.df(bars)
         df_bars['datetime'] = pd.to_datetime(df_bars['date'])
@@ -228,7 +416,7 @@ async def main():
             can_trade, daily_start_nlv, max_equity = await check_margin_and_risk(ib, daily_start_nlv, max_equity)
 
             # Actualizar barras + ATR
-            bars = await ib.reqHistoricalData(contract, '', '1 D', TIMEFRAME,
+            bars = await ib.reqHistoricalDataAsync(contract, '', '1 D', TIMEFRAME,
                                               'TRADES', True, 1, keepUpToDate=True)
             new_df = util.df(bars)
             new_df['datetime'] = pd.to_datetime(new_df['date'])
@@ -244,7 +432,7 @@ async def main():
             # CIERRE INTRADAY
             if current_pos != 0 and min_to_close <= CIERRE_VENTANA_FIN_MIN:
                 action = 'SELL' if current_pos > 0 else 'BUY'
-                await ib.placeOrder(contract, MarketOrder(action, abs(current_pos), tif='DAY'))
+                ib.placeOrder(contract, MarketOrder(action, abs(current_pos), tif='DAY'))
                 logger.info(f"🚨 {SYMBOL} FORCE CLOSE intraday")
                 active_sl_order = active_tp_order = None
 
@@ -255,7 +443,17 @@ async def main():
                     await asyncio.sleep(60)
                     continue
 
-                signal, confidence = generar_prediccion(df_bars, model, scaler)
+                # Config para tu modelo XAU_GRU_bin_V2 (60min wavelet)
+                CONFIG_PATH = "E:/Futuro/MLAlgoTrading/TradingBots/Features/features_config.json"  # ← Busca este archivo
+                TICK_SIZE_GC = 0.10  # Gold futures COMEX
+                
+                signal, confidence = generar_prediccion(
+                    df_bars, model, scaler,
+                    minutes=60,
+                    json_config_path=CONFIG_PATH,
+                    return_horizon_min=60,
+                    spec={'tick_size': TICK_SIZE_GC}
+                )
                 logger.info(f"[{ahora.strftime('%H:%M:%S')}] {SYMBOL} PRED: {signal} (conf={confidence:.3f}) | pos={current_pos}")
 
                 last_prediction_time = ahora
@@ -264,7 +462,7 @@ async def main():
                 if signal == 'HOLD':
                     if current_pos != 0:
                         action = 'SELL' if current_pos > 0 else 'BUY'
-                        await ib.placeOrder(contract, MarketOrder(action, abs(current_pos), tif='DAY'))
+                        ib.placeOrder(contract, MarketOrder(action, abs(current_pos), tif='DAY'))
                         logger.info("   → HOLD: cierre total")
                     consecutive_same = 0
                     last_signal = None
@@ -275,7 +473,7 @@ async def main():
                 if (signal == 'BUY' and current_pos < 0) or (signal == 'SELL' and current_pos > 0):
                     action_flat = 'SELL' if current_pos > 0 else 'BUY'
                     if current_pos != 0:
-                        await ib.placeOrder(contract, MarketOrder(action_flat, abs(current_pos), tif='DAY'))
+                        ib.placeOrder(contract, MarketOrder(action_flat, abs(current_pos), tif='DAY'))
                     consecutive_same = 1
                     last_signal = signal
                 elif signal == last_signal:
@@ -298,9 +496,9 @@ async def main():
                         limitPrice=precio, stopLossPrice=sl, takeProfitPrice=tp,
                         orderType='MKT', tif='DAY'
                     )
-                    await ib.placeOrder(contract, parent)
-                    await ib.placeOrder(contract, sl_order)
-                    await ib.placeOrder(contract, tp_order)
+                    ib.placeOrder(contract, parent)
+                    ib.placeOrder(contract, sl_order)
+                    ib.placeOrder(contract, tp_order)
 
                     active_sl_order = sl_order
                     active_tp_order = tp_order
@@ -337,4 +535,5 @@ async def main():
         logger.info(f"✅ {SYMBOL} desconectado")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    util.run(main())
+    

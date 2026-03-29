@@ -248,3 +248,130 @@ def evaluate_atr_multipliers(
             })
 
     return pd.DataFrame(results)
+
+def target_realistic(df, spec, return_horizon_min, sampling_minutes):
+    df = df.copy()
+    tick_size = float(spec["tick_size"])
+    tick_value = float(spec["tick_value"])
+    
+    # 1. Horizonte
+    shift = max(1, int(return_horizon_min / max(1, int(sampling_minutes))))
+    
+    # 2. Diferencia de precio en ticks
+    future_price = df["close"].shift(-shift)
+    raw_ticks = (future_price - df["close"]) / tick_size
+
+    # 3. Costes Reales (Cálculo basado en tu JSON)
+    fee_side = float(spec.get("approx_total_fee_per_side", 2.5))
+    fees_rt_ticks = (fee_side * 2.0) / tick_value # 0.5 ticks
+    slip_ticks = float(spec.get("min_slippage_ticks", 1.0)) # 1.0 tick
+    spread_ticks = float(spec.get("min_spread_ticks", 1.0)) # 1.0 tick
+    
+    total_cost_ticks = fees_rt_ticks + slip_ticks + spread_ticks # Total: 2.5 ticks
+    
+    # 4. AJUSTE CRÍTICO: El Multiplicador de "Ruido"
+    # Para el Oro en 120m, un movimiento de 2.5 ticks es insignificante.
+    # Queremos que el objetivo sea al menos 3 o 4 veces el coste para que valga la pena.
+    profit_factor = 4.0 
+    threshold = total_cost_ticks * profit_factor # 2.5 * 4 = 10 ticks ($1.0 en precio)
+
+    # 5. Clasificación Ternaria
+    conditions = [
+        (raw_ticks > threshold),  # BUY
+        (raw_ticks < -threshold)  # SELL
+    ]
+    # Usamos 0 para HOLD, 1 para BUY, 2 para SELL (común para Softmax)
+    # O mantén [-1, 0, 1] si prefieres, yo usaré [1, 0, -1] aquí:
+    df[f"target_class_{return_horizon_min}m"] = np.select(conditions, [1, -1], default=0)
+    # Mapear a 0, 1, 2 para Softmax (opcional):
+    df[f"target_class_{return_horizon_min}m"] = df[f"target_class_{return_horizon_min}m"].map({1: 1, 0: 0, -1: 2})
+    
+    return df.dropna()
+
+def target_triple_barrier_realistic(
+    df,
+    spec,
+    return_horizon_min=120,
+    sampling_minutes=60,
+    atr_col="atr",
+    tp_atr_mult=1.8,
+    sl_atr_mult=1.2,
+    profit_factor=2.5
+):
+    df = df.copy()
+
+    tick_size = float(spec["tick_size"])
+    tick_value = float(spec["tick_value"])
+
+    # -------------------------
+    # 1. Horizonte
+    # -------------------------
+    max_steps = max(1, int(return_horizon_min / sampling_minutes))
+
+    # -------------------------
+    # 2. Costes
+    # -------------------------
+    fee_side = float(spec.get("approx_total_fee_per_side", 2.5))
+    fees_rt_ticks = (fee_side * 2.0) / tick_value
+    slip_ticks = float(spec.get("min_slippage_ticks", 1.0))
+    spread_ticks = float(spec.get("min_spread_ticks", 1.0))
+
+    total_cost_ticks = fees_rt_ticks + slip_ticks + spread_ticks
+
+    # -------------------------
+    # 3. Arrays (más rápido)
+    # -------------------------
+    close = df["close"].values
+    high = df["high"].values
+    low = df["low"].values
+    atr = df[atr_col].values
+
+    labels = np.zeros(len(df))
+
+    # -------------------------
+    # 4. Triple Barrier
+    # -------------------------
+    for i in range(len(df) - max_steps):
+
+        entry_price = close[i]
+
+        # ATR en ticks
+        atr_ticks = atr[i] / tick_size
+
+        # Barreras base
+        tp_ticks = tp_atr_mult * atr_ticks
+        sl_ticks = sl_atr_mult * atr_ticks
+
+        # Filtro anti-ruido + costes
+        min_profit_ticks = total_cost_ticks * profit_factor
+        tp_ticks = max(tp_ticks, min_profit_ticks)
+
+        upper_barrier = entry_price + tp_ticks * tick_size
+        lower_barrier = entry_price - sl_ticks * tick_size
+
+        label = 0  # HOLD
+
+        for j in range(1, max_steps + 1):
+
+            # TP primero
+            if high[i + j] >= upper_barrier:
+                label = 1
+                break
+
+            # SL
+            if low[i + j] <= lower_barrier:
+                label = -1
+                break
+
+        labels[i] = label
+
+    # -------------------------
+    # 5. Map softmax
+    # -------------------------
+    df[f"target_tb_{return_horizon_min}m"] = pd.Series(labels, index=df.index).map({
+        1: 1,
+        0: 0,
+        -1: 2
+    })
+
+    return df.dropna()
