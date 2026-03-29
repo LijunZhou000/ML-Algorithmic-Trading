@@ -44,42 +44,112 @@ def create_targets(df, return_horizon_min, sampling_minutes, tick_size=None, ter
 
     return df.iloc[:-shift].copy()
 
-def create_targets_atr(df, return_horizon_min, sampling_minutes, tick_size=None, ternary=False, atr_multiplier=1.5):
+def create_targets_atr(
+    df,
+    return_horizon_min,
+    sampling_minutes,
+    tick_size=None,
+    ternary=False,
+    atr_multiplier=1.5,
+    instrument_info=None,
+    profit_target_multiplier=1.0,
+):
+    """
+    Crea targets basados en ATR pero expresados en ticks cuando se pasa `tick_size`.
+
+    - Si `instrument_info` está presente puede usar campos como
+      `tick_value`, `approx_total_fee_per_side`, `min_slippage_ticks` y
+      `min_spread_ticks` para estimar costes reales en ticks.
+    - `profit_target_multiplier` permite escalar el umbral objetivo (p.ej. 1.1 para +10%).
+    """
+
     df = df.copy()
     shift = max(1, int(return_horizon_min / max(1, int(sampling_minutes))))
     suffix = f"{return_horizon_min}m"
 
     future_price = df["close"].shift(-shift)
     df[f"target_logret_{suffix}"] = np.log(future_price / df["close"])
-    df[f"target_ret_{suffix}"]    = future_price / df["close"] - 1
+    df[f"target_ret_{suffix}"] = future_price / df["close"] - 1
     price_diff = future_price - df["close"]
 
-    # Umbral dinámico basado en ATR
+    # Umbral dinámico basado en ATR (en unidades de precio)
     dynamic_threshold = df["atr"] * atr_multiplier
 
-    # --- Lógica Binaria (Siempre se calcula) ---
-    # 1 si sube más que el ATR, 0 si no (incluye caídas y neutralidad)
-    df["target_bin"] = (price_diff > dynamic_threshold).astype("Int8")
+    # Si no se pasa tick_size mantenemos la lógica anterior en precio
+    if tick_size is None:
+        # Binario basado en ATR en precio
+        df["target_bin"] = (price_diff > dynamic_threshold).astype("Int8")
 
-    # --- Lógica Ternaria ---
+        if ternary:
+            df["target_class"] = np.select(
+                condlist=[price_diff > dynamic_threshold, price_diff < -dynamic_threshold],
+                choicelist=[2, 0],
+                default=1,
+            ).astype(float)
+            df.loc[future_price.isna(), "target_class"] = np.nan
+
+        df.loc[future_price.isna(), "target_bin"] = np.nan
+        return df.iloc[:-shift].copy()
+
+    # --- Cuando hay tick_size: convertir todo a ticks y descontar costes ---
+    raw_ticks = price_diff / float(tick_size)
+
+    # Instrument info defaults
+    tick_value = None
+    fee_per_side = 0.0
+    min_slippage_ticks = 0.0
+    spread_ticks = 0.0
+
+    if instrument_info:
+        tick_value = instrument_info.get("tick_value")
+        fee_per_side = float(instrument_info.get("approx_total_fee_per_side", 0.0))
+        min_slippage_ticks = float(instrument_info.get("min_slippage_ticks", 0.0))
+        # some specs may provide spread estimate
+        spread_ticks = float(
+            instrument_info.get(
+                "min_spread_ticks", instrument_info.get("spread_ticks", min_slippage_ticks or 0.0)
+            )
+        )
+
+    # Si no se conoce tick_value, asumimos 1.0 (solo afecta conversión fee->ticks)
+    if tick_value is None or tick_value == 0:
+        tick_value = 1.0
+
+    # Costes en ticks (round-trip fees + spread + slippage)
+    fees_roundtrip_ticks = (fee_per_side * 2.0) / float(tick_value) if fee_per_side else 0.0
+    slippage_ticks = min_slippage_ticks
+    total_cost_ticks = fees_roundtrip_ticks + spread_ticks + slippage_ticks
+
+    # Umbral dinámico en ticks
+    dynamic_threshold_ticks = dynamic_threshold / float(tick_size)
+
+    # Umbral efectivo: exigimos superar ATR en ticks + costes, y opcionalmente escalado por
+    # `profit_target_multiplier` (p.ej. 1.1 para requerir 10% más de beneficio)
+    effective_threshold_ticks = dynamic_threshold_ticks * float(profit_target_multiplier) + total_cost_ticks
+
+    # Guardar columnas explicativas
+    df[f"target_ticks_{suffix}"] = raw_ticks
+    df[f"target_ticks_net_{suffix}"] = raw_ticks - np.sign(raw_ticks) * total_cost_ticks
+    df["fees_roundtrip_ticks"] = fees_roundtrip_ticks
+    df["spread_ticks"] = spread_ticks
+    df["slippage_ticks"] = slippage_ticks
+    df["total_cost_ticks"] = total_cost_ticks
+    df["dynamic_threshold_ticks"] = dynamic_threshold_ticks
+    df["effective_threshold_ticks"] = effective_threshold_ticks
+
+    # Clasificación usando ticks netos vs umbral efectivo
+    df["target_bin"] = (raw_ticks > effective_threshold_ticks).astype("Int8")
+
     if ternary:
         df["target_class"] = np.select(
-            condlist=[
-                price_diff > dynamic_threshold, 
-                price_diff < -dynamic_threshold
-            ],
+            condlist=[raw_ticks > effective_threshold_ticks, raw_ticks < -effective_threshold_ticks],
             choicelist=[2, 0],
-            default=1
+            default=1,
         ).astype(float)
-        
-        # Limpiar NaNs finales
-        df.loc[future_price.isna(), "target_class"] = np.nan
-    
-    # Limpiar NaNs finales para binario también
-    df.loc[future_price.isna(), "target_bin"] = np.nan
 
-    if tick_size:
-        df[f"target_ticks_{suffix}"] = price_diff / float(tick_size)
+        df.loc[future_price.isna(), "target_class"] = np.nan
+
+    df.loc[future_price.isna(), "target_bin"] = np.nan
 
     return df.iloc[:-shift].copy()
 

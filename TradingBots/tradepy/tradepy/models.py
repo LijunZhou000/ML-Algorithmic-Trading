@@ -27,6 +27,32 @@ def prepare_all(asset, minutes, return_horizon_min, json_config_path="features_c
     df_final = generate_features(df_cumulative, config_json=config, dropna_strategy='any')
     return df_final, spec
 
+
+def compute_trade_pnl(preds, ret_arr, prob_trade_arr=None, stop_loss_pct=None):
+    """Compute per-trade PnL with optional position sizing and stop-loss cap.
+
+    Exposed helper for notebooks/scripts.
+    """
+    preds = np.array(preds)
+    ret_arr = np.array(ret_arr)
+    pnl = np.zeros(len(preds), dtype=float)
+    pos_size = np.ones(len(preds), dtype=float)
+    if prob_trade_arr is not None:
+        pos_size = np.clip(np.array(prob_trade_arr, dtype=float), 0.0, 1.0)
+
+    buy_idx = (preds == 2)
+    sell_idx = (preds == 0)
+
+    if stop_loss_pct is None:
+        pnl[buy_idx] = pos_size[buy_idx] * ret_arr[buy_idx]
+        pnl[sell_idx] = pos_size[sell_idx] * (-ret_arr[sell_idx])
+    else:
+        sl = float(stop_loss_pct)
+        pnl[buy_idx] = pos_size[buy_idx] * np.clip(ret_arr[buy_idx], -sl, None)
+        pnl[sell_idx] = pos_size[sell_idx] * np.clip(-ret_arr[sell_idx], -sl, None)
+
+    return pnl
+
 def create_lstm_dataset(df, features, target_col, lookback=14):
     """
     Crea el dataset para LSTM usando NumPy strides (ultra rápido).
@@ -189,7 +215,7 @@ def run_gold_master_workflow(df, feature_cols, suffix, model_class=None, target_
 
 def apply_confidence_filter(df, prob_trade_col="prob_trade", prob_buy_col="prob_buy", prob_sell_col="prob_sell",
                             trade_threshold=0.6, dir_threshold=0.5, buy_label=2, sell_label=0, hold_label=1,
-                            verbose=True, fallback_on_no_trades=False):
+                            verbose=True, fallback_on_no_trades=False, fallback_trade_percentile=80):
     """Apply a combined confidence filter:
     - require prob_trade > trade_threshold to consider a directional signal
     - require directional prob (buy/sell) >= dir_threshold and greater than the opposite
@@ -219,17 +245,30 @@ def apply_confidence_filter(df, prob_trade_col="prob_trade", prob_buy_col="prob_
     # want to act on high trade-probability signals.
     if fallback_on_no_trades:
         if (df['pred_filtered'] == hold_label).all():
-            # assign direction using argmax for rows where trade mask is True
+            # Consider only rows that passed the trade mask, then restrict to the top
+            # percentile of `prob_trade` among those rows to avoid acting on weak signals.
             idx_trade = df.index[mask_trade]
             if len(idx_trade) > 0:
-                buy_inds = df.loc[idx_trade, prob_buy_col] > df.loc[idx_trade, prob_sell_col]
-                df.loc[idx_trade[buy_inds.values], 'pred_filtered'] = buy_label
-                df.loc[idx_trade[~buy_inds.values], 'pred_filtered'] = sell_label
-                if verbose:
-                    n_buy2 = int(((df['pred_filtered'] == buy_label)).sum())
-                    n_sell2 = int(((df['pred_filtered'] == sell_label)).sum())
-                    n_hold2 = int(((df['pred_filtered'] == hold_label)).sum())
-                    print(f"apply_confidence_filter (fallback argmax) -> buy:{n_buy2} sell:{n_sell2} hold:{n_hold2}")
+                trade_probs = df.loc[idx_trade, prob_trade_col].values
+                try:
+                    cutoff = float(np.percentile(trade_probs, float(fallback_trade_percentile)))
+                except Exception:
+                    cutoff = float(np.percentile(df[prob_trade_col].values, float(fallback_trade_percentile)))
+
+                idx_top_mask = df.loc[idx_trade, prob_trade_col] >= cutoff
+                idx_top = idx_trade[idx_top_mask.values]
+                if len(idx_top) == 0:
+                    if verbose:
+                        print(f"apply_confidence_filter: fallback_on_no_trades enabled but no rows above percentile {fallback_trade_percentile}")
+                else:
+                    buy_inds = df.loc[idx_top, prob_buy_col] > df.loc[idx_top, prob_sell_col]
+                    df.loc[idx_top[buy_inds.values], 'pred_filtered'] = buy_label
+                    df.loc[idx_top[~buy_inds.values], 'pred_filtered'] = sell_label
+                    if verbose:
+                        n_buy2 = int(((df['pred_filtered'] == buy_label)).sum())
+                        n_sell2 = int(((df['pred_filtered'] == sell_label)).sum())
+                        n_hold2 = int(((df['pred_filtered'] == hold_label)).sum())
+                        print(f"apply_confidence_filter (fallback argmax top{fallback_trade_percentile}%) -> buy:{n_buy2} sell:{n_sell2} hold:{n_hold2}")
 
     return df
 
@@ -258,9 +297,17 @@ def sweep_confidence_thresholds(probs_df, ret_array, trade_percentiles=(60,70,80
                                 'trades': 0, 'winrate': None, 'avg_trade': None, 'total_return': 0.0})
                 continue
 
-            pnl = _pd.Series(0.0, index=_pd.RangeIndex(len(preds)))
-            pnl.loc[(preds == 2)] = ret_array[(preds == 2)]
-            pnl.loc[(preds == 0)] = -ret_array[(preds == 0)]
+            # compute pnl with optional sizing/stop-loss if probs_df contains prob_trade
+            prob_trade_arr = None
+            if 'prob_trade' in dfp.columns:
+                prob_trade_arr = dfp['prob_trade'].values
+
+            # look for optional stop-loss parameter passed via probs_df attribute
+            # (not all callers will provide stop_loss; default behavior preserved)
+            stop_loss = getattr(probs_df, '_stop_loss_pct', None)
+
+            pnl_arr = compute_trade_pnl(preds, np.array(ret_array), prob_trade_arr=prob_trade_arr, stop_loss_pct=stop_loss)
+            pnl = _pd.Series(pnl_arr)
 
             trades = pnl[trade_mask]
             winrate = float((trades > 0).mean()) if len(trades) > 0 else None
