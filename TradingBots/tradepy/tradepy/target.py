@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 def create_targets(df, return_horizon_min, sampling_minutes, tick_size=None, ternary=False, threshold_buy=0.0, threshold_sell=None):
     """
@@ -50,6 +51,7 @@ def create_targets_atr(df, return_horizon_min, sampling_minutes, tick_size=None,
 
     future_price = df["close"].shift(-shift)
     df[f"target_logret_{suffix}"] = np.log(future_price / df["close"])
+    df[f"target_ret_{suffix}"]    = future_price / df["close"] - 1
     price_diff = future_price - df["close"]
 
     # Umbral dinámico basado en ATR
@@ -123,3 +125,56 @@ def audit_single_df(df, feature_cols):
         print("💎 Sin NaNs en features")
 
     return df
+
+def evaluate_atr_multipliers(
+    df,
+    return_horizon_min,
+    sampling_minutes,
+    tick_size,
+    atr_min=0.5,
+    atr_max=1.5,
+    atr_step=0.25,
+):
+    """
+    Evalúa diferentes multiplicadores ATR y devuelve un DataFrame con los conteos
+    de target_class antes y después del filtro de liquidez.
+    """
+
+    results = []
+
+    multipliers = np.arange(atr_min, atr_max + atr_step, atr_step)
+
+    for m in multipliers:
+        # 1. Crear targets con ATR
+        df_atr = create_targets_atr(
+            df.copy(),
+            return_horizon_min=return_horizon_min,
+            sampling_minutes=sampling_minutes,
+            tick_size=tick_size,
+            ternary=True,
+            atr_multiplier=m
+        )
+
+        # 2. Aplicar filtro de liquidez
+        df_liquid = apply_liquidity_filter(df_atr)
+
+        # 3. Conteos antes y después
+        counts_before = df_atr["target_class"].value_counts(dropna=False)
+        counts_after = df_liquid["target_class"].value_counts(dropna=False)
+
+        # 4. Normalizados
+        norm_before = df_atr["target_class"].value_counts(normalize=True, dropna=False)
+        norm_after = df_liquid["target_class"].value_counts(normalize=True, dropna=False)
+
+        # 5. Consolidar resultados
+        for cls in sorted(set(df_atr["target_class"].unique())):
+            results.append({
+                "atr_multiplier": m,
+                "target_class": cls,
+                "count_before": counts_before.get(cls, 0),
+                "count_after": counts_after.get(cls, 0),
+                "norm_before": norm_before.get(cls, 0.0),
+                "norm_after": norm_after.get(cls, 0.0),
+            })
+
+    return pd.DataFrame(results)
