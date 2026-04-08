@@ -14,7 +14,7 @@ from ib_async import *
 from tradepy.load import import_dataset, clean, wavelet_denoising, resample_ohlcv, daily_ohlcv_cummulative
 from tradepy.features import generate_features
 import os
-from ib_async import util
+from ib_async import BracketOrder, MarketOrder
 
 # ==================== LOGGING (preparado para Grafana + Alertmanager) ====================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -32,7 +32,7 @@ SYMBOL = args.symbol
 # EXPIRATION = args.expiration
 CLIENT_ID = args.client_id
 MODEL_PATH = args.model_path
-PREDICCION_CADA_MINUTOS = 60
+PREDICCION_CADA_MINUTOS = 1
 
 # ==================== CONFIG RIESGO + ATR ====================
 MAX_DAILY_LOSS_USD = -1000.0
@@ -50,7 +50,7 @@ CIERRE_VENTANA_INICIO_MIN = 15
 CIERRE_VENTANA_FIN_MIN = 5
 
 TIMEFRAME = '1 min'
-DURACION_HISTORICO = '3 D'
+DURACION_HISTORICO = '20 D'
 
 JSON_POS = Path(f'posiciones_{SYMBOL}.json')
 JSON_BARS = Path(f'bars_{SYMBOL}.json')
@@ -120,13 +120,92 @@ def calculate_atr(df: pd.DataFrame, period: int = ATR_PERIOD):
     return tr.rolling(window=period).mean()
 
 # ==================== PREDICCIÓN PyTorch + SCALER ====================
-def generar_prediccion(df: pd.DataFrame, model: LSTMModel, scaler, minutes: int, json_config_path, return_horizon_min: int, spec: dict) -> Tuple[Literal['BUY', 'SELL', 'HOLD'], float]:
+def ensure_datetime_column(df: pd.DataFrame, col_name: str = 'datetime') -> pd.DataFrame:
+    """Ensure column exists and is proper datetime, handling IB data formats."""
+    df = df.copy()
+    
+    # Handle IB util.df() output
+    if 'date' in df.columns and col_name not in df.columns:
+        df[col_name] = pd.to_datetime(df['date'])
+    
+    # Handle index-based datetime
+    if col_name not in df.columns:
+        df = df.reset_index()
+        if 'datetime' in df.columns:
+            df[col_name] = pd.to_datetime(df['datetime'])
+        elif 'date' in df.columns:
+            df[col_name] = pd.to_datetime(df['date'])
+        else:
+            df[col_name] = pd.to_datetime(df.index)
+    
+    df[col_name] = pd.to_datetime(df[col_name], errors='coerce')
+    return df
+def basic_strat(df, rolling_window=20):
+    df = df.copy()
+
+    df["signal"] = 0
+
+    # filtro de volatilidad
+    # vol_filter = df["atr"] > df["atr"].rolling(rolling_window).quantile(0.6)
+    
+    cond_long = (
+        (df["ema_fast"] > df["ema_slow"]) &
+        (df["rsi"] > 55) &
+        (df["volume_z"] > 1.5) &
+        (df["ema_slow"] > df["ema_slow"].shift(5))
+        )
+
+    cond_short = (
+        (df["ema_fast"] < df["ema_slow"]) &
+        (df["rsi"] < 45) &
+        (df["volume_z"] > 1.5) &
+        (df["ema_slow"] < df["ema_slow"].shift(5))
+        )
+    
+
+    # asignación vectorizada
+    df.loc[cond_long, "signal"] = 1
+    df.loc[cond_short, "signal"] = -1
+
+    # evitar lookahead bias
+    df["signal"] = df["signal"].shift(1)
+
+    # stops dinámicos
+    df["stop_loss"] = 1.5 * df["atr"]
+    df["take_profit"] = 2.5 * df["atr"]
+
+    return df
+def generar_prediccion(df: pd.DataFrame, model: LSTMModel, scaler, minutes: int, json_config_path, return_horizon_min: int, spec: dict, basic: bool = False) -> Tuple[Literal['BUY', 'SELL', 'HOLD'], float]:
     if len(df) < 60:
         return 'HOLD', 0.0
 
     # === Features exactas con las que se entrenó (5 columnas) ===
     df = df.copy()
+    if 'datetime' not in df.columns:
+        if 'date' in df.columns:
+            df['datetime'] = pd.to_datetime(df['date'])
+        else:
+            df = df.reset_index()
+            if 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'], utc=True)
+            elif df.columns[0] == 'date':
+                df['datetime'] = pd.to_datetime(df.iloc[:, 0])
+            else:
+                df.rename(columns={df.columns[0]: 'datetime'}, inplace=True)
+                df['datetime'] = pd.to_datetime(df['datetime'])
+
+    # CRITICAL: Convert to datetime FIRST, THEN check timezone
+    df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+    df = ensure_datetime_column(df)
+    # Now .dt accessor is safe
+    if df['datetime'].dt.tz is not None:
+        df['datetime'] = df['datetime'].dt.tz_localize(None)
+    # Convertir a tz-naive para tradepy (eliminar timezone info)
     df["close"] = wavelet_denoising(df['close'].values.copy())
+    df["openint"] = 0
+    df["dtyyyymmdd"] = df['datetime'].dt.strftime('%Y%m%d').astype(int)
+    df["ticker"] = SYMBOL
+    df["per"] = 120
     df_resampled = resample_ohlcv(df, period=f"{minutes}min")
     df_cumulative = daily_ohlcv_cummulative(df_resampled)
     with open(json_config_path) as f:
@@ -148,26 +227,58 @@ def generar_prediccion(df: pd.DataFrame, model: LSTMModel, scaler, minutes: int,
         "target_bin", f"target_logret_{minutes}", f"target_ret_{minutes}", f"target_ticks_{minutes}"
     ]
 
-    feature_cols = [c for c in df.columns if c not in exclude_cols_triple]
+    feature_cols = [c for c in df_final.columns if c not in exclude_cols_triple]
+    logger.info(f"raw len={len(df)} | resampled len={len(df_resampled)} | cumulative len={len(df_cumulative)} | final len={len(df_final)}")
+    logger.info(f"feature_cols={len(feature_cols)}")
+    seq_df = df_final[feature_cols].iloc[-60:]
+    if seq_df.empty or seq_df.isna().all().all():
+        logger.warning("⚠️ No valid features available - insufficient data or all NaN")
+        return 'HOLD', 0.0
+    
+    seq = seq_df.values.astype(float)
+    if seq.shape[0] == 0:
+        logger.warning("⚠️ Empty feature sequence after selection")
+        return 'HOLD', 0.0
+    
+    # Check for sufficient non-NaN data
+    if seq_df.isna().sum().sum() > seq.shape[0] * seq.shape[1] * 0.5:  # >50% NaN
+        logger.warning("⚠️ Too many NaN values in features")
+        return 'HOLD', 0.0
 
-    seq = df_final[feature_cols].iloc[-60:].values.astype(float)
 
     # Aplicar scaler (el mismo que guardaste al entrenar)
-    scaled = scaler.transform(seq)
+    if not basic:
+        scaled = scaler.transform(seq)
 
-    # Tensor para PyTorch
-    tensor = torch.tensor(scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)  # shape (1, 60, 5)
+        # Tensor para PyTorch
+        tensor = torch.tensor(scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)  # shape (1, 60, 5)
 
-    model.eval()
-    with torch.no_grad():
-        pred = model(tensor).item()
-
-    confidence = float(pred)
-    if confidence > 0.60:
-        return 'BUY', confidence
-    elif confidence < 0.40:
-        return 'SELL', confidence
-    return 'HOLD', confidence
+        model.eval()
+        with torch.no_grad():
+            pred = model(tensor).item()
+        confidence = float(pred)
+        if confidence > 0.60:
+            logger.info(f"Predicción: BUY (conf={confidence:.3f})")
+            return 'BUY', confidence
+        elif confidence < 0.40:
+            logger.info(f"Predicción: SELL (conf={confidence:.3f})")
+            return 'SELL', confidence
+        else:
+            logger.info(f"Predicción: HOLD (conf={confidence:.3f})")
+            return 'HOLD', confidence
+    if basic:
+        df = basic_strat(df_final)
+        last_signal = df['signal'].iloc[-1]
+        if last_signal == 1:
+            logger.info(f"Predicción BASIC: BUY")
+            return 'BUY', 1.0
+        elif last_signal == -1:
+            logger.info(f"Predicción BASIC: SELL")
+            return 'SELL', 1.0
+        else:
+            logger.info(f"Predicción BASIC: HOLD")
+            # return 'HOLD', 0.0
+            return 'BUY', 1.0 # Prueba
 
 # ==================== CHECK MARGEN + DAILY LOSS + DRAWDOWN ====================
 async def check_margin_and_risk(ib, daily_start_nlv, max_equity) -> Tuple[bool, float, float]:
@@ -392,17 +503,21 @@ async def main():
     last_signal: Literal['BUY', 'SELL', None] = None
     active_sl_order = None
     active_tp_order = None
-
     df_bars = load_bars_cache()
-    if df_bars.empty:
-        bars = await ib.reqHistoricalDataAsync(contract, '', DURACION_HISTORICO, TIMEFRAME,
-                                          'TRADES', True, 1, keepUpToDate=True)
-        df_bars = util.df(bars)
-        df_bars['datetime'] = pd.to_datetime(df_bars['date'])
-        df_bars.set_index('datetime', inplace=True)
-        df_bars = df_bars[['open','high','low','close','volume']].astype(float)
-        save_bars_cache(df_bars)
-
+    bars = await ib.reqHistoricalDataAsync(contract, '', DURACION_HISTORICO, TIMEFRAME,
+                                  'TRADES', True, 1, keepUpToDate=True)
+    if bars:
+        new_df = util.df(bars)
+        if 'date' in new_df.columns:
+            new_df['datetime'] = pd.to_datetime(new_df['date'])
+            new_df.set_index('datetime', inplace=True)
+            new_df = new_df[['open','high','low','close','volume']].astype(float)
+            df_bars = pd.concat([df_bars, new_df])  # Ahora df_bars ya existe
+            df_bars = df_bars[~df_bars.index.duplicated(keep='last')].sort_index()
+            df_bars['atr'] = calculate_atr(df_bars)
+            save_bars_cache(df_bars)
+        else:
+            logger.warning("No se encontró la columna 'date' en los datos recibidos.")
     logger.info(f"🚀 Bot {SYMBOL} PyTorch + Scaler iniciado")
 
     try:
@@ -416,16 +531,24 @@ async def main():
             can_trade, daily_start_nlv, max_equity = await check_margin_and_risk(ib, daily_start_nlv, max_equity)
 
             # Actualizar barras + ATR
-            bars = await ib.reqHistoricalDataAsync(contract, '', '1 D', TIMEFRAME,
-                                              'TRADES', True, 1, keepUpToDate=True)
-            new_df = util.df(bars)
-            new_df['datetime'] = pd.to_datetime(new_df['date'])
-            new_df.set_index('datetime', inplace=True)
-            new_df = new_df[['open','high','low','close','volume']].astype(float)
-            df_bars = pd.concat([df_bars, new_df[~new_df.index.isin(df_bars.index)]])
-            df_bars = df_bars[~df_bars.index.duplicated(keep='last')].sort_index()
-            df_bars['atr'] = calculate_atr(df_bars)
-            save_bars_cache(df_bars)
+            bars = await ib.reqHistoricalDataAsync(contract, '', DURACION_HISTORICO, TIMEFRAME,
+                                  'TRADES', True, 1, keepUpToDate=True)
+            if bars:
+                new_df = util.df(bars)
+                if 'date' in new_df.columns:
+                    new_df['datetime'] = pd.to_datetime(new_df['date'])
+                    new_df.set_index('datetime', inplace=True)
+                    # Seleccionamos columnas y convertimos a float ANTES de unir
+                    new_df = new_df[['open','high','low','close','volume']].astype(float)
+
+                    # Unimos al df_bars que vino del cache (o estaba vacío)
+                    df_bars = pd.concat([df_bars, new_df])
+                    # Ahora el índice es 100% Timestamps, sort_index funcionará
+                    df_bars = df_bars[~df_bars.index.duplicated(keep='last')].sort_index()
+                    df_bars['atr'] = calculate_atr(df_bars)
+                    save_bars_cache(df_bars)
+                else:
+                    logger.warning("No se encontró la columna 'date' en los datos recibidos.")
 
             current_pos = next((p.position for p in ib.positions() if p.contract.conId == contract.conId), 0.0)
 
@@ -452,7 +575,8 @@ async def main():
                     minutes=60,
                     json_config_path=CONFIG_PATH,
                     return_horizon_min=60,
-                    spec={'tick_size': TICK_SIZE_GC}
+                    spec={'tick_size': TICK_SIZE_GC},
+                    basic=True
                 )
                 logger.info(f"[{ahora.strftime('%H:%M:%S')}] {SYMBOL} PRED: {signal} (conf={confidence:.3f}) | pos={current_pos}")
 
@@ -471,6 +595,10 @@ async def main():
 
                 # Lógica de racha y reverse
                 if (signal == 'BUY' and current_pos < 0) or (signal == 'SELL' and current_pos > 0):
+                    if active_sl_order:
+                        ib.cancelOrder(active_sl_order)
+                    if active_tp_order:
+                        ib.cancelOrder(active_tp_order)
                     action_flat = 'SELL' if current_pos > 0 else 'BUY'
                     if current_pos != 0:
                         ib.placeOrder(contract, MarketOrder(action_flat, abs(current_pos), tif='DAY'))
@@ -491,14 +619,31 @@ async def main():
                     sl = precio - SL_PUNTOS if signal == 'BUY' else precio + SL_PUNTOS
                     tp = precio + TP_PUNTOS if signal == 'BUY' else precio - TP_PUNTOS
 
-                    parent, sl_order, tp_order = bracketOrder(
-                        action=signal, quantity=CANTIDAD_BASE,
-                        limitPrice=precio, stopLossPrice=sl, takeProfitPrice=tp,
-                        orderType='MKT', tif='DAY'
+                    reverse_action = "SELL" if signal == "BUY" else "BUY"
+
+                    bracket = ib.bracketOrder(
+                        action=signal,
+                        quantity=1,
+                        limitPrice=precio,
+                        takeProfitPrice=tp,
+                        stopLossPrice=sl
                     )
+
+                    parent, tp_order, sl_order = bracket
+                    parent.orderType = "MKT"
+                    parent.tif = "DAY"
+                    tp_order.tif = "DAY"
+                    sl_order.tif = "DAY"
+
                     ib.placeOrder(contract, parent)
-                    ib.placeOrder(contract, sl_order)
                     ib.placeOrder(contract, tp_order)
+                    ib.placeOrder(contract, sl_order)
+
+                    # active_sl_order = sl_order
+                    # active_tp_order = tp_order
+                    # ib.placeOrder(contract, parent)
+                    # ib.placeOrder(contract, sl_order)
+                    # ib.placeOrder(contract, tp_order)
 
                     active_sl_order = sl_order
                     active_tp_order = tp_order
@@ -530,8 +675,10 @@ async def main():
 
     except Exception as e:
         logger.error(f"❌ Error {SYMBOL}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     finally:
-        await ib.disconnect()
+        ib.disconnect()
         logger.info(f"✅ {SYMBOL} desconectado")
 
 if __name__ == "__main__":

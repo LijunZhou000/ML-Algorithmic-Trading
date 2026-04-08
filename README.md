@@ -2,6 +2,167 @@
 
 **21/01/2026** 
 
+## Diseño ideal del bot
+```mermaid
+---
+title: En progreso
+---
+graph TD
+    %% --- DEFINICIÓN DE CLASES ---
+    classDef done fill:#c8f7c5,stroke:#2e8b57,stroke-width:2px,color:#1b4d3e;
+    classDef progress fill:#ffe9b3,stroke:#ff9900,stroke-width:2px,color:#8a4f00;
+    classDef todo fill:#e0e0e0,stroke:#9e9e9e,stroke-width:2px,color:#4f4f4f;
+    classDef improve fill:#d6e4ff,stroke:#3366cc,stroke-width:2px,color:#1a3d7c;
+
+    %% --- 0. DATOS HISTÓRICOS ---
+    subgraph "0. Datos históricos"
+        H0[Datis OHLCV históricos en formato txt] --> DL0
+        H1[Datis OHLCV históricos obtenidos directamente de TWS IB] --> DL0
+    end
+
+    %% --- 1. DATA LAKE ---
+    subgraph "1. CAPA DE DATOS (DATA LAKE)"
+        DL0[Limpieza y Wavelet Denoising] --> DL1
+        DL1[Resampling a N minutos y calculo de features acumuladas] --> DL2
+        DL2[Feature Engineering: 149+ Cols] --> DL3
+        DL3[Selección de features, eliminando las estacionarias y no numéricas] --> DL4
+        DL4[Definición de targets: Binario o Trinario] --> DL5
+        DL5[Filtrar targets en horas líquidas] --> SL0
+    end
+
+    %% --- 2.1 SUPERVISED LEARNING ---
+    subgraph "2.1 Supervised Learning"
+        SL0[Definir modelos: LSTM, GRU, etc.] --> SL1
+        SL1[Entrenamiento walk-forward] --> SL2
+        SL2[Validación: Accuracy, Precision, Recall] --> SL3
+        SL3[Selección de modelos y umbrales] --> BT0
+    end
+
+    %% --- 2.2 UNSUPERVISED LEARNING ---
+    subgraph "2.2 Unsupervised Learning"
+        UL0[Clustering / Regímenes] --> UL1
+        UL1[Validación de clusters]
+    end
+
+    %% --- 2.3 REINFORCEMENT LEARNING / PYOMO ---
+    subgraph "2.3 Pyomo / RL"
+        RL0[Definición del objetivo] --> RL1
+        RL1[Definición de variables]
+    end
+    
+    %% --- 3. BACKTESTING ---
+    subgraph "3. Backtesting & Estrés"
+        BT0[Modelos finalistas] --> BT1
+        BT1[BacktestEngine] --> BT2
+        BT2[Simulación de CAOS] --> BT3
+        BT2 --> BT4
+        BT2 --> BT5
+        BT3[Lag: Poisson]
+        BT4[Slippage: T-Student]
+        BT5[Monte Carlo: 100 Iteraciones]
+    end
+
+    %% --- 4. OPERACIÓN EN VIVO ---
+    subgraph "4. Operación en Vivo"
+        BT5 --> LIVE0
+        LIVE0[Pipeline de Datos en Vivo] --> LIVE1
+        LIVE1[Predicciones cada N minutos] --> LIVE2
+        LIVE2[Gestión de Posiciones] --> LIVE3
+        LIVE3[Monitoreo y Alertas]
+    end
+
+    %% --- 5. REGISTRO Y MONITOREO ---
+    subgraph "5. Registro y Monitoreo"
+        LIVE3 --> LOG0[Json decisiones]
+        BT5 --> LOG1[Json datos de predicción]
+    end
+
+    %% --- CONEXIONES ADICIONALES ---
+    UL1 --> SL0
+    UL1 --> BT0
+    UL1 --> LIVE0
+
+    SL3 --> RL0
+    UL1 --> RL0
+    RL1 --> BT0
+    RL1 --> LIVE2
+
+    %% --- EJEMPLO DE ESTADO ---
+    class H0 done
+```
+## Diseño ideal de la arquitectura completa (todo dockerizado)
+```mermaid
+graph TD
+
+    %% ============================
+    %% 1. BOT DE TRADING
+    %% ============================
+    subgraph BOT["BOT de Trading (Pipeline Completo)"]
+        B0[Data Lake + Feature Engineering]
+        B1[Supervised Learning]
+        B2[Unsupervised Learning]
+        B3[Reinforcement Learning / Pyomo]
+        B4[Backtesting Engine]
+        B5[Live Trading Engine]
+        B6[JSON Logs + Métricas]
+        
+        B0 --> B1
+        B0 --> B2
+        B1 --> B3
+        B2 --> B3
+        B3 --> B4
+        B4 --> B5
+        B5 --> B6
+    end
+
+    %% ============================
+    %% 2. WEB UI
+    %% ============================
+    subgraph WEB["Web Dashboard (UI tipo TWS)"]
+        W0[Resumen de Bots]
+        W1[Estado de Cuenta]
+        W2[Posiciones y Predicciones]
+        W3[Embeds: MLflow / Airflow]
+    end
+
+    %% ============================
+    %% 3. MONITORIZACIÓN
+    %% ============================
+    subgraph MON["Monitorización (Prometheus + Grafana + Alertmanager)"]
+        M0[Prometheus]
+        M1[Grafana]
+        M2[Alertmanager]
+    end
+
+    %% ============================
+    %% 4. NOTIFICACIONES
+    %% ============================
+    subgraph NOTIF["Notificaciones"]
+        N0[WhatsApp / Telegram / Email]
+    end
+
+    %% ============================
+    %% CONEXIONES ENTRE BLOQUES
+    %% ============================
+
+    %% BOT -> WEB
+    B5 --> W0
+    B5 --> W1
+    B5 --> W2
+    B6 --> W2
+    B1 --> W3
+    B3 --> W3
+
+    %% BOT -> MONITORIZACIÓN
+    B6 --> M0
+    M0 --> M1
+    M1 --> W0
+
+    %% ALERTAS
+    M2 --> N0
+    M0 --> M2
+```
+
 ## Directorios
 - DespliegueDocker
   - .yaml
