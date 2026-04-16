@@ -1,7 +1,81 @@
 > README actualizado el día 13/04/2026
 # Desarrollo de bot de trading algorítmico de futuros a partir de swing charts y apayado en modelos de ML.
 
-## Diseño ideal del bot
+## Diseño del bot V2
+- Bot de trading algorítmico de futuros usando ML y swing charts
+### 1. Datos
+- Datos (Bronze) sacados de txt, time frame de 1 min solo con las columnas `<TICKER>,<PER>,<DTYYYYMMDD>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>`
+  - 13 futuros [AD (Dólar Australiano), BP (Libra Esterlina), CL (Petróleo Crudo WTI), EC (Euro FX), ES (E-mini S&P 500), GC (Oro), MFXI (Micro Euro FX), NG (Gas Natural), NQ (E-mini Nasdaq 100), YM (E-mini Dow Jones), ZB (Bono del Tesoro 30Y), ZN (Nota del Tesoro 10Y), ZS (Soja)]
+- JSON con información de los futuros
+  - (nombre, símbolo, exchange, multiplier, tick size, tick value, currency, trading hours, liquid hours, aprox total fee per side, min slipagge tick, initial margin, maint margin)
+- JSON para el entrenamiento y la operación
+  - (sampling, horizonte de futuro, max drawdown pct, max contratos, max pct maint margin, lookback (días aprox), etc)
+### 2. Limpieza y Visualiación
+- Cargar cada futuro y realizar limpieza básica, pasar a datetime DTYYYYMMDD y TIME y añadir una nueva columna con la información temporal completa, una vez logrado pasar todos los datetime a UTC
+- Para los futuros con horario extendido y hora de descanso, indicar esa hora de descanso en una columna. Para el resto de horas fuera del horario normal, principalmente sabados y por las noches, eliminar esas filas. (Silver)
+- EDA simple antes de feature engineering para ver qué datos limpiar
+- EDA más completo una vez realizado el feature engineering
+### 3. Feature Engineering y Filtrado de Features
+- Sampling de los datos originales a 4 horas, sampleando hasta la última vela usando right
+- Generación de 100+ features intradía
+- Generación de features interdía
+- Features de comparación de activos una vez obtenido los clusters de UL
+- Generación de features a partir de swings, dirección de swing y derivados
+- Varios pasos para reducir el número de features (Gold)
+  - Excluir directamente datos en crudo, los que puedan provocar leakage, identificadores temporales no cíclicos, no estacionarias, volumen absoluto
+  - Filtro de alta correlación
+  - Percentil 50 o filtro por importancia usando LASSO y un RandomForestClassifier
+### 4. Unsupervised Learning
+- Dos objetivos
+  - Clustering de activos, una vez obtenidos la clasificación generar métricas comparativas con otros activos del cluster y comparación con los centros de los demas clusters (GMM) calcular cuál es el número óptimo de régimenes 
+  - Clustering de régimenes de mercado, usar otras features para determinar qué regimen es cada id (GMM) calcular cuál es el número óptimo de régimenes 
+### 5. Supervised Learning
+- Cálculo del target por triple barrier, usando 2 dias como límite temporal y buscar mejores multiplicadores para SL y TP que superen los costes operativos de IB
+- Modelo ensemble en tres paso, para tener clases más balanceadas
+- L1 Movimiento (Clasificaicón binaria): LSTM + GRU, predicen si hay movimiento, toca SL o TP sin importar cuál
+- L2 Dirección (Clasificaicón binaria): LSTM + GRU, predicen la dirección de aquellos que si han tenido movimiento
+- L3 Retorno logarítmico (Regresión con confianza): LSTM + GRU, predecir el retorno esperado junto a la confianza del cálculo
+### 6. UL + SL Train y Backtest
+- Ambos sistemas se entrenan a la vez usando walk forward con rolling window, en cada ventana (2 años y predecir 6 meses quizás)
+- Durante el entrenamiento guardar todos los scaler de cada ventana para el backtest
+- Usar métricas clasicas para una primera valoración de los modelos
+- Usar monte carlo
+- (La definición de como se hará la operación se hace más abajo)
+- Crear una clase para los bots para mayor facilidad de uso
+### 7. Optimización de Cartera con Pyomo
+- Una vez obtenidos los datos Gold de todos los futuros y entrenado los modelos usar parte del train para backtest de pyomo (después)
+- Optimizar ganancias
+- Añadir limitaciones como información de qué activos se pueden operar a dicha hora del día
+- De momento Pyomo no va a tener la habilidad de cerrar operaciones solo de abrirlas
+### 8. Backtest de Pyomo
+- Usar los mismos parámetros de walk forward con rolling window para comparar el rendimiento global respecto de operar con un solo activo
+### 9. Gestión de Riesgos y vigilancia
+- Código para obtener datos de bid y ask y calcular posible spread para evitar spreads grandes, en tal caso recalcular spread teórico durante 30 minutos y si no cambia la cosa desistir.
+- Comprobar si algún mercado acaba de abrir o está por cerrar (también para evitar spreads altos), en tal caso no operar durante los 15 minutos anteriores o posteriores
+- Vigilar si se han cerrado operaciones para añadir la información al histórico
+### 10. Operación en Vivo
+- Al usar sampling de cada 4 horas, también opero cada 4 horas, quizás con un margen de 15-30 minutos
+- Al iniciar el código el sistema lee un json con el nombre de todos los activos a operar en esa sesión, por defecto los 13 pero se puede cambiar manualmente. Se cargan los datos secuencialmente para no saturar la API de IB
+- Cada 4 horas se lanzan las predicciones y se pasan los vectores de confianza a Pyomo quien decide qué comprar y en principio también cuanto comprar
+- Para cada futuro, se calcula SL y TP usando ATR y redondeando al número correcto de decimales
+- En general vigilar la operación
+- Cada vez que se activa el sistema se comprueba primero si hay posiciones abiertas, para esos activos en concretos se usan esas fechas para la operación (añadir que una vez cerrado esas operaciones se puede lanzar otra búsqueda del contrato concreto con mayor volumen), si no hay ningún contrato activo del futuro se busca el contrato concreto con mayor volumen
+- Añadir la posibilidad de cerrar todas las operaciones si se alcanza max drawdown pct permitido o solo de aquellos activos altamente correlados
+- Ambos clusterings se calculan en cada time frame
+- Usar logging para mostrar info por consola
+### 11. Logging de Contratos
+- Dos JSON
+  - Posiciones abiertas con toda la información necesaria
+  - Posiciones históricas con información para revisar a futuro, incluyendo max drawdown, PnL, sharpe ratio
+- Archivos con los datos OHLCV usados por cada futuro para las predicciones, para revisar a futuro
+- A futuro desplegar contenedor de SQL para guardar métricas
+### 12. Reentrenamiento
+- De momento reentreno/fine tuning semanal manual (a futuro mlflow/airflow) tanto todos los modelos, como los scalers
+### 13. (Una vez pasado a Docker) Grafana con Alertmanager
+- Usar los loggings de la terminal para mostrar información en la IU de grafana
+- Usar Alertmanager para reporting diario y reporting de actividad
+
+## Mejoras a realizar
 Después de haber realizado el primer despliegue del primero proyecto mínicamente viable me he dado cuenta de diferentes mejoras que se pueden realizar al sistema. Por ello, a continuación voy a listas como estoy pensado actualmente de va a ser la arquitectura de V2
 ### Datos
 - En primer lugar voy a seguir usando datos históricos minuto a minuto, ahora de 13 activos [AD (Dólar Australiano), BP (Libra Esterlina), CL (Petróleo Crudo WTI), EC (Euro FX), ES (E-mini S&P 500), GC (Oro), MFXI (Micro Euro FX), NG (Gas Natural), NQ (E-mini Nasdaq 100), YM (E-mini Dow Jones), ZB (Bono del Tesoro 30Y), ZN (Nota del Tesoro 10Y), ZS (Soja)]
