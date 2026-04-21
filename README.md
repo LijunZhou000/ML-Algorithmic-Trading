@@ -74,6 +74,22 @@
 ### 13. (Una vez pasado a Docker) Grafana con Alertmanager
 - Usar los loggings de la terminal para mostrar información en la IU de grafana
 - Usar Alertmanager para reporting diario y reporting de actividad
+## Organización
+- **tradepy**
+  - **load_data**
+  - **features**
+  - **eda**
+  - clean
+  - filter_features
+  - sl
+  - ul
+  - opti
+  - models
+  - load_models
+  - backtest_l
+  - backtest_p
+  - operation
+  - risk_n_vig
 
 ## Mejoras a realizar
 Después de haber realizado el primer despliegue del primero proyecto mínicamente viable me he dado cuenta de diferentes mejoras que se pueden realizar al sistema. Por ello, a continuación voy a listas como estoy pensado actualmente de va a ser la arquitectura de V2
@@ -131,6 +147,7 @@ Después de haber realizado el primer despliegue del primero proyecto mínicamen
 - Usar los tick size y tick value para redondear correctamente los sl y tp y para calcularlos de manera correcta
 - Añadir que al iniciar para cada activo comprueba si hay posiciones abiertas, si las hay opera con esa fecha de caducidad si no busca el que mayor volumen tenga
 ## Organización de los archivos
+- Una carpeta dedicada a los notebooks, enumerados como lo tengo en Robotrader
 - **tradepy**: Módulo donde añadir todas las funciones a usar. Usar subcarpetas para mejor organización de los códigos, intentar no superrar un par de cientos de línea por archivo
   - **load_data**: Lo que ya tenía como load
   - **features**: Carpeta subdividida con las funciones para calcular las features ordenadas por tipo de dato (tendencia, momento, volatilidad, volumen, relacionados con el tiempo, features interdiarios, comparativa vs otros activos)

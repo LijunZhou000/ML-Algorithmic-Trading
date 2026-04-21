@@ -303,14 +303,8 @@ def target_triple_barrier_realistic(
     tick_size = float(spec["tick_size"])
     tick_value = float(spec["tick_value"])
 
-    # -------------------------
-    # 1. Horizonte
-    # -------------------------
     max_steps = max(1, int(return_horizon_min / sampling_minutes))
 
-    # -------------------------
-    # 2. Costes
-    # -------------------------
     fee_side = float(spec.get("approx_total_fee_per_side", 2.5))
     fees_rt_ticks = (fee_side * 2.0) / tick_value
     slip_ticks = float(spec.get("min_slippage_ticks", 1.0))
@@ -318,60 +312,57 @@ def target_triple_barrier_realistic(
 
     total_cost_ticks = fees_rt_ticks + slip_ticks + spread_ticks
 
-    # -------------------------
-    # 3. Arrays (más rápido)
-    # -------------------------
     close = df["close"].values
     high = df["high"].values
     low = df["low"].values
     atr = df[atr_col].values
 
-    labels = np.zeros(len(df))
+    # CORRECCIÓN 1: Usamos np.nan en lugar de ceros.
+    # Así, las últimas velas que no pueden mirar al futuro se eliminarán 
+    # correctamente con el dropna() final, evitando datos falsos.
+    labels = np.full(len(df), np.nan)
 
-    # -------------------------
-    # 4. Triple Barrier
-    # -------------------------
     for i in range(len(df) - max_steps):
 
         entry_price = close[i]
-
-        # ATR en ticks
         atr_ticks = atr[i] / tick_size
 
-        # Barreras base
         tp_ticks = tp_atr_mult * atr_ticks
         sl_ticks = sl_atr_mult * atr_ticks
 
-        # Filtro anti-ruido + costes
         min_profit_ticks = total_cost_ticks * profit_factor
         tp_ticks = max(tp_ticks, min_profit_ticks)
 
         upper_barrier = entry_price + tp_ticks * tick_size
         lower_barrier = entry_price - sl_ticks * tick_size
 
-        label = 0  # HOLD
+        label = 0  # HOLD por defecto
 
         for j in range(1, max_steps + 1):
+            
+            # Evaluamos ambas condiciones en la misma vela
+            hit_tp = high[i + j] >= upper_barrier
+            hit_sl = low[i + j] <= lower_barrier
 
-            # TP primero
-            if high[i + j] >= upper_barrier:
+            # CORRECCIÓN 2: Lógica de conflicto intrabarra
+            if hit_tp and hit_sl:
+                # Si toca ambos en la misma vela, asumimos el peor escenario (SL)
+                label = -1
+                break
+            elif hit_tp:
                 label = 1
                 break
-
-            # SL
-            if low[i + j] <= lower_barrier:
+            elif hit_sl:
                 label = -1
                 break
 
         labels[i] = label
 
-    # -------------------------
-    # 5. Map softmax
-    # -------------------------
     df[f"target_tb_{return_horizon_min}m"] = pd.Series(labels, index=df.index).map({
-        1: 1,
-        0: 0,
-        -1: 2
+        -1: 0,  # SELL (o Stop Loss)
+        0: 1,   # HOLD (Expiración de tiempo)
+        1: 2    # BUY (Take Profit)
     })
 
+    # Ahora sí, dropna() eliminará las últimas 'max_steps' filas llenas de NaN
     return df.dropna()
