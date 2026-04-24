@@ -4,89 +4,71 @@
 
 \vspace{-1.3cm}
 
-\section{XXXXXXXXXXXX}
+\section{Desarrollo del autómata}
 
-Esto es texto normal y corriente. \textbf{Negritaaaaaaa}.
+El desarrollo del sistema se divide en diferentes partes dentro de la ETL, destacando la carga de datos históricos, su limpieza y filtrado, su transformación en las diferentes características para alimentar a los modelos de aprendizaje automático.
 
-Parrafo sólo separando por un intro del anterior. la justificacion del texto es automatica.
+Además, están las partes de 
 
+Se quiero usar una arquitectura de medallón, para representar la utilidad de los datos, en primer lugar están los datos en crudo que se cargan
 
-\section{Seccion 1}
-
-Esto es una sección dentro del capitulo principal
-
-\subsection{Subsection 1}
-
-Esto es un subsección dentro de la sección 1
-
-\section{Seccion 2}
-
-Esto es una sección 2 dentro del capitulo principal
-
-\subsection{Subsection 2}
-
-Esto es un subsección dentro de la sección 2
-
-\section{Seccion 3}
-
-Ejemplo de tabla (Hay que conocer la sintáxis específica pero existen muchas herramientas online para generarla gráficamente y copiar el código directamente).
-
-\begin{table}[H]
-\caption{Average error comparison of an Algorithm with several methods expressed in centimeters.}
-\label{table1mufaf}
-\begin{center}
-\begin{tabular}{ | c | c | c | c | c | }
-\hline
-Positioning Method & XBee & CC2420 & WiFi & Bluetooth \\
-\hline
-Euclidean Distance & 110.71 & 150.367 &	122.72 & 	150.57 \\
-\hline
-Mahalanobis Distance & 108.33 &	140.05 & 112.12 & 142.58 \\
-\hline
-K-NN & 105.87 & 139.58 & 157.42 &	161.29 \\
-\hline
-Gaussian Kernel & 67.27 & 61.92 & 63.30 & 170.34 \\
-\hline
-Exponential Kernel (This Work)  & 63.05  &  59.49 & 79.73 & 137.15 \\
-\hline
-\end{tabular}
-\end{center}
-\end{table}
-
-Esto es un ejemplo de poner una imagen (por defecto las imágenes se almacenan aquí en la carpeta ``img'').
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Machine Learning project chain: data acquisition, cleaning, learning phase and model deployment.}
-    \label{fig_mlp}
-\end{figure}
+El objetivo es poder generalizar el código, que no importe de qué activos sean los datos
 
 
-Citar el paper de ResNet sería así \cite{He2015DeepRL}. Tienes que poner el nombre que te aparece en la cita de latex al inicio, este nombre lo puedes modificar por lo que tu quieras para tenerlo controlado.
+\subsection{Carga y limpieza}
 
+Se me han facilitado los datos históricos de distintos futuros con los que voy a operar.
 
-Ejemplo de elementos en diferentes puntos y ecuaciones.
+En un primer análisis me doy cuenta de que los datos de tiempo no están regularizados al formato UTC, por lo que es el primer cambio que realizo. Usando de referencia las hoas de apertura y cierre de cada futuro
 
-\begin{itemize}
-	\item Classification accuracy is the number of correct predictions made as a ratio of all predictions made.
-	\begin{equation}
-		accuracy = \frac{TP+TN}{TP+FP+TN+FN}
-	\end{equation}
-	Where $TP$ is True Positives, $FP$ False Positives, $TN$ True Negatives and $FN$ False Negatives.
-	\item Logarithmic Loss works by penalizing the false classifications. When working with Log Loss, the classifier must assign probability to each class for all the samples.
-	\begin{equation}
-		LogLoss = -\frac{1}{N}\sum^{N}_{i=1}\sum^{M}_{j=1}y_{ij}log(p_{ij})
-	\end{equation}
-	Where $N$ is the number of samples, $M$ is the number of possible labels, $y_{ij}$ takes value $1$ if label $j$ is the correct classification for instance $i$, and $0$ otherwise and $p_{ij}$ is the model probability of assigning label $j$ to instance $i$.	
-	\item Confusion Matrix gives us a matrix as output and describes the complete performance of the model comparing all the data involved and presenting the correct and incorrect number of asserts and failures between classes.
-    
-	\item Area Under Curve (AUC) is used for binary classification problem. AUC of a classifier is equal to the probability that the classifier will rank a randomly chosen positive example higher than a randomly chosen negative example.
-    
-	\item F1 Score is the Harmonic Mean between precision and recall. The range for F1 Score is $[0,1]$. It tells you how precise your classifier is, as well as how robust it is.
-	\begin{equation}
-		F1 = \frac{2 \cdot precision\cdot recall}{precision + recall}
-	\end{equation}
-    
-\end{itemize}
+Después, decido filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana
 
+\section{Cálculo de características}
+
+Una vez con los datos OHLCV limpios, llega el momento de aplicar diferentes funciones de diversas librerías para obtener características derivadas que servirán para alimentar a los modelos.
+
+Hay características de diferentes tipos, momento, estructural, temporal, de tendencia, de volatilidad, de volumen y características derivadas de otras. Al ser una estratégia multidía también he hecho uso de los swing charts y de características derivadas de ellas, además de otras características obtenidas de comparar diferentes activos
+
+Para obtener estas características primero agrupo los datos que venían minuto a minuto a agrupaciones de 4 horas, de esto modo se evita tener el ruido de señales tan cortas y es un buen número para una estratégia interdía donde una posición puede estar abierta varios días
+
+\subsection{Selección de características}
+
+Una vez calculadas todas las características es necesario reducir ese número porque es posible que muchas de ellas estén interrelacionadas
+
+Para ello se aplican varias técnicas, empezando por la más básica, un filtro de alta correlación, además de eliminar las características que puedan predecir el futuro, las no cíclicas o no estacionarias pueden confundir a los modelos indicando que en valor que quizás representaba el día de la semana sea considerado como más importante a mayor número
+
+También filtro usando el algorítmo de LASSO usando un modelo de aprendizaje automático clásico de sklearn que permité mayor explicabilidad
+
+\subsection{Aprendizaje no supervisado}
+
+Pasando ahora a los modelos primero voy a explicar las dos cituaciones donde voy a implementar modelos de aprendizaje no supervisado
+
+En primer lugar para agrupar los diferentes 
+
+\section{Despliegue usando contenedores de Docker}
+
+Una vez que se ha desarrollado el autómata y se ha comprobado que su funcionamiento es correcto, he decidido añadir el proyecto a un contenedor de docker para facilitar el despligue en otros equipos
+
+\subsection{Configuración del contenedor principal}
+
+Por cómo he desarrollado el sistema y por velocidad todo va a estar incluido en un único contenedor.
+
+No requiere demasidos cambios ya que voy a copiar los códigos desarrollados dentro del contenedor
+
+\subsection{Bases de datos}
+
+Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas
+
+\subsection{Orquestación}
+
+Uso de Airflow
+
+\subsection{MLOps}
+
+Uso de MLflow
+
+\subsection{Alertas y avisos}
+
+Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en directo y en diferido
+
+Uso Prometheus, Grafana y Alertmanager este último conectado a otro servicio que se conecta a la API de whatsapp
