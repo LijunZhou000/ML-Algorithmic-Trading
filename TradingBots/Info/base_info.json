@@ -1,0 +1,145 @@
+{
+  "AD": {
+    "name": "Australian Dollar",
+    "symbol": "AD",
+    "ib_symbol": "AUD",
+    "exchange": "CME",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 3000
+  },
+  "BP": {
+    "name": "British Pound",
+    "symbol": "BP",
+    "ib_symbol": "GBP",
+    "exchange": "CME",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 3000
+  },
+  "CL": {
+    "name": "Crude Oil WTI",
+    "symbol": "CL",
+    "ib_symbol": "CL",
+    "exchange": "NYMEX",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 30000
+  },
+  "EC": {
+    "name": "Euro FX",
+    "symbol": "EC",
+    "ib_symbol": "EUR",
+    "exchange": "CME",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 4000
+  },
+  "ES": {
+    "name": "E-mini S&P 500",
+    "symbol": "ES",
+    "ib_symbol": "ES",
+    "exchange": "CME",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 2,
+    "fallback_margin": 35000
+  },
+  "GC": {
+    "name": "Gold",
+    "symbol": "GC",
+    "ib_symbol": "GC",
+    "exchange": "COMEX",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 4,
+    "fallback_margin": 45000
+  },
+  "MFXI": {
+    "name": "Micro Euro FX",
+    "symbol": "MFXI",
+    "ib_symbol": "M6E",
+    "exchange": "CME",
+    "currency": "USD",
+    "approx_total_fee_per_side": 0.85,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 500
+  },
+  "NG": {
+    "name": "Natural Gas",
+    "symbol": "NG",
+    "ib_symbol": "NG",
+    "exchange": "NYMEX",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 5,
+    "fallback_margin": 7000
+  },
+  "NQ": {
+    "name": "E-mini Nasdaq 100",
+    "symbol": "NQ",
+    "ib_symbol": "NQ",
+    "exchange": "CME",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 2,
+    "fallback_margin": 65000
+  },
+  "YM": {
+    "name": "E-mini Dow Jones",
+    "symbol": "YM",
+    "ib_symbol": "YM",
+    "exchange": "CBOT",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 2,
+    "fallback_margin": 20000
+  },
+  "ZB": {
+    "name": "30Y US Treasury Bond",
+    "symbol": "ZB",
+    "ib_symbol": "ZB",
+    "exchange": "CBOT",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 5000
+  },
+  "ZN": {
+    "name": "10Y US Treasury Note",
+    "symbol": "ZN",
+    "ib_symbol": "ZN",
+    "exchange": "CBOT",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 3000
+  },
+  "ZS": {
+    "name": "Soybean",
+    "symbol": "ZS",
+    "ib_symbol": "ZS",
+    "exchange": "CBOT",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 5,
+    "fallback_margin": 5000
+  }
+}
