@@ -51,7 +51,7 @@ def _ticker_from_filename(filename: str) -> str:
 
 def _find_parquet(ticker: str) -> Path:
     """Localiza el parquet de un ticker usando regex."""
-    pattern = re.compile(rf'^{re.escape(ticker.lower())}_\d+min\.parquet$', re.IGNORECASE)
+    pattern = re.compile(rf'^{re.escape(ticker.lower())}\d+min\.parquet$', re.IGNORECASE)
     matches = [f for f in PARQUET_DIR.iterdir() if pattern.match(f.name)]
     if not matches:
         raise FileNotFoundError(f"No se encuentra parquet para '{ticker}' en {PARQUET_DIR}")
@@ -73,18 +73,17 @@ def load_future(ticker: str) -> tuple[pd.DataFrame, dict]:
     DataFrame con columnas originales y tipos correctos.
     El ajuste a UTC se hace en cleaner.py.
     """
-    ticker = ticker.upper()
     parquet_path = _find_parquet(ticker)
 
     log.info(f"[{ticker}] Cargando {parquet_path.name}...")
     df = pd.read_parquet(parquet_path)
 
     # Ajustar tipos
-    df['dtyyyymmdd'] = pd.to_datetime(df['dtyyyymmdd'], format='%Y%m%d')
+    df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
     df['time']       = df['time'].astype(str).str.zfill(6)
     df['time']       = pd.to_datetime(df['time'], format='%H%M%S').dt.time
     df['datetime']   = pd.to_datetime(
-        df['dtyyyymmdd'].astype(str) + ' ' + df['time'].astype(str)
+        df['date'].astype(str) + ' ' + df['time'].astype(str)
     )
     df = df.sort_values('datetime').reset_index(drop=True)
 
@@ -92,9 +91,14 @@ def load_future(ticker: str) -> tuple[pd.DataFrame, dict]:
 
     # Cargar specs
     specs = load_specs()
+    ticker = ticker.upper()
     if ticker not in specs:
         raise KeyError(f"No se encuentra spec para '{ticker}' en los JSON de info.")
-
+    n_before = len(df)
+    df = df.sort_values('datetime').drop_duplicates(subset='datetime').reset_index(drop=True)
+    n_dupes = n_before - len(df)
+    if n_dupes:
+        log.warning(f"[{ticker}] {n_dupes} filas duplicadas eliminadas.")
     return df, specs[ticker]
 
 
