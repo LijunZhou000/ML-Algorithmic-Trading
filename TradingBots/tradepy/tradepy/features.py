@@ -5,26 +5,12 @@ import json
 import inspect
 
 # Media movil simple
-def sma(df, n=20):
-    return {f"sma_{n}": df['close'].rolling(n).mean()}
+
 # Media movil exponencial
-def ema(df, n=20):
-    return {f"ema_{n}": df['close'].ewm(span=n, adjust=False).mean()}
+
 
 # Convergencia y divergencia de medias moviles
-def macd(df, n_fast=12, n_slow=26):
-    ema_fast = df['close'].ewm(span=n_fast, adjust=False).mean()
-    ema_slow = df['close'].ewm(span=n_slow, adjust=False).mean()
-    macd_s = ema_fast - ema_slow
-    signal = macd_s.ewm(span=9, adjust=False).mean()
-    histogram = macd_s - signal
-    return {
-        'ema_fast': ema_fast,
-        'ema_slow': ema_slow,
-        'macd': macd_s,
-        'signal': signal,
-        'histogram': histogram,
-    }
+
 
 # Índice direccional medio
 def adx(df, n=14):
@@ -73,141 +59,18 @@ def cci(df, n=20):
     return {'cci': pd.Series(ta.CCI(df['high'], df['low'], df['close'], timeperiod=n), index=df.index)}
 
 # Volumen en balance
-def obv(
-    df,
-    roc_windows=None,
-    smooth_windows=None,
-    zscore_window=20,
-    relative_volume_window=20,
-    normalize_by="range",  # "range", "close", "none"
-    include_manual=False,
-    include_direction=True,
-    include_delta=True,
-    session_key=None,
-):
-    obv_s = pd.Series(ta.OBV(df['close'], df['volume']), index=df.index)
-    out = {'obv': obv_s}
 
-    if include_manual:
-        manual = ((df['close'].diff() > 0).astype(int) * df['volume'] - (df['close'].diff() < 0).astype(int) * df['volume'])
-        if session_key is not None or 'trading_date' in df.columns:
-            manual = manual.groupby(df['trading_date']).cumsum()
-        else:
-            manual = manual.cumsum()
-        out['obv_manual'] = pd.Series(manual, index=df.index)
-
-    if normalize_by == 'range':
-        out['obv_norm'] = obv_s / (df['high'] - df['low']).replace(0, np.nan)
-    elif normalize_by == 'close':
-        out['obv_norm'] = obv_s / df['close']
-    else:
-        out['obv_norm'] = obv_s
-
-    if roc_windows is None:
-        roc_windows = [5,10]
-    if smooth_windows is None:
-        smooth_windows = [10]
-
-    for w in roc_windows:
-        out[f'obv_roc_{w}'] = obv_s.pct_change(w)
-    for w in smooth_windows:
-        out[f'obv_ema_{w}'] = obv_s.ewm(span=w, adjust=False).mean()
-        out[f'obv_sma_{w}'] = obv_s.rolling(w).mean()
-
-    mean = obv_s.rolling(zscore_window).mean()
-    std = obv_s.rolling(zscore_window).std()
-    out['obv_z'] = (obv_s - mean) / std
-
-    if include_direction:
-        out['obv_dir'] = np.sign(obv_s.diff())
-
-    out['obv_rel'] = obv_s / df['volume'].rolling(relative_volume_window).sum()
-
-    if include_delta:
-        out['obv_delta'] = obv_s.diff()
-
-    # wrap as Series
-    return {k: pd.Series(v, index=df.index) for k,v in out.items()}
 
 # Volumen por precio
-def vpt(df):
-    vpt_s = (df['close'] - df['close'].shift(1)) / df['close'].shift(1) * df['volume']
-    return {'vpt': vpt_s}
 
 # Volumen relativo
-def relative_volume(df, window=20):
-    # normalize names to english snake_case
-    avg = df['volume'].rolling(window=window).mean()
-    return {'avg_volume': avg, 'relative_volume': df['volume'] / avg}
+
 
 # Acumulación/distribución
-def ad(
-    df,
-    zscore_window=20,
-    roc_windows=None,
-    smooth_windows=None,
-    relative_volume_window=20,
-    normalize_by="range",   # "range", "close", "none"
-    include_clv=True,
-    include_delta=True,
-    include_direction=True,
-    session_key=None,
-):
-    out = {}
-    if include_clv:
-        clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low']).replace(0, np.nan)
-        out['clv'] = clv
-    else:
-        clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low']).replace(0, np.nan)
 
-    ad_s = (clv * df['volume']).cumsum()
-    out['ad'] = ad_s
 
-    if normalize_by == 'range':
-        out['ad_norm'] = ad_s / (df['high'] - df['low']).replace(0, np.nan)
-    elif normalize_by == 'close':
-        out['ad_norm'] = ad_s / df['close']
-    else:
-        out['ad_norm'] = ad_s
 
-    if roc_windows is None:
-        roc_windows = [5,10]
-    if smooth_windows is None:
-        smooth_windows = [10]
 
-    for w in roc_windows:
-        out[f'ad_roc_{w}'] = ad_s.pct_change(w)
-    for w in smooth_windows:
-        out[f'ad_ema_{w}'] = ad_s.ewm(span=w, adjust=False).mean()
-        out[f'ad_sma_{w}'] = ad_s.rolling(w).mean()
-
-    mean = ad_s.rolling(zscore_window).mean()
-    std = ad_s.rolling(zscore_window).std()
-    out['ad_z'] = (ad_s - mean) / std
-
-    if include_delta:
-        out['ad_delta'] = ad_s.diff()
-    if include_direction:
-        out['ad_dir'] = np.sign(ad_s.diff())
-
-    out['ad_rel'] = ad_s / df['volume'].rolling(relative_volume_window).sum()
-
-    return {k: pd.Series(v, index=df.index) for k,v in out.items()}
-
-def mfi(df, window=14):
-    typical_price = (df['high'] + df['low'] + df['close']) / 3
-    money_flow = typical_price * df['volume']
-    positive_flow = money_flow.where(typical_price > typical_price.shift(1), 0)
-    negative_flow = money_flow.where(typical_price < typical_price.shift(1), 0)
-    pos_sum = positive_flow.rolling(window).sum()
-    neg_sum = negative_flow.rolling(window).sum()
-    mfi_s = 100 - (100 / (1 + (pos_sum / neg_sum)))
-    return {'mfi': mfi_s}
-def cmf(df, window=20):
-    clv = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low']).replace(0, np.nan)
-    money_flow_volume = clv * df['volume']
-    cmf_s = money_flow_volume.rolling(window).sum() / df['volume'].rolling(window).sum()
-    return {'cmf': cmf_s}
 def vwap(df):
     typical_price = (df['high'] + df['low'] + df['close']) / 3
     tp_vol = typical_price * df['volume']
@@ -221,18 +84,11 @@ def vwap(df):
     else:
         vwap_s = tp_vol.cumsum() / df['volume'].cumsum()
     return {'vwap': vwap_s}
-def volume_zscore(df, window=20):
-    mean = df['volume'].rolling(window).mean()
-    std = df['volume'].rolling(window).std()
-    return {'volume_z': (df['volume'] - mean) / std}
-def volume_delta(df):
-    return {'volume_delta': df['volume'].diff()}
-def volume_sum(df, window=20):
-    return {f'volume_sum_{window}': df['volume'].rolling(window).sum()}
-def volume_by_range(df):
-    return {'volume_range': df['volume'] / (df['high'] - df['low']).replace(0, np.nan)}
-def volume_by_price(df):
-    return {'volume_price': df['volume'] / df['close']}
+
+
+
+
+
 
 def historical_volatility(df, window=20):
     returns = np.log(df['close'] / df['close'].shift(1))
@@ -243,42 +99,8 @@ def volatility_zscore(df, window=20):
     mean = df['atr'].rolling(window).mean()
     std = df['atr'].rolling(window).std()
     return {'atr_z': (df['atr'] - mean) / std}
-def dema(df, span=20):
-    ema = df['close'].ewm(span=span).mean()
-    return {'dema': 2*ema - ema.ewm(span=span).mean()}
-def kama(df, window=10, fast=2, slow=30):
-    # Prefer TA-Lib's KAMA for correctness and performance. Fall back to
-    # a safe pandas/numpy implementation if TA-Lib call fails.
-    try:
-        return {'kama': pd.Series(ta.KAMA(df['close'], timeperiod=window), index=df.index)}
-    except Exception:
-        close = df['close'].astype(float).to_numpy()
-        n = len(close)
-        if n == 0:
-            return {'kama': pd.Series(np.full(0, np.nan), index=df.index)}
 
-        # Efficiency Ratio (ER): abs(close - close.shift(window)) / sum(abs(diff(close)))
-        change = np.abs(close - np.roll(close, window)).astype(float)
-        change[:window] = np.nan
 
-        vol = np.concatenate([[np.nan], np.abs(np.diff(close))])
-        vol = pd.Series(vol).rolling(window).sum().to_numpy()
-
-        # avoid division by zero
-        er = np.where(vol == 0, 0.0, change / vol)
-
-        fast_sc = 2.0 / (fast + 1.0)
-        slow_sc = 2.0 / (slow + 1.0)
-        sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
-
-        kama = np.full(n, np.nan, dtype=float)
-        # initialize first value at the end of the warm-up window
-        if n > window:
-            kama[window] = close[window]
-            for i in range(window + 1, n):
-                kama[i] = kama[i - 1] + sc[i] * (close[i] - kama[i - 1])
-
-        return {'kama': pd.Series(kama, index=df.index)}
 def roc(df, window=10):
     return {f'roc_{window}': df['close'].pct_change(window)}
 
@@ -298,10 +120,8 @@ def cmo(df, window=14):
     up = diff.clip(lower=0).rolling(window).sum()
     down = -diff.clip(upper=0).rolling(window).sum()
     return {'cmo': 100 * (up - down) / (up + down)}
-def vol_vol_ratio(df):
-    return {'vol_vol_ratio': df['volume'] / df['atr']}
-def vpt_norm(df):
-    return {'vpt_norm': df['vpt'] / df['close']}
+
+
 def tr_direction(df):
     return {'tr_dir': np.sign(df['true_range'].diff())}
 def candle_body(df):

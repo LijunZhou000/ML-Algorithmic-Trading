@@ -1,0 +1,33 @@
+{
+"global": {
+"sampling_minutes": "__MINUTES__",
+"return_horizon_min": "__RETURN_HORIZON_MIN__",
+"tick_size": "__TICK_SIZE__"
+},
+"percent_return_features": {
+"lags": [1,5,10,20],
+"rolling_windows": [5,10,20]
+},
+"compute_atr": {"period": 14},
+"obv": {
+"roc_windows":[5,10],
+"smooth_windows":[10],
+"zscore_window":20,
+"relative_volume_window":20,
+"normalize_by":"range",
+"include_manual": false,
+"include_direction": true,
+"include_delta": true
+},
+"ad": {
+"zscore_window":20,
+"roc_windows":[5,10],
+"smooth_windows":[10],
+"relative_volume_window":20,
+"normalize_by":"range",
+"include_clv": true,
+"include_delta": true,
+"include_direction": true
+},
+"rolling_slope": {"window":10, "source":"close"}
+}

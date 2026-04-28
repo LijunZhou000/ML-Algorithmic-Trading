@@ -1,0 +1,12 @@
+{
+    "sampling_minutes": 240,
+    "return_horizon_multiplier": 12,
+    "lookback_days": 60,
+    "walk_forward_train_months": 24,
+    "walk_forward_test_months": 6,
+    "max_drawdown_pct": 0.15,
+    "max_pct_cash": 0.30,
+    "wavelet": "db4",
+    "wavelet_level": 1,
+    "swing_n": 3
+}

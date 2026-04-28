@@ -19,7 +19,7 @@ def add_trading_date_by_gap(df, gap_minutes=60):
     df["time_diff"] = df["datetime"].diff()
 
     # Detectar gaps grandes
-    df["new_session"] = df["time_diff"] > pd.Timedelta(minutes=gap_minutes)
+    df["new_session"] = df["time_diff"] >= pd.Timedelta(minutes=gap_minutes)
 
     # Primera fila siempre nueva sesión
     df["new_session"] = df["new_session"].fillna(True)
@@ -31,21 +31,3 @@ def add_trading_date_by_gap(df, gap_minutes=60):
     df["trading_date"] = df.groupby("session_id")["datetime"].transform("first").dt.date
 
     return df.drop(columns=["time_diff", "new_session"])
-
-def wavelet_denoising(x, wavelet='db4', level=1):
-    # Descomponer la señal
-    coeffs = pywt.wavedec(x, wavelet, mode='per')
-    # Aplicar umbral para eliminar ruido (detalles de alta frecuencia)
-    sigma = (1/0.6745) * np.median(np.abs(coeffs[-level] - np.median(coeffs[-level])))
-    uthresh = sigma * np.sqrt(2 * np.log(len(x)))
-    coeffs[1:] = [pywt.threshold(i, value=uthresh, mode='hard') for i in coeffs[1:]]
-    # Reconstruir
-    y = pywt.waverec(coeffs, wavelet, mode='per')
-
-    # Ajustar longitud
-    if len(y) > len(x):
-        y = y[:len(x)]
-    elif len(y) < len(x):
-        y = np.pad(y, (0, len(x) - len(y)), mode='edge')
-
-    return y

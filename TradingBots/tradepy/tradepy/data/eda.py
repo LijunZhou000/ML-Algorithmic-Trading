@@ -125,7 +125,7 @@ def _plot_gaps(ax: plt.Axes, d: pd.DataFrame) -> None:
 
 def _plot_volume(ax: plt.Axes, d: pd.DataFrame) -> None:
     """4. Distribución de volumen con percentiles 99 y 99.9 marcados."""
-    vol = d['vol'].dropna()
+    vol = d['volume'].dropna()
     p99  = vol.quantile(0.99)
     p999 = vol.quantile(0.999)
 

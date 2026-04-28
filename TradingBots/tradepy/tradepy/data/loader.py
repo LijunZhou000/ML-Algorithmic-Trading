@@ -77,7 +77,9 @@ def load_future(ticker: str) -> tuple[pd.DataFrame, dict]:
 
     log.info(f"[{ticker}] Cargando {parquet_path.name}...")
     df = pd.read_parquet(parquet_path)
-
+    df = df.rename(columns={
+            'vol': 'volume'
+        })
     # Ajustar tipos
     df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
     df['time']       = df['time'].astype(str).str.zfill(6)
