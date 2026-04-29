@@ -28,20 +28,35 @@ def generate_features(df, config_json=None, dropna_strategy="any"):
         return {**global_cfg, **cfg.get(name, {})}
 
     # ─────────────────────────────────────────────────────────────
-    # DAG BUILD (dependencias)
+    # DAG BUILD (dependencias por features y por columnas producidas)
     # ─────────────────────────────────────────────────────────────
     graph = defaultdict(list)
     indegree = defaultdict(int)
 
-    for name, meta in FEATURE_REGISTRY.items():
+    for name in FEATURE_REGISTRY:
         indegree[name] = 0
 
+    # mapa columna -> productores
+    produced_by = defaultdict(list)
     for name, meta in FEATURE_REGISTRY.items():
-        for dep in meta["requires"]:
-            # Solo conectar si la dependencia es otra feature
-            if dep in FEATURE_REGISTRY:
+        for col in meta.get('produces', []):
+            produced_by[col].append(name)
+
+    # conectar dependencias: si 'requires' es nombre de feature, o nombre de columna producida por alguna feature
+    for name, meta in FEATURE_REGISTRY.items():
+        for dep in meta.get('requires', []):
+            # preferir columnas producidas por features (semántica: requires son columnas)
+            if dep in produced_by:
+                for producer in produced_by[dep]:
+                    graph[producer].append(name)
+                    indegree[name] += 1
+            elif dep in FEATURE_REGISTRY:
+                # compatibilidad: si alguien puso el nombre de una función en requires
                 graph[dep].append(name)
                 indegree[name] += 1
+            else:
+                # se asume columna de entrada (no conexión)
+                pass
 
     # Topological sort (Kahn)
     queue = deque([n for n in FEATURE_REGISTRY if indegree[n] == 0])
@@ -77,7 +92,7 @@ def generate_features(df, config_json=None, dropna_strategy="any"):
         params = p(name)
 
         # defaults especiales
-        session_funcs = {"compute_atr", "obv", "ad", "rolling_slope"}
+        session_funcs = {"atr", "compute_atr", "obv", "ad", "rolling_slope"}
         if name in session_funcs and "session_key" not in params:
             params = {**params, "session_key": "trading_date"}
 
@@ -119,12 +134,37 @@ def generate_features(df, config_json=None, dropna_strategy="any"):
             buf[col] = series.values
 
     # ─────────────────────────────────────────────────────────────
+    # CALCULAR CAPAS (layers) y grupos efectivos para snapshots
+    # ─────────────────────────────────────────────────────────────
+    rev = defaultdict(list)
+    for u, vs in graph.items():
+        for v in vs:
+            rev[v].append(u)
+
+    layers = {}
+    for node in execution_order:
+        preds = rev.get(node, [])
+        if not preds:
+            layers[node] = 1
+        else:
+            layers[node] = max(layers[p] for p in preds) + 1
+
+    effective_group = {}
+    for name, meta in FEATURE_REGISTRY.items():
+        grp = meta.get('group', 1)
+        layer = layers.get(name, 1)
+        if layer == 1:
+            effective_group[name] = grp
+        else:
+            effective_group[name] = f"{grp}-{layer}"
+
+    # ─────────────────────────────────────────────────────────────
     # EJECUCIÓN POR CAPAS (snapshot automático)
     # ─────────────────────────────────────────────────────────────
     last_group = None
 
     for name in execution_order:
-        group = FEATURE_REGISTRY[name].get("group", 1)
+        group = effective_group.get(name, FEATURE_REGISTRY[name].get("group", 1))
 
         if last_group is not None and group != last_group:
             _snapshot()

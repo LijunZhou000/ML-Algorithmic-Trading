@@ -22,3 +22,8 @@ def cmf(df, window=20):
     money_flow_volume = clv * df['volume']
     cmf_s = money_flow_volume.rolling(window).sum() / df['volume'].rolling(window).sum()
     return {'cmf': cmf_s}
+
+@feature(group='volume')
+def elder_force_index(df, n=13):
+    efi = ta.EMA((df['close'] - df['close'].shift(1)) * df['volume'], timeperiod=n)
+    return {'efi': pd.Series(efi, index=df.index)}
