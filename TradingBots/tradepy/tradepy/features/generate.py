@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from .registry import FEATURE_REGISTRY
 
 
-def generate_features(df, config_json=None, dropna_strategy="any"):
+def generate_features(df, config_json=None, dropna_strategy="all"):
     # ─────────────────────────────────────────────────────────────
     # CONFIG
     # ─────────────────────────────────────────────────────────────
@@ -178,6 +178,9 @@ def generate_features(df, config_json=None, dropna_strategy="any"):
     # CLEAN
     # ─────────────────────────────────────────────────────────────
     base.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # eliminar columnas que sean todas NaN (evita que una columna vacía provoque
+    # que `dropna(how='any')` borre todas las filas)
+    base.dropna(axis=1, how='all', inplace=True)
 
     # ─────────────────────────────────────────────────────────────
     # DROPNA

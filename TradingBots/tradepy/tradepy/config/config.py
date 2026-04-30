@@ -13,8 +13,9 @@ Uso:
 
 import json
 import logging
+from typing import Optional
 
-from tradepy.paths import SYSTEM_CONFIG, FUTURES_STATIC, FUTURES_DYNAMIC, FEATURE_CONFIG
+from tradepy.paths import SYSTEM_CONFIG, FUTURES_STATIC, FUTURES_DYNAMIC, FEATURE_CONFIG, EXCLUDE_CONFIG
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +98,40 @@ def load_feature_config() -> dict:
     """
     with open(FEATURE_CONFIG) as f:
         return json.load(f)
+ 
+def load_exclude_config(minutes: Optional[int] = None) -> dict:
+    """
+    Carga el archivo exclude.json con las listas de columnas a excluir.
+
+    Parámetros
+    ----------
+    minutes : int | None
+        Si se proporciona, sustituye los placeholders `{MINUTES}` y `__MINUTES__`
+        por este valor (útil para nombres de target como `target_ret_5`).
+
+    Retorna
+    -------
+    dict
+        Contenido del JSON con las sustituciones aplicadas cuando procede.
+    """
+    with open(EXCLUDE_CONFIG) as f:
+        cfg = json.load(f)
+
+    if minutes is None:
+        return cfg
+
+    mins = str(minutes)
+
+    def _replace(obj):
+        if isinstance(obj, str):
+            return obj.replace("{MINUTES}", mins).replace("__MINUTES__", mins)
+        if isinstance(obj, list):
+            return [_replace(i) for i in obj]
+        if isinstance(obj, dict):
+            return {k: _replace(v) for k, v in obj.items()}
+        return obj
+
+    return _replace(cfg)
 if __name__ == '__main__':
     import pprint
     logging.basicConfig(level=logging.INFO, format='%(levelname)s | %(message)s')

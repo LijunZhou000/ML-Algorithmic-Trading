@@ -1,0 +1,41 @@
+{
+	"exclude_cols_triple": [
+		"datetime",
+		"dtyyyymmdd",
+		"trading_date",
+		"ticker",
+		"per",
+		"openint",
+
+		"open",
+		"high",
+		"low",
+		"close",
+		"volume",
+
+		"target_bin",
+		"target_logret_{MINUTES}",
+		"target_ret_{MINUTES}",
+		"target_ticks_{MINUTES}"
+	],
+	"exclude_more": [
+		"open_day",
+		"bb_std",
+		"true_range",
+		"volume_cum",
+		"vpt",
+		"obv",
+		"ad",
+		"hour",
+		"minute",
+		"dayofweek",
+		"day",
+		"month",
+		"swing_low",
+		"swing_low_price",
+		"swing_low_strength",
+		"swing_high",
+		"swing_high_price",
+		"swing_high_strength"
+	]
+}

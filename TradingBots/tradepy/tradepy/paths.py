@@ -29,6 +29,7 @@ FUTURES_STATIC  = INFO_DIR / 'base_info.json'
 FUTURES_DYNAMIC = INFO_DIR / 'dynamic_info.json'
 SYSTEM_CONFIG   = CONFIG_DIR / 'system.json'
 FEATURE_CONFIG   = CONFIG_DIR / 'features.json'
+EXCLUDE_CONFIG   = CONFIG_DIR / 'exclude.json'
 
 # ── Data ────────────────────────────────────────────────────────────────────
 TXT_DIR     = DATA_DIR / 'txt'

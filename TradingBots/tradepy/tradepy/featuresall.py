@@ -540,7 +540,7 @@ def add_tick_features(df, tick_size=0.1):
     }
     return {k: pd.Series(v, index=df.index) if not isinstance(v, (float, int)) else pd.Series([v]*len(df), index=df.index) for k,v in out.items()}
 
-def generate_features(df, config_json=None, dropna_strategy='any'):
+def generate_features_all(df, config_json=None, dropna_strategy='any'):
     cfg = {}
     if config_json:
         if isinstance(config_json, str):
