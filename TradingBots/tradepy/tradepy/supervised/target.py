@@ -82,7 +82,7 @@ def target_triple_barrier_interday(
             hit_sl = low[i + j] <= lower_barrier
 
             if hit_tp and hit_sl:
-                label = -1  # conflicto intrabarra → peor caso
+                label = np.nan  # conflicto intrabarra → ambiguo, descartar
                 break
             elif hit_tp:
                 label = 1
