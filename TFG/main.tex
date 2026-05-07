@@ -79,6 +79,15 @@
 \usepackage{pdflscape}
 \usepackage{lscape}
 \usepackage{afterpage}
+% =====Añadido por mí=====
+\usepackage{todonotes}
+\setuptodonotes{inline}
+\usepackage{minted}
+\usepackage{dirtree}
+\newcommand{\review}[2][]{%
+  \todo[color=red!50,#1]{#2}%
+}
+% ==========
 \begin{document}
 
 \selectlanguage{spanish}

@@ -6,48 +6,99 @@
 
 \section{Desarrollo del autómata}
 
-El desarrollo del sistema se divide en diferentes partes dentro de la ETL, destacando la carga de datos históricos, su limpieza y filtrado, su transformación en las diferentes características para alimentar a los modelos de aprendizaje automático.
+El desarrollo del sistema se divide en diferentes fases dentro de la ETL, destacando la carga de datos históricos, su limpieza y filtrado,
+su transformación en las diferentes características para alimentar a los modelos de aprendizaje automático.
 
-Además, están las partes de 
+% Además, están las partes de 
 
-Se quiero usar una arquitectura de medallón, para representar la utilidad de los datos, en primer lugar están los datos en crudo que se cargan
+% Se quiere usar una arquitectura de medallón, para representar la utilidad de los datos, en primer lugar están los datos en crudo que se cargan
 
-El objetivo es poder generalizar el código, que no importe de qué activos sean los datos
+El objetivo es poder generalizar el código, que no importe de qué activos sean los datos el flujo de datos puede reutilizarse.
 
+Para lograr este objetivo he decidido implementar la lógica del código dentro de un paquete instalable de python usando
+\mintinline{bash}{pip install -e} y he decidido usar la siguiente estructura organizativa.
+
+\dirtree{%
+    .1 /.
+    .2 paths.py.
+    .2 get\_info.
+    .2 data.
+        .3 loader.py.
+        .3 cleaner.py.
+        .3 resampler.py.
+        .3 to\_parquet.py.
+    .2 features.
+    .2 supervised.
+    .2 unsupervised.
+    .2 portfolio.
+    .2 risk.
+    .2 execution.
+    .2 logging.
+    .2 retrain.
+}
+
+Hay funciones que están en algunos de los directorios que pueden servir para varias entapas del proceso, principalmente aquellas encargadas de
+obtener los datos desde los archivos.
+
+A continuación paso a explicar cada una de las fases del flujo de los datos y las funciones utilizadas en ellas.
 
 \subsection{Carga y limpieza}
 
-Se me han facilitado los datos históricos de distintos futuros con los que voy a operar.
+Se me han facilitado los datos históricos OHLCV de distintos futuros con los que voy a operar.
 
-En un primer análisis me doy cuenta de que los datos de tiempo no están regularizados al formato UTC, por lo que es el primer cambio que realizo. Usando de referencia las hoas de apertura y cierre de cada futuro
+En un primer análisis me doy cuenta de que los datos temporales no están regularizados al formato UTC, por lo que es el primer cambio que realizo.
+Usando de referencia las horas de apertura y cierre de cada futuro, agrupo el volumen por horas para cada activo puedo detectar las horas con poca
+o nula actividad, con ello puedo inferir la zona horaría usada.
 
-Después, decido filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana
+\todo{Explicar mejor cómo funciona la función de inferencia}
+
+Después, decido filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana. Los pedidos realoizados en
+las horas de descanso las mantengo por que pueden haber sido retrasos en la ejecución por lo que son operaciones reales no realizadas en el momento
+indicado.
+
+Una vez estandarizado el tiempo aprovecho la función de inferencia y añado una priemra columna derivada que indica el día de \textit{trading} aunque
+al ser una fecha no se usará directamente para el entrenamiento si me ayudará para calcular valores acumulados diarios.
+
+Por otra parte como mi intención es obtener métricas de comparación entre activos decido recortar el número de filas disponibles en los diferentes
+archivos para tener un conjunto homogéneo. Además para mejorar el rendimiento y disminuir el tamaño de los archivos convierto los datos que estaban
+en formato csv a parquet.
 
 \section{Cálculo de características}
 
-Una vez con los datos OHLCV limpios, llega el momento de aplicar diferentes funciones de diversas librerías para obtener características derivadas que servirán para alimentar a los modelos.
+Una vez con los datos OHLCV limpios, llega el momento de aplicar diferentes funciones de diversas librerías para obtener características derivadas
+que servirán para alimentar a los modelos.
 
-Hay características de diferentes tipos, momento, estructural, temporal, de tendencia, de volatilidad, de volumen y características derivadas de otras. Al ser una estratégia multidía también he hecho uso de los swing charts y de características derivadas de ellas, además de otras características obtenidas de comparar diferentes activos
+Hay características de diferentes tipos, momento, estructural, temporal, de tendencia, de volatilidad, de volumen y características derivadas de
+otras. Al ser una estratégia multidía también he hecho uso de los swing charts y de características derivadas de ellas, además de otras
+características obtenidas de comparar diferentes activos
 
-Para obtener estas características primero agrupo los datos que venían minuto a minuto a agrupaciones de 4 horas, de esto modo se evita tener el ruido de señales tan cortas y es un buen número para una estratégia interdía donde una posición puede estar abierta varios días
+Para obtener estas características primero agrupo los datos que venían minuto a minuto a agrupaciones de 4 horas, de esto modo se evita tener el
+ruido de señales tan cortas y es un buen número para una estratégia interdía donde una posición puede estar abierta varios días
 
 \subsection{Selección de características}
 
 Una vez calculadas todas las características es necesario reducir ese número porque es posible que muchas de ellas estén interrelacionadas
 
-Para ello se aplican varias técnicas, empezando por la más básica, un filtro de alta correlación, además de eliminar las características que puedan predecir el futuro, las no cíclicas o no estacionarias pueden confundir a los modelos indicando que en valor que quizás representaba el día de la semana sea considerado como más importante a mayor número
+Para ello se aplican varias técnicas, empezando por la más básica, un filtro de alta correlación, además de eliminar las características que puedan
+predecir el futuro, las no cíclicas o no estacionarias pueden confundir a los modelos indicando que en valor que quizás representaba el día de la
+semana sea considerado como más importante a mayor número
 
 También filtro usando el algorítmo de LASSO usando un modelo de aprendizaje automático clásico de sklearn que permité mayor explicabilidad
 
 \subsection{Aprendizaje no supervisado}
 
-Pasando ahora a los modelos primero voy a explicar las dos cituaciones donde voy a implementar modelos de aprendizaje no supervisado
+Pasando ahora a los modelos, primero voy a explicar las dos situaciones donde voy a implementar modelos de aprendizaje no supervisado
 
-En primer lugar para agrupar los diferentes 
+En primer lugar para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias por ejemplo todas las monedas
+juntas dejo que el sistema decida cuales son los activos más parecidos
+
+\todo{Decidir el algoritmo a usar para UL}
+\review{Prueba cuadro \textbackslash review}
 
 \section{Despliegue usando contenedores de Docker}
 
-Una vez que se ha desarrollado el autómata y se ha comprobado que su funcionamiento es correcto, he decidido añadir el proyecto a un contenedor de docker para facilitar el despligue en otros equipos
+Una vez que se ha desarrollado el autómata y se ha comprobado que su funcionamiento es correcto, he decidido añadir el proyecto a un contenedor de
+docker para facilitar el despligue en otros equipos
 
 \subsection{Configuración del contenedor principal}
 
@@ -69,6 +120,7 @@ Uso de MLflow
 
 \subsection{Alertas y avisos}
 
-Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en directo y en diferido
+Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
+directo y en diferido
 
 Uso Prometheus, Grafana y Alertmanager este último conectado a otro servicio que se conecta a la API de whatsapp
