@@ -63,7 +63,7 @@ Por otra parte como mi intención es obtener métricas de comparación entre act
 archivos para tener un conjunto homogéneo. Además para mejorar el rendimiento y disminuir el tamaño de los archivos convierto los datos que estaban
 en formato csv a parquet.
 
-\section{Cálculo de características}
+\subsection{Cálculo de características}
 
 Una vez con los datos OHLCV limpios, llega el momento de aplicar diferentes funciones de diversas librerías para obtener características derivadas
 que servirán para alimentar a los modelos.
@@ -85,6 +85,15 @@ semana sea considerado como más importante a mayor número
 
 También filtro usando el algorítmo de LASSO usando un modelo de aprendizaje automático clásico de sklearn que permité mayor explicabilidad
 
+\subsection{Aprendizaje supervisado}
+
+El uso de modelos de aprendizaje supervisado se centra en modelos de clasificación binaria, en este caso en dos etapas, y dentro de cada etapa se
+utilizan dos modelos de aprendizaje profundo usando PyTorch, LSTM y GRU. Cada uno de los modelos utilizados tiene una función, LSTM ..., por su parte GRU.
+Para ambas fases se realiza una votación equitativa, si la media supera el umbral indicado para cada fase se pasa a la siguiente
+\notes{Probar a ver otros métodos de votación además de usar la media}
+
+Existe una tercera etapa, en este caso de regresión que sigue la misma lógica, usando los dos modelos
+
 \subsection{Aprendizaje no supervisado}
 
 Pasando ahora a los modelos, primero voy a explicar las dos situaciones donde voy a implementar modelos de aprendizaje no supervisado
@@ -93,7 +102,7 @@ En primer lugar para agrupar los diferentes activos en diferentes grupos. En vez
 juntas dejo que el sistema decida cuales son los activos más parecidos
 
 \todo{Decidir el algoritmo a usar para UL}
-\review{Prueba cuadro \textbackslash review}
+% \review{Prueba cuadro \textbackslash review}
 
 \section{Despliegue usando contenedores de Docker}
 
@@ -110,17 +119,24 @@ No requiere demasidos cambios ya que voy a copiar los códigos desarrollados den
 
 Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas
 
-\subsection{Orquestación}
-
-Uso de Airflow
-
-\subsection{MLOps}
-
-Uso de MLflow
-
 \subsection{Alertas y avisos}
 
 Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
 directo y en diferido
 
 Uso Prometheus, Grafana y Alertmanager este último conectado a otro servicio que se conecta a la API de whatsapp
+
+\subsection{Orquestación y MLOps}
+
+\notes{Tanto Airflow como MLflow, ver si hay tiempo para implementarlos}
+
+Una vez desplegado un sistema robusto que cuenta con un autómata funcional y con alertas tanto de seguridad como para mostrar información, decido
+implementar el uso de Airflow como orquestrador.
+
+En general el uso de Airflow está muy ligado al uso de MLflow ya que será el uso prinicpal de esta herramienta por mi parte.
+
+En MLflow 
+
+% \subsection{MLOps}
+
+% Uso de MLflow
