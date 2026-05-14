@@ -80,7 +80,7 @@
 \usepackage{lscape}
 \usepackage{afterpage}
 % =====Añadido por mí=====
-\usepackage{todonotes}
+\usepackage[colorinlistoftodos]{todonotes}
 \setuptodonotes{inline}
 \usepackage{minted}
 \usepackage{dirtree}
@@ -90,6 +90,8 @@
 \newcommand{\notes}[2][]{%
   \todo[color=blue!25,#1]{#2}%
 }
+\usepackage{longtable}
+\usepackage{booktabs}
 % ==========
 \begin{document}
 
