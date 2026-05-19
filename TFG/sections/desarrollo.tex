@@ -56,7 +56,7 @@ Después, decido filtrar los datos que claramente no deberían de estar, estos s
 las horas de descanso las mantengo por que pueden haber sido retrasos en la ejecución por lo que son operaciones reales no realizadas en el momento
 indicado.
 
-Una vez estandarizado el tiempo aprovecho la función de inferencia y añado una priemra columna derivada que indica el día de \textit{trading} aunque
+Una vez estandarizado el tiempo aprovecho la función de inferencia y añado una primera columna derivada que indica el día de \textit{trading} aunque
 al ser una fecha no se usará directamente para el entrenamiento si me ayudará para calcular valores acumulados diarios.
 
 Por otra parte como mi intención es obtener métricas de comparación entre activos decido recortar el número de filas disponibles en los diferentes
@@ -92,17 +92,119 @@ utilizan dos modelos de aprendizaje profundo usando PyTorch, LSTM y GRU. Cada un
 Para ambas fases se realiza una votación equitativa, si la media supera el umbral indicado para cada fase se pasa a la siguiente
 \notes{Probar a ver otros métodos de votación además de usar la media}
 
-Existe una tercera etapa, en este caso de regresión que sigue la misma lógica, usando los dos modelos
+Existe una tercera etapa, en este caso de regresión que sigue la misma lógica, usando los dos modelos que servirá para ayudar 
 
 \subsection{Aprendizaje no supervisado}
 
-Pasando ahora a los modelos, primero voy a explicar las dos situaciones donde voy a implementar modelos de aprendizaje no supervisado
+\notes{Pasar a planes de futuro}
 
-En primer lugar para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias por ejemplo todas las monedas
-juntas dejo que el sistema decida cuales son los activos más parecidos
+Además de usar modelos de aprendizaje supervisado tenía la idea de usar modelos no supervisados para un par de tareas
 
-\todo{Decidir el algoritmo a usar para UL}
+En primer lugar, para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias, por ejemplo, todas las modedas
+juntas, dejo que el sistema decida cuales son los activos más parecidos. De este modo podría generar más características derivadas de la comparación
+de los activos, basandome en el concepto de \textit{Pairs Trading} donde se comparan un par de activos que se saben que son correlados y cointegrados,
+y si uno de ellos sube más que el otro se abre una posición en corto y si uno de ellos baja más que el otro se abre una posición en largo.
+
+El problema que le encuentro a este primer caso de uso es la disparidad de datos, por una parte los datos históricos proporcionados no son de las
+mismas fechas, esto se soluciona fácilmente al recortar los datos más antiguos ya que además podrían causar problemas a los modelos. Pero donde
+existen más problemas es el tema de los horarios de las diferentes bolsas, la idea sería usar la función de rellenado hacia adelante para los
+momentos donde faltasen datos de alguno de los futuros. Otra opción sería comparar cada futuro con el centroide (el centro de cada cluster) del
+cluster al que pertenece cada futuro y el resto de centroides, de este modo se puede evitar problemas por la disparidad del número de futuros en cada
+cluster.
+
+Además de este problema está la necesidad de tomar la decisión de qué tipo de modelo no supervisado usar, si uno donde se predefine el número de
+clusters o uno donde el propio modelo decide el número (Decidir entre modelos paramétricos (k fijo) o modelos no paramétricos (k variable))
+
+El segundo uso es el de segmentar los régimenes de mercado. Con esta información hay dos opciones de acción, por una parte, usarlo como una
+característica más para complementar al resto, aunque puede no ser tan útil al usar modelos de aprendizaje supervisado profundo que al estar diseñados
+para manejar series temporales pueden inferir los régimenes de mercado por si solos. La segunda opción es usar la diferencia de régimenes para entrenar
+modelos dedicados para cada régimen consiguiendo modelos más especializados en cada régimen. Este uso tiene los mismos problemas que el primero
+
+\notes{Revisar esta afirmación}
+% Pasando ahora a los modelos, primero voy a explicar las dos situaciones donde voy a implementar modelos de aprendizaje no supervisado
+
+% En primer lugar para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias por ejemplo todas las monedas
+% juntas dejo que el sistema decida cuales son los activos más parecidos
+
+% \todo{Decidir el algoritmo a usar para UL}
 % \review{Prueba cuadro \textbackslash review}
+
+\subsection{Análisis de resultados de entrenamiento y Backtest de las predicciones}
+
+\subsection{Gestión de cartera}
+
+Una vez entrenados los modelos para cada futuro es necesario coordinarlos todos para que no hayan problemas de liquidez. Para ello en un primer
+momento decidí usar un método más rudimentario y manual para después pasar a la optimización de la cartera usando Pyomo
+
+En el primer caso se realizan los siguientes pasos
+
+\begin{enumerate}
+    \item Realizar todas las predicciones para todos los futuros disponibles en el momento temporal
+    \item Ordenar por nivel de confianza total
+    \item Iterar sobre cada predicción por este orden e ir comprobando si cumple con los requisitos para poder operar como la disponibilidad de
+    capital suficiente
+    \item Ejecutar las diferentes operaciones
+\end{enumerate}
+
+Una vez que tuve el sistema funcionando paso a implementar un optimizador usando Pyomo
+
+\notes{Explicar qué es Pyomo}
+
+Para ello sigo los siguiente paso para una optimización de un objetivo, en este caso máximizar el \textit{Sharpe Ratio}
+
+\begin{enumerate}
+    \item Definir variables
+    \item \dots
+\end{enumerate}
+
+\notes{Explicar qué es Sharpe Ratio}
+
+
+\review{Implementar la gestión de cartera}
+
+\subsection{Análisis de resultados de optimización y Backtest de las optimizaciones}
+
+\notes{Comparar respecto a usar todo el capital en un solo activo}
+
+\subsection{Manejo del riesgo}
+
+Una vez entrenados los modelos y antes de pasar a la operación es necesario definir el riesgo que uno está dispuesto a tener. La métrica más
+importante en este sentido es el \textit{Max Drawdown}, que define la mayor caida del valor neto de la cartera. En mi caso lo defino como un valor
+porcentual. Relacionado con esto está el porcentaje máximo de activo en posiciones abiertas que estoy dispuesto a mantener simultáneamente, es decir,
+el porcentaje máximo del equity expuesto. Esta métrica define el límite superior de capital que puede estar comprometido en operaciones abiertas en un
+momento dado, independientemente del apalancamiento implícito de cada instrumento \textit{Exposure Limit}.
+
+Por otra parte a la hora de operar hay que tener en cuenta que el spread al inicio y al final de las sesiones puede ser mayor que durante el resto del
+tiempo, por ello al tener información de las horas de mercado es posible decidir que para esos instantes temporales en vez de operar a en punto
+atrasar la toma de decisiones a 15 minutos despues o una vez que se supere un umbral de volumen.
+
+Por último como medida para estar al día con los datos de los futuros, cada semana se entrenan nuevos modelos o se afinan los modelos actuales y se
+comparan con los modelos actuales para comprobar cuales son mejores predictores de los datos de la última semana o mes
+
+\notes{Ver donde colocar mejor el último parrafo}
+
+\subsection{Operación}
+
+Una vez con todo preparado llega el momento de unir todo en un único código que será el que se conecte a la API de Interactive Brokers para realizar
+las operaciones.
+
+La operación tendrá los siguientes pasos
+
+\begin{enumerate}
+    \item Conexión a la API de Interactive Brokers
+    \item Lectura de los futuros sobre los que se van a operar
+    \item Descarga de los datos necesarios para realizar las predicciones
+    \item Carga de la información de configuración del sistema
+    \item Carga de los modelos, los escaladores, y la configuración individual de cada futuro
+    \item Cada X minutos realizar las predicciones de cada futuro
+\end{enumerate}
+
+\subsection{Logging}
+
+No es una fase per se, es algo que se debe implementar en las diferentes etapas del flujo para saber qué está pasando en cada parte y para poder
+llevar un registro de todo.
+
+\notes{Ejemplos de donde añadir logging}
 
 \section{Despliegue usando contenedores de Docker}
 
