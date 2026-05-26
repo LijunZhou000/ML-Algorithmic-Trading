@@ -215,11 +215,20 @@ docker para facilitar el despligue en otros equipos
 
 Por cómo he desarrollado el sistema y por velocidad todo va a estar incluido en un único contenedor.
 
-No requiere demasidos cambios ya que voy a copiar los códigos desarrollados dentro del contenedor
+No requiere demasidos cambios ya que voy a copiar los códigos desarrollados dentro del contenedor.
+
+De este modo se logra tener un entorno estático donde se han seleccionado todas las versiones de los diferentes paquetes usados en el proyecto
+
+Ademá, esto permite agrupar todas las funcionalidades que quiero implementar en un mismo lugar, diferentes contenedores con funciones dedicadas.
 
 \subsection{Bases de datos}
 
-Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas
+Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas. Por facilidad
+voy a guardar las estadísticas en archivos sqlite, aunque a futuro existe la posibilidad de pasar a MySQL si necesito más rendimiento
+
+Porñ
+
+\notes{Ver si con sqlite vale o pasar directamente a MySQL}
 
 \subsection{Alertas y avisos}
 

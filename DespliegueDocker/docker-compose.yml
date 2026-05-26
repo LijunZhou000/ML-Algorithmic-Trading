@@ -1,0 +1,31 @@
+
+version: "3.8"
+
+services:
+  tradingbot:
+    build:
+      context: ..
+      dockerfile: DespliegueDocker/tradingbot/Dockerfile
+    image: mlalgotrading/tradingbot:latest
+    container_name: tradingbot
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TZ: "UTC"
+    volumes:
+      - ../TradingBots:/app/TradingBots:rw
+      - ../Data:/app/Data:rw
+      - ./tradingbot_logs:/var/log/tradingbot
+    working_dir: /app/TradingBots
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    networks:
+      - mlnet
+
+networks:
+  mlnet:
+
+volumes:
+  tradingbot_logs:
+
