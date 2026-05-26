@@ -19,6 +19,7 @@ from ib_async import BracketOrder, MarketOrder
 import numpy as np
 from models_def import GoldLSTM_L1_Move, GoldLSTM_L2_Dir, GoldGRU_L1_Move, GoldGRU_L2_Dir
 from dataclasses import dataclass
+from tradepy.logging.logger import log_movement, log_balance
 
 
 # ==================== LOGGING (preparado para Grafana + Alertmanager) ====================
@@ -1109,6 +1110,13 @@ async def main():
     await detectar_huerfanas(ib, contract, df_bars)
     
     logger.info(f"🚀 Bot {SYMBOL} PyTorch + Scaler iniciado")
+    # Prueba: escribir un par de logs para que Promtail los capture (movements + balance)
+    try:
+        log_movement(SYMBOL, "long", 1234.56, 1)
+        log_balance(100000.0, 100100.0, 0.1)
+        logger.info("✅ Test logs escritos: movements & balance")
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudieron escribir logs de prueba: {e}")
  
     # Recuperar órdenes SL/TP activas tras reconexión
     current_pos = next((p.position for p in ib.positions() if p.contract.conId == contract.conId), 0.0)

@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "tradingbot"
+    static_configs:
+      - targets: ["tradingbot:8000"]   # puerto donde expongas prometheus_client
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "tradingbot"
+
+  - job_name: "pushgateway"
+    honor_labels: true                 # respeta labels que manda el bot
+    static_configs:
+      - targets: ["pushgateway:9091"]
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

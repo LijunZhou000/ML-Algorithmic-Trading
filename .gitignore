@@ -417,3 +417,48 @@ TSWLatexianTemp*
 
 /TradingBots/Img
 /TradingBots/Models
+
+# ── Docker: datos de runtime (generados, no configs) ────────────────────
+
+# Grafana: base de datos interna, plugins descargados, exports
+DespliegueDocker/grafana_db/
+
+# Loki: chunks e índices (pueden pesar GBs)
+DespliegueDocker/loki/loki_data/
+DespliegueDocker/loki_data/
+
+# Prometheus: series temporales (TSDB)
+DespliegueDocker/prometheus/data/
+
+# Logs del tradingbot montados en el contenedor
+DespliegueDocker/tradingbot_logs/
+
+# MLflow: artifacts y sqlite local
+DespliegueDocker/mlflow/mlruns/
+DespliegueDocker/mlflow/mlflow.db
+DespliegueDocker/mlflow/*.db
+
+# DB genérica (sqlite, dumps...)
+DespliegueDocker/db/
+
+# Promtail: posiciones de lectura de logs (estado interno)
+DespliegueDocker/promtail/positions.yaml
+
+# Variables de entorno con secrets
+.env
+.env.*
+!.env.example                    # la plantilla sí va al repo
+
+# ── Docker: archivos de build ────────────────────────────────────────────
+**/.dockerignore
+# Si tienes override local de compose
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Forzar configs que sí queremos versionar
+!DespliegueDocker/prometheus/prometheus.yml
+!DespliegueDocker/loki/loki-config.yaml
+!DespliegueDocker/promtail/promtail-config.yml
+!DespliegueDocker/grafana/provisioning/
+!DespliegueDocker/alertmanager/
+!DespliegueDocker/tradingbot/Dockerfile
