@@ -63,6 +63,13 @@ Por otra parte como mi intención es obtener métricas de comparación entre act
 archivos para tener un conjunto homogéneo. Además para mejorar el rendimiento y disminuir el tamaño de los archivos convierto los datos que estaban
 en formato csv a parquet.
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
+    \label{fig_mlp_2}
+\end{figure}
+
 \subsection{Cálculo de características}
 
 Una vez con los datos OHLCV limpios, llega el momento de aplicar diferentes funciones de diversas librerías para obtener características derivadas
@@ -93,6 +100,18 @@ Para ambas fases se realiza una votación equitativa, si la media supera el umbr
 \notes{Probar a ver otros métodos de votación además de usar la media}
 
 Existe una tercera etapa, en este caso de regresión que sigue la misma lógica, usando los dos modelos que servirá para ayudar 
+
+\begin{table}[H]
+\caption{Tabla comparativa de parámetros de los modelos}
+\label{table1mufaf_1}
+\begin{center}
+\begin{tabular}{ | c | c | c | c | c | }
+\hline
+1 & 2 & 3 & 4 & 5 \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
 
 \subsection{Aprendizaje no supervisado}
 
@@ -131,6 +150,13 @@ modelos dedicados para cada régimen consiguiendo modelos más especializados en
 
 \subsection{Análisis de resultados de entrenamiento y Backtest de las predicciones}
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con una simulación del Backtest}
+    \label{fig_mlp_5}
+\end{figure}
+
 \subsection{Gestión de cartera}
 
 Una vez entrenados los modelos para cada futuro es necesario coordinarlos todos para que no hayan problemas de liquidez. Para ello en un primer
@@ -162,9 +188,30 @@ Para ello sigo los siguiente paso para una optimización de un objetivo, en este
 
 \review{Implementar la gestión de cartera}
 
+\begin{table}[H]
+\caption{Tabla comparativa de gestión de riesgo}
+\label{table1mufaf_2}
+\begin{center}
+\begin{tabular}{ | c | c | c | c | c | }
+\hline
+1 & 2 & 3 & 4 & 5 \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
 \subsection{Análisis de resultados de optimización y Backtest de las optimizaciones}
 
 \notes{Comparar respecto a usar todo el capital en un solo activo}
+
+\subsection{Simulación de Monte Carlo}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con una simulación de Monte Carlo}
+    \label{fig_mlp_3}
+\end{figure}
 
 \subsection{Manejo del riesgo}
 
@@ -176,7 +223,7 @@ momento dado, independientemente del apalancamiento implícito de cada instrumen
 
 Por otra parte a la hora de operar hay que tener en cuenta que el spread al inicio y al final de las sesiones puede ser mayor que durante el resto del
 tiempo, por ello al tener información de las horas de mercado es posible decidir que para esos instantes temporales en vez de operar a en punto
-atrasar la toma de decisiones a 15 minutos despues o una vez que se supere un umbral de volumen.
+atrasar la toma de decisiones a 15 minutos después o una vez que se supere un umbral de volumen.
 
 Por último como medida para estar al día con los datos de los futuros, cada semana se entrenan nuevos modelos o se afinan los modelos actuales y se
 comparan con los modelos actuales para comprobar cuales son mejores predictores de los datos de la última semana o mes
@@ -230,12 +277,41 @@ Porñ
 
 \notes{Ver si con sqlite vale o pasar directamente a MySQL}
 
+\subsection{Visualización}
+
+Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
+directo y en diferido
+
+Para ello uso varios contenedores, pushgateway, prometheus, loki, promtail, y grafana.
+
+Prometheus y Pushgateway gestionan métricas; Promtail y Loki gestionan logs. Pushgateway y Promtail son los recolectores, mientras que Prometheus y
+Loki son los motores de almacenamiento y consulta.
+
+Toda la información se consume después en un \textit{dashboard} en grafana donde se agrupa toda la información.
+
+En la visualización se observan diferentes métricas empezando por las relacionadas con el rendimiento del sistema. Equity curve, max drawdown, sharpe
+ratio, volatilidad diaria, profit factor, win rate, rendimiento por futuro. Por otra parte están
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img dashboard grafana}
+    \label{fig_mlp_1}
+\end{figure}
+
 \subsection{Alertas y avisos}
 
 Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
 directo y en diferido
 
 Uso Prometheus, Grafana y Alertmanager este último conectado a otro servicio que se conecta a la API de whatsapp
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img Alertmanager o Slack}
+    \label{fig_mlp_4}
+\end{figure}
 
 \subsection{Orquestación y MLOps}
 
