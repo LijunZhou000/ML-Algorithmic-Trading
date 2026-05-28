@@ -22,8 +22,11 @@ import random
 import signal
 import sys
 import time
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+
+import requests
 
 
 DEFAULT_CATEGORIES = [
@@ -94,6 +97,8 @@ def main():
     parser.add_argument("--interval", "-i", type=float, default=2.0, help="Intervalo en segundos entre escrituras")
     parser.add_argument("--categories", "-c", nargs="*", default=DEFAULT_CATEGORIES, help="Categorias a generar (por defecto todas)")
     parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--pushgateway", "-p", default=os.getenv("PUSHGATEWAY_URL", ""), help="URL del Pushgateway (opcional) para exponer contadores de logs críticos")
+    parser.add_argument("--instance", "-n", default=os.getenv("INSTANCE", f"loki-gen-{os.getpid()}"), help="Instance label usado al enviar métricas al Pushgateway")
     args = parser.parse_args()
 
     base = Path(args.logdir)
@@ -110,6 +115,13 @@ def main():
 
     # Mantener un archivo por categoría
     files = {c: base / c / f"generator_{c}.log" for c in args.categories}
+
+    # Contadores de logs críticos (se enviarán al Pushgateway si se configura)
+    counters = defaultdict(int)
+
+    pushgateway = args.pushgateway.rstrip('/') if args.pushgateway else ''
+    push_job = 'logs'
+    push_instance = args.instance
 
     if args.verbose:
         print(f"Generando logs en: {base.resolve()}")
@@ -129,6 +141,21 @@ def main():
                 write_line(files[c], line)
                 if args.verbose:
                     print(f"WROTE {c}: {line}")
+                # Si es un log crítico (categoria 'errors'), incrementar contador
+                if c == 'errors' and pushgateway:
+                    counters['errors'] += 1
+                    # construir payload para Pushgateway (reemplaza grupo 'logs' con instancia)
+                    metric_name = 'log_errors_total'
+                    labels = {'category': 'errors'}
+                    label_str = '{' + ','.join(f'{k}="{v}"' for k, v in labels.items()) + '}'
+                    payload = f"# TYPE {metric_name} counter\n{metric_name}{label_str} {counters['errors']}\n"
+                    try:
+                        url = f"{pushgateway}/metrics/job/{push_job}/instance/{push_instance}"
+                        requests.put(url, data=payload, headers={"Content-Type": "text/plain; charset=utf-8"}, timeout=5)
+                        if args.verbose:
+                            print(f"Pushed counter to {url}: {metric_name}={counters['errors']}")
+                    except Exception as e:
+                        print(f"Error pushing counter to Pushgateway: {e}", file=sys.stderr)
             except Exception as e:
                 print(f"Error escribiendo en {c}: {e}", file=sys.stderr)
 
