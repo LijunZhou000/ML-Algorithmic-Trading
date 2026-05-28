@@ -88,6 +88,33 @@ services:
     depends_on:
       - loki
 
+  # --- Contenedores auxiliares para pruebas (generadores) -----------------
+  test_pushgenerator:
+    build:
+      context: ./tests
+      dockerfile: Dockerfile.pushgateway
+    image: mlalgotrading/test-pushgateway:latest
+    container_name: test_pushgateway
+    restart: unless-stopped
+    networks:
+      - mlnet
+    depends_on:
+      - pushgateway
+
+  test_loggenerator:
+    build:
+      context: ./tests
+      dockerfile: Dockerfile.loki_generator
+    image: mlalgotrading/test-loggenerator:latest
+    container_name: test_loggenerator
+    restart: unless-stopped
+    volumes:
+      - ./tradingbot_logs:/var/log/tradingbot:rw
+    networks:
+      - mlnet
+    depends_on:
+      - promtail
+
 networks:
   mlnet:
     driver: bridge
