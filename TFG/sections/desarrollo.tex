@@ -246,6 +246,12 @@ La operación tendrá los siguientes pasos
     \item Cada X minutos realizar las predicciones de cada futuro
 \end{enumerate}
 
+Como los futuros tienen fecha de caducidad obtengo una lista para cada futuro con el número de contratos activos y los ordeno para obtener el contrato
+con mayor volumen, minimizando el spread. En el caso de estar corriendo el código durante varios días seguidos el sistema realiza esta consulta una
+vez al día. En caso de que sigan habiendo contratos abiertos existen dos posibilidad dependiendo de cómo esté configurado, en el primer caso cierra
+esos contratos directamente, en el segundo caso comprueba la diferencia de volumen y si es menor de un umbral decide seguir con el contrato anterio,
+si no, hace como en el primer caso y cierra las posiciones.
+
 \subsection{Logging}
 
 No es una fase per se, es algo que se debe implementar en las diferentes etapas del flujo para saber qué está pasando en cada parte y para poder
