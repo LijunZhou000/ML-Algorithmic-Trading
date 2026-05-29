@@ -6,19 +6,27 @@ route:
   group_wait: 10s
   group_interval: 5m
   repeat_interval: 1h
-  receiver: 'webhook'
+  # Por defecto envía a Slack (configurada via SLACK_WEBHOOK_URL en .env)
+  receiver: 'slack'
 
   routes:
-    # Las alertas con label 'severity: critical' se envían al webhook (webhook.site)
+    # Las alertas con label 'severity: critical' se envían al webhook
     - match:
         severity: 'critical'
-      receiver: 'webhook'
-    # Por defecto, otras alertas también usan 'webhook'
+      receiver: 'slack'
 
 receivers:
+  - name: 'slack'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/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'
+        # Si quieres usar un canal diferente, define SLACK_CHANNEL en .env
+        channel: '#varios'
+        # Si dejas SLACK_DEFAULT_TEXT vacío, Alertmanager usará su plantilla por defecto
+        # text: ''
+
   - name: 'webhook'
     webhook_configs:
-      - url: 'https://webhook.site/your-uuid-here'
+      - url: 'https://hooks.slack.com/services/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'
 
   - name: 'discord'
     webhook_configs:
@@ -33,5 +41,6 @@ receivers:
         auth_password: 'your-smtp-password'
         auth_identity: 'your-email@example.com'
 
-# Nota: reemplaza 'https://webhook.site/your-uuid-here' por la URL que te
-# proporciona https://webhook.site/ para recibir las notificaciones.
+# Nota: reemplaza la variable WEBHOOK_URL por la URL que quieras usar.
+# Este archivo es una plantilla: el contenedor de Alertmanager lo procesará con
+# envsubst y generará la configuración final antes de arrancar Alertmanager.

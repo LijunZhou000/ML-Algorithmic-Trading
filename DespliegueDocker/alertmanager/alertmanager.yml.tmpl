@@ -6,15 +6,24 @@ route:
   group_wait: 10s
   group_interval: 5m
   repeat_interval: 1h
-  receiver: 'webhook'
+  # Por defecto envía a Slack (configurada via SLACK_WEBHOOK_URL en .env)
+  receiver: 'slack'
 
   routes:
     # Las alertas con label 'severity: critical' se envían al webhook
     - match:
         severity: 'critical'
-      receiver: 'webhook'
+      receiver: 'slack'
 
 receivers:
+  - name: 'slack'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        # Si quieres usar un canal diferente, define SLACK_CHANNEL en .env
+        channel: '${SLACK_CHANNEL}'
+        # Si dejas SLACK_DEFAULT_TEXT vacío, Alertmanager usará su plantilla por defecto
+        # text: '${SLACK_DEFAULT_TEXT}'
+
   - name: 'webhook'
     webhook_configs:
       - url: '${WEBHOOK_URL}'
