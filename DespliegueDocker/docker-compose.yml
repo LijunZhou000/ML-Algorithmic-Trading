@@ -98,6 +98,35 @@ services:
     depends_on:
       - loki
 
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+    networks:
+      - mlnet
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - mlnet
+  
   # --- Contenedores auxiliares para pruebas (generadores) -----------------
   test_pushgenerator:
     build:
@@ -136,4 +165,6 @@ volumes:
   prometheus_data:   # métricas históricas de prometheus
   loki_data:         # índices y chunks de loki
   alertmanager_data:
+  db:
+  pgadmin_data:
   # tradingbot_logs NO va aquí → es bind mount desde ./tradingbot_logs
