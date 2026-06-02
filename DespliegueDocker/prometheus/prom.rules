@@ -2,8 +2,8 @@ groups:
 - name: test_metrics_and_logs
   rules:
   - alert: HighRandomGauge
-    expr: test_random_gauge > 90
-    for: 1m
+    expr: test_random_gauge > 85
+    for: 0m
     labels:
       severity: warning
     annotations:
@@ -11,8 +11,8 @@ groups:
       description: "La métrica test_random_gauge supera 90 (valor: {{ $value }})"
 
   - alert: CriticalLogsDetected
-    expr: log_errors_total > 0
-    for: 1m
+    expr: rate(log_errors_total[1m]) > 0
+    for: 0m
     labels:
       severity: critical
     annotations:

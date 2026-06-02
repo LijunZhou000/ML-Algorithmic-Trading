@@ -100,6 +100,7 @@ services:
 
   postgres:
     image: postgres:13
+    container_name: postgres
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -113,6 +114,17 @@ services:
     restart: always
     networks:
       - mlnet
+  
+  db-init:
+    image: postgres:13
+    depends_on:
+      - postgres
+    entrypoint: >
+      sh -c "sleep 5 && psql postgresql://airflow:airflow@postgres:5432/airflow -f /scripts/create_demo_table.sql"
+    volumes:
+      - ./db:/scripts
+    networks:
+      - mlnet
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -120,10 +132,17 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./pgadmin/pgpass:/pgpass:ro
+    entrypoint: >
+      /entrypoint.sh
+    depends_on:
+      - postgres
     networks:
       - mlnet
   
@@ -156,6 +175,25 @@ services:
       - mlnet
     depends_on:
       - promtail
+
+  test_sqlwriter:
+    build:
+      context: ./tests
+      dockerfile: Dockerfile.sql_writer
+    image: mlalgotrading/test-sqlwriter:latest
+    container_name: test_sqlwriter
+    restart: unless-stopped
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=airflow
+      - PGUSER=airflow
+      - PGPASSWORD=airflow
+      - INSTANCE=test_sqlwriter
+    networks:
+      - mlnet
+    depends_on:
+      - postgres
 
 networks:
   mlnet:
