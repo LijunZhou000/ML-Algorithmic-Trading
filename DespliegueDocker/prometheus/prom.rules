@@ -18,3 +18,12 @@ groups:
     annotations:
       summary: "Logs críticos detectados"
       description: "Se han detectado logs de nivel ERROR por parte del generador. Valor: {{ $value }}"
+
+  - alert: SQLMetricAvgTooHigh
+    expr: demo_metrics_avg_last_n{metric_name="demo_metric"} > 40
+    for: 0m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Media de últimas 10 filas de {{ $labels.metric_name }} alta"
+      description: "La media es {{ $value }} (umbral 100)"

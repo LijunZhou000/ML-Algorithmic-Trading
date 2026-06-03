@@ -195,6 +195,30 @@ services:
     depends_on:
       - postgres
 
+  sql_pusher:
+    build:
+      context: ./sql_exporter
+      dockerfile: Dockerfile
+    image: mlalgotrading/sql-pusher:latest
+    container_name: sql_pusher
+    restart: unless-stopped
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=airflow
+      - PGUSER=airflow
+      - PGPASSWORD=airflow
+      - PUSHGATEWAY_URL=http://pushgateway:9091
+      - METRIC_NAME=demo_metric
+      - INTERVAL=30
+      - LIMIT=10
+      - JOB_NAME=sql_avg_job
+    networks:
+      - mlnet
+    depends_on:
+      - postgres
+      - pushgateway
+
 networks:
   mlnet:
     driver: bridge
