@@ -27,15 +27,40 @@ Para lograr este objetivo he decidido implementar la lógica del código dentro 
         .3 cleaner.py.
         .3 resampler.py.
         .3 to\_parquet.py.
-    .2 features.
+    .2 features.\DTcomment{Gran cantidad de archivos para ordenar las funciones que generar las características}.
     .2 supervised.
+        .3 load.py.
+        .3 models.py.
+        .3 target.py.
+        .3 pretrain.py.
+        .3 train.py.
+        .3 posttrain.py.
+        .3 evaluate.py.
+        .3 backtest.py.
     .2 unsupervised.
     .2 portfolio.
+        .3 optimizer.py.
+        .3 backtest.py.
     .2 risk.
+        .3 drawdown.py.
+        .3 spread.py.
     .2 execution.
+        .3 broker.py.
+        .3 live.py.
+        .3 orders.py.
+        .3 positions.py.
+        .3 killswitch.py.
     .2 logging.
+        .3 logeer.py.
     .2 retrain.
 }
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con el diagrama de cómo funcioan todo}
+    \label{fig_mlp_7}
+\end{figure}
 
 Hay funciones que están en algunos de los directorios que pueden servir para varias entapas del proceso, principalmente aquellas encargadas de
 obtener los datos desde los archivos.
@@ -264,6 +289,13 @@ llevar un registro de todo.
 Una vez que se ha desarrollado el autómata y se ha comprobado que su funcionamiento es correcto, he decidido añadir el proyecto a un contenedor de
 docker para facilitar el despliegue en otros equipos
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con el diagrama de cómo funcioan todo, los puertos usados, etc}
+    \label{fig_mlp_8}
+\end{figure}
+
 \subsection{Configuración del contenedor principal}
 
 Por cómo he desarrollado el sistema y por velocidad todo va a estar incluido en un único contenedor.
@@ -279,7 +311,40 @@ Ademá, esto permite agrupar todas las funcionalidades que quiero implementar en
 Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas. Por facilidad
 voy a guardar las estadísticas en archivos sqlite, aunque a futuro existe la posibilidad de pasar a MySQL si necesito más rendimiento
 
-Porñ
+Uso una base de datos relacional para guardar métricas de la operación y el historial de operaciones, además de guardarlo como archivos json como lo
+hacia antes. En este caso uso PostgreSQL y para poder visualizar con mayor facilidad los datos uso PgAdmin aunque tambien se puede ver parte de la
+información desde grafana, contenedor que se explica en el siguiente apartado.
+
+Como he mencionado anteriormente voy a guardar varios tipos de datos, por ello necesito diferentes tablas
+
+\notes{Detallar las tablas}
+
+\begin{longtable}{l l l}
+\caption{Estructura de la tabla \texttt{metrics}} \\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{3}{r}{\textit{Continúa en la siguiente página}} \\
+\midrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+id           & SERIAL            & Identificador único \\
+ts           & TIMESTAMPTZ       & Marca temporal de la métrica \\
+metric\_name & TEXT              & Nombre de la métrica (pnl, sharpe, latency, etc.) \\
+value        & DOUBLE PRECISION  & Valor numérico de la métrica \\
+tags         & JSONB             & Información adicional (símbolo, timeframe, etc.) \\
+\end{longtable}
 
 \notes{Ver si con sqlite vale o pasar directamente a MySQL}
 

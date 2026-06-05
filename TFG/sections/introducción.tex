@@ -9,16 +9,106 @@
 % Trabajo con 13 futuros [AD (Dólar Australiano), BP (Libra Esterlina), CL (Petróleo Crudo WTI), EC (Euro FX), ES (E-mini S&P 500), GC (Oro), MFXI (Micro Euro FX), NG (Gas Natural), NQ (E-mini Nasdaq 100), YM (E-mini Dow Jones), ZB (Bono del Tesoro 30Y), ZN (Nota del Tesoro 10Y), ZS (Soja)]
 El trading tradicional tiene el inconveniente de depender de los sentimientos humanos de cada persona.
 
-Por ello se creó el trading algorítmico donde las decisiones se toman por funciones matemáticas y umbrales fijados.
+Por ello se creó el trading algorítmico donde las decisiones se toman en base a funciones matemáticas y umbrales fijados.
 
 El siguiente paso dentro del trading algorítmico es el uso de modelos de aprendizaje automático que se entrenar usando diferentes características
-derivadas de la información obtenida de los diferentes activos financieros
+derivadas de la información obtenida de los diferentes activos financieros. Este trabajo se basa en esta premisa para operar sobre futuros
 
 Para empezar este trabajo tomé como referencia el libro \cite{Trullas2024}
 
 \notes{Mejorar el texto}
 
+\notes{Añadir breve explicación de los diferentes tipos de activos que existen}
+
+Se ha elegido la operación sobre futuros en vez de sobre otros activos por diversas razones.
+
+Las negociaciones se realizan en mercados regulados y centralizados (CME, MEFF, etc), garantizando transparencia y control disminuyendo los riesgos
+
+Ofrecen gran liquidez.
+
+Existe una estandarización de la información de los contratos, todos comparten especificaciones fijas, tamaño, tick, vencimiento, márgenes,
+simplificando la obtención, comparación y el tratamiento de los datos.
+
+El uso de márgenes permite operar usando apalancamiento permitiendo una ganancia potencial mayor, aunque tambien aumenta el riesgo, por ello es
+importante la gestión del mismo como se verá más adelante en el desarrollo. De este modo se pueden controlar posiciones más grandes con un capital
+limitado.
+
+No es necesario el cobro en la matería, si está apunto caducar un contrato es posible hacer rollover y pasar a un contrato posterior.
+
 \section{Objetivos}
+
+A continuación se describen los futuros sobre los que se va a operar
+
+% \begin{itemize}
+%     \item \textbf{AD - Australian Dollar}: Futuro sobre el dólar australiano frente al dólar estadounidense. Muy utilizado para estrategias macro y de divisas por su liquidez y comportamiento ligado a materias primas.
+
+%     \item \textbf{BP - British Pound}: Futuro sobre la libra esterlina. Presenta alta liquidez y es un instrumento clave para estrategias FX y cobertura frente a movimientos del Banco de Inglaterra.
+
+%     \item \textbf{CL - Crude Oil WTI}: Futuro del petróleo West Texas Intermediate. Uno de los contratos más negociados del mundo, con elevada volatilidad y sensibilidad a factores geopolíticos y de oferta-demanda.
+
+%     \item \textbf{EC - Euro FX}: Futuro del euro frente al dólar. Es el contrato de divisas más líquido del CME, adecuado para estrategias direccionales y de reversión a la media.
+
+%     \item \textbf{ES - E-mini S\&P 500}: Futuro del índice S\&P 500 en formato reducido. Altísima liquidez, baja latencia y comportamiento representativo del mercado estadounidense.
+
+%     \item \textbf{GC - Gold}: Futuro del oro. Activo refugio por excelencia, con dinámicas propias en periodos de incertidumbre macroeconómica y movimientos de tipos reales.
+
+%     \item \textbf{MFXI - Micro Euro FX (M6E)}: Versión micro del futuro del euro. Permite exposición granular con menor requerimiento de margen, ideal para estrategias de bajo tamaño o calibración fina.
+
+%     \item \textbf{NG - Natural Gas}: Futuro del gas natural. Destaca por su elevada volatilidad y fuerte estacionalidad, muy utilizado en estrategias de energía y spreads.
+
+%     \item \textbf{NQ - E-mini Nasdaq 100}: Futuro del índice Nasdaq 100. Más volátil que el ES, con fuerte exposición al sector tecnológico y movimientos rápidos en sesiones de alta actividad.
+
+%     \item \textbf{YM - E-mini Dow Jones}: Futuro del Dow Jones Industrial Average. Menos volátil que NQ y ES, con comportamiento más estable y representativo de empresas industriales.
+
+%     \item \textbf{ZB - 30Y US Treasury Bond}: Futuro del bono del Tesoro estadounidense a 30 años. Sensible a movimientos de tipos de interés y expectativas macro de largo plazo.
+
+%     \item \textbf{ZN - 10Y US Treasury Note}: Futuro del Treasury a 10 años. El contrato de renta fija más líquido del mundo, referencia clave para estrategias macro y de curva de tipos.
+
+%     \item \textbf{ZS - Soybean Futures}: Futuro de la soja. Presenta estacionalidad marcada y sensibilidad a factores climáticos y de oferta agrícola global.
+% \end{itemize}
+
+\begin{description}
+
+    \item[\textbf{AD - Australian Dollar}] \hfill \\
+    Futuro sobre el dólar australiano frente al dólar estadounidense. Muy utilizado en estrategias macro y ligadas a materias primas.
+
+    \item[\textbf{BP - British Pound}] \hfill \\
+    Futuro sobre la libra esterlina. Alta liquidez y relevancia en estrategias FX y cobertura frente a decisiones del Banco de Inglaterra.
+
+    \item[\textbf{CL - Crude Oil WTI}] \hfill \\
+    Futuro del petróleo WTI. Uno de los contratos más negociados del mundo, con elevada volatilidad y fuerte sensibilidad geopolítica.
+
+    \item[\textbf{EC - Euro FX}] \hfill \\
+    Futuro del euro frente al dólar. El contrato FX más líquido del CME, adecuado para estrategias direccionales y de reversión.
+
+    \item[\textbf{ES - E-mini S\&P 500}] \hfill \\
+    Futuro del índice S\&P 500 en formato reducido. Altísima liquidez y representatividad del mercado estadounidense.
+
+    \item[\textbf{GC - Gold}] \hfill \\
+    Futuro del oro. Activo refugio con dinámicas propias en periodos de incertidumbre y movimientos de tipos reales.
+
+    \item[\textbf{MFXI - Micro Euro FX (M6E)}] \hfill \\
+    Versión micro del futuro del euro. Permite exposición granular con menor margen, ideal para calibración fina.
+
+    \item[\textbf{NG - Natural Gas}] \hfill \\
+    Futuro del gas natural. Muy volátil y con fuerte estacionalidad, relevante en estrategias de energía.
+
+    \item[\textbf{NQ - E-mini Nasdaq 100}] \hfill \\
+    Futuro del Nasdaq 100. Más volátil que el ES, con fuerte exposición al sector tecnológico.
+
+    \item[\textbf{YM - E-mini Dow Jones}] \hfill \\
+    Futuro del Dow Jones Industrial Average. Menor volatilidad y comportamiento más estable que NQ y ES.
+
+    \item[\textbf{ZB - 30Y US Treasury Bond}] \hfill \\
+    Futuro del bono del Tesoro a 30 años. Muy sensible a expectativas macroeconómicas de largo plazo.
+
+    \item[\textbf{ZN - 10Y US Treasury Note}] \hfill \\
+    Futuro del Treasury a 10 años. El contrato de renta fija más líquido del mundo, referencia clave en estrategias macro.
+
+    \item[\textbf{ZS - Soybean Futures}] \hfill \\
+    Futuro de la soja. Presenta estacionalidad marcada y sensibilidad a factores climáticos y agrícolas globales.
+
+\end{description}
 
 \begin{longtable}{l l c r r r r}
 \caption{Características principales de los contratos de futuros analizados} \\
@@ -76,27 +166,43 @@ El núcleo del sistema funciona de la siguiente manera
 
 \begin{enumerate}
     \item Se cargan los datos minuto a minuto de uno de los futuros
-    \item Se estandariza el tiempo que aparece en las muestras a UTC
+    \item[$\blacksquare$] Se estandariza el tiempo que aparece en las muestras a UTC
     \item Se eliminan los datos que son claramente erróneos (fines de semana)
-    \item Se recortan los dataset para tener los mismos periodos para todos los futuros
+    \item[$\blacksquare$] Se recortan los dataset para tener los mismos periodos para todos los futuros
     \item Se añade el día de negociación al que pertenece cada dato
     \item[$\blacksquare$] Visualizar los datos originales limpios 
     \item Obtener la información actualizada de los diferentes futuros
     \item Muestreo de los datos en diferentes periodos
     \item Cálculo de los datos acumulados a partir de los datos originales
     \item Cálculo de las características que se usarán para entrenar los modelos de aprendizaje automático
-    \item Analizar las nuevas características para revisar si la información tiene sentido
+    \item Analizar las nuevas características para revisar si la información tiene sentido y si se han filtrado datos futuros por usar mal las
+    fórmulas
     \item Decidir algunas de las características que no se usarán manualmente por criterios como la no estacionalidad
     \item Calcular la variable objetivo que los modelos supervisados tratarán de predecir
     \item Filtrar más características usando modelos supervisados tradicionales que permitan mayor explicabilidad
     \item Calcular los parámetros que se utilizaran para definir el entrenamiento de los modelos
     \item Entrenar los modelos por separado
-    \item Durante cada época del entrenamiento se usan los modelos no supervisado para detectar el régimen de mercado actual y usar esta información
+    \item[$\blacksquare$] Durante cada época del entrenamiento se usan los modelos no supervisado para detectar el régimen de mercado actual y usar esta información
     como características adicionales para el modelo
     \item Búsqueda de los umbrales de confianza más adecuados para cada modelo y evaluación de los resultados de la predicción usando métricas
     estandar de clasificación y métricas dedicadas de finanzas
     \item Guardar los mejores modelos
+    \item Usar optimización para poder operar todos los futuros a la vez con una cartera, evitando gastar más de lo que tenemos
+    \item Comprobar que este modo es mejor que dejar todo en un solo futuro 
+    \item Definir los límites extremos de seguridad para la operación
+    \item Ejecutar el sistema
+    \item Monitorizar y guardar la información
+    \item Analizar el rendimiento del sistema para poder añadir mejoras
+    \item Dockerizar todo el sistema
 \end{enumerate}
 
 \notes{Revisar clustering para comparar futuros y para segmentación de modelos}
 \review{Dejar UL para futuro mejor}
+
+El objetivo último de este trabajo es poder poner el uso la mayor cantidad de conocimiento obtenido de estos años de estudio en un solo trabajo,
+incluyendo principalmente programación en Python, despliegue del trabajo en Docker, entrenamiento de modelos de Machine Learning, optimización, etc
+
+\notes{Añadir más cosas}
+
+Hay parte del conocimiento que no he podido incluir por falta de tiempo, todo lo relacionado a teoría de la información, entropía de Shannon,
+información mutua, etc.
