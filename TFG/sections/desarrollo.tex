@@ -132,18 +132,22 @@ En un primer análisis me doy cuenta de que los datos temporales no están regul
 Usando de referencia las horas de apertura y cierre de cada futuro, agrupo el volumen por horas para cada activo puedo detectar las horas con poca
 o nula actividad, con ello puedo inferir la zona horaría usada.
 
-\todo{Explicar mejor cómo funciona la función de inferencia}
+\todo{Explicar mejor cómo funciona la función de inferencia, decidir si pasar a UTC o no}
 
-Después, decido filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana. Los pedidos realoizados en
-las horas de descanso las mantengo por que pueden haber sido retrasos en la ejecución por lo que son operaciones reales no realizadas en el momento
-indicado.
+Después de un análisis inicial, decido filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana.
+Los pedidos realizados en las horas de descanso las mantengo por que pueden haber sido retrasos en la ejecución por lo que son operaciones reales
+no realizadas en el momento debido.
 
 Una vez estandarizado el tiempo aprovecho la función de inferencia y añado una primera columna derivada que indica el día de \textit{trading} aunque
-al ser una fecha no se usará directamente para el entrenamiento si me ayudará para calcular valores acumulados diarios.
+al ser una fecha no se usará directamente para el entrenamiento, pero sí me ayudará para calcular valores acumulados diarios, que a su vez servirán
+para calcular otras variables
+
+\notes{Creo que esto no me da tiempo a hacerlo}
 
 Por otra parte como mi intención es obtener métricas de comparación entre activos decido recortar el número de filas disponibles en los diferentes
 archivos para tener un conjunto homogéneo. Además para mejorar el rendimiento y disminuir el tamaño de los archivos convierto los datos que estaban
-en formato csv a parquet.
+en formato csv a parquet. Una ventaja extra de parque es la habilidad de poder guardar los datos en diferentes particiones y poder leer las
+particiones que uno necesite, en mi caso realizo las particiones por año y por mes.
 
 \begin{figure}[h]
     \centering
@@ -163,6 +167,42 @@ características obtenidas de comparar diferentes activos
 
 Para obtener estas características primero agrupo los datos que venían minuto a minuto a agrupaciones de 4 horas, de esto modo se evita tener el
 ruido de señales tan cortas y es un buen número para una estratégia interdía donde una posición puede estar abierta varios días
+
+Las características están divididas en subcarpetas dependiendo de su tipo, en algunos casos existe aún más división si hay demasiadas funciones
+
+\begin{description}
+
+\item[\textbf{derived}] \hfill \\
+Características derivadas de otras series básicas. Incluye transformaciones estadísticas, normalizaciones, estandarizaciones y combinaciones no triviales de indicadores primarios.
+
+\item[\textbf{momentum}] \hfill \\
+Indicadores de momento y aceleración del precio. Contiene osciladores, ROC (Rate of Change) y medidas de fuerza relativa basadas en variaciones porcentuales.
+
+\item[\textbf{returns}] \hfill \\
+Cálculo de retornos simples, logarítmicos y acumulados. Incluye funciones para medir variaciones relativas entre barras y construir series de rendimiento.
+
+\item[\textbf{selection}] \hfill \\
+Módulo destinado a la selección de características. Puede incluir filtros, ranking de importancia, eliminación de colinealidad o criterios de calidad.
+
+\item[\textbf{structural}] \hfill \\
+Características que describen la estructura interna de las velas y del microcomportamiento del precio. Incluye patrones de velas, proporciones OHLC y medidas de microestructura.
+
+\item[\textbf{swings}] \hfill \\
+Detección de swings, pivotes y estructuras de máximos/mínimos relevantes. Útil para identificar cambios de tendencia y puntos de giro.
+
+\item[\textbf{temporal}] \hfill \\
+Variables temporales: hora, minuto, día de la semana, estacionalidades, ciclos intradía y cualquier codificación temporal relevante.
+
+\item[\textbf{trend}] \hfill \\
+Indicadores de tendencia: medias móviles, MACD, ADX, fuerza de tendencia y medidas de persistencia direccional.
+
+\item[\textbf{volatility}] \hfill \\
+Medidas de volatilidad histórica y realizada. Incluye ATR, bandas de Bollinger, rangos, dispersión de precios y estimadores de volatilidad intradía.
+
+\item[\textbf{volume}] \hfill \\
+Características basadas en volumen: flujo de órdenes, volumen relativo, volumen por precio, desequilibrio comprador/vendedor y estadísticas derivadas del volumen.
+
+\end{description}
 
 \subsection{Selección de características}
 
@@ -220,6 +260,9 @@ El segundo uso es el de segmentar los régimenes de mercado. Con esta informaci�
 característica más para complementar al resto, aunque puede no ser tan útil al usar modelos de aprendizaje supervisado profundo que al estar diseñados
 para manejar series temporales pueden inferir los régimenes de mercado por si solos. La segunda opción es usar la diferencia de régimenes para entrenar
 modelos dedicados para cada régimen consiguiendo modelos más especializados en cada régimen. Este uso tiene los mismos problemas que el primero
+
+Otra utilidad relacionada con la agrupación es poder comparar modelos entrenados para otros activos pero aplicados a un activo del mismo grupo para
+ver si es mejor. 
 
 \notes{Revisar esta afirmación}
 % Pasando ahora a los modelos, primero voy a explicar las dos situaciones donde voy a implementar modelos de aprendizaje no supervisado
@@ -357,7 +400,7 @@ docker para facilitar el despliegue en otros equipos
 
 Por cómo he desarrollado el sistema y por velocidad todo va a estar incluido en un único contenedor.
 
-No requiere demasidos cambios ya que voy a copiar los códigos desarrollados dentro del contenedor.
+No requiere demasiados cambios ya que voy a copiar los códigos desarrollados dentro del contenedor.
 
 De este modo se logra tener un entorno estático donde se han seleccionado todas las versiones de los diferentes paquetes usados en el proyecto
 
@@ -451,6 +494,8 @@ implementar el uso de Airflow como orquestrador.
 En general el uso de Airflow está muy ligado al uso de MLflow ya que será el uso prinicpal de esta herramienta por mi parte.
 
 En MLflow 
+
+Comparativa de modelos, entre el modelo en uso y nuevos modelos
 
 \review{No me da la RAM, hay que separar, despliegue de solo MLflow y Airflow}
 
