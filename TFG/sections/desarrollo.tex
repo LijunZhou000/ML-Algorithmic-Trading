@@ -272,12 +272,352 @@ Existe una tercera etapa, en este caso de regresión que sigue la misma lógica,
 
 \begin{figure}[h]
     \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img de las arquitecturas}
+    \begin{tikzpicture}[
+        >=LaTeX, % Use default LaTeX arrows
+        % Styles 
+        cell/.style={ % RNN cell
+            rectangle, 
+            rounded corners=5mm, 
+            draw,
+            very thick,
+            minimum height=4cm,
+            minimum width=6cm
+        }, 
+        cellc/.style={ % RNN cells in a chain
+            cell,
+            on chain,
+            join
+        },
+        input/.style={ % Input or output node
+            circle,
+            minimum width=2.25em,
+            draw,
+            fill=gray!10,
+            thick
+        },
+        hidden/.style={ % Hidden state
+        },
+        func/.style={ % Functions
+            rectangle,
+            draw,
+            inner sep=2pt,
+            minimum height=0.4cm
+        },
+        op/.style={ % Operators
+            circle,
+            draw,
+            inner sep=-0.5pt,
+            minimum height=0.4cm,
+        },
+        pointwise/.style={ % Pointwise operations and functions
+            fill=gray!50,
+        },
+        arrow/.style={
+            -latex,
+            very thick
+        },
+        arrowc1/.style={ % Arrows with rounded corners
+            arrow,
+            rounded corners=.25cm
+        },
+        arrowc2/.style={ % Arrows with big rounded corners
+            arrow,
+            rounded corners=.5cm
+        },
+        backprop/.style={ % Backpropagation arrows
+            arrow,
+            dashed,
+            gray
+        }
+    ]
+    
+        % LSTM cell
+        \node [cell] at (0,0){};
+    
+        % Internal functions and operators
+        \node [func] (sigf) at (-2,-0.75) {$\sigma$};
+        \node [func] (sigi) at (-1.4,-0.75) {$\sigma$};
+        \node [func] (tanhi) at (-0.5,-0.75) {$\tanh$};
+        \node [func] (sigo) at (0.5,-0.75) {$\sigma$};
+        \node [func, pointwise] (tanho) at (1.5,0.75) {$\tanh$};
+        \node [op, pointwise] (mulf) at (-2,1.5) {$\times$};
+        \node [op, pointwise] (add) at (-0.5,1.5) {+};
+        \node [op, pointwise] (muli) at (-0.5,0) {$\times$};
+        \node [op, pointwise] (mulo) at (1.5,0) {$\times$};
+    
+        % Inputs, outputs and hidden states
+        \node[hidden] (ct-1) at (-4,1.5) {$\mathbf{c}_{t-1}$};
+        \node[hidden] (ht-1) at (-4,-1.5) {$\mathbf{h}_{t-1}$};
+        \node[input] (x) at (-2.5,-3) {$\mathbf{x}_{t}$};
+        \node[hidden] (ct) at (4,1.5) {$\mathbf{c}_{t}$};
+        \node[hidden] (ht) at (4,-1.5) {$\mathbf{h}_{t}$};
+        \node[input] (y) at (2.5,3) {$\hat{\mathbf{y}}_{t}$};
+    
+        % Arrows from input and previous hidden states h_{t-1} and c_{t-1}
+        \draw [arrowc1, -] (x) -- (x |- ht-1) -| (tanhi);
+        \draw [arrowc2, -] (ht-1) -| (sigo);
+        \draw [arrowc1, -] (ht-1 -| sigf)++(-0.5,0) -| (sigf); 
+        \draw [arrowc1, -] (ht-1 -| sigi)++(-0.5,0) -| (sigi);
+        \draw [arrowc1, -] (ht-1 -| tanhi)++(-0.5,0) -| (tanhi);
+        \draw [arrow] (ct-1) -- (mulf) -- (add) -- (ct);
+    
+        % Arrows for operation flow within LSTM gates
+        \draw [arrow] (sigf) -- node[midway, left] {$\mathbf{f}_t$} (mulf);
+        \draw [arrowc2] (sigi) |- node[midway, xshift=-1.5, yshift=1.5] {$\mathbf{i}_t$} (muli);
+        \draw [arrow] (tanhi) -- node[midway, xshift=12, yshift=1.5] {$\tilde{\mathbf{c}}_t$} (muli);
+        \draw [arrowc2] (sigo) |- node[midway, xshift=-1.5, yshift=1.5] {$\mathbf{o}_t$} (mulo);
+        \draw [arrow] (muli) -- (add);
+        \draw [arrowc1] (add -| tanho) ++(-0.5,0) -| (tanho);
+        \draw [arrow] (tanho) -- (mulo);
+    
+        % Arrows to output and current hidden states h_t
+        \draw [arrowc2] (mulo) |- (ht);
+        \draw (ct -| y) ++(0,-0.1) coordinate (i1);
+        \draw [arrowc2, -] (ht -| y) ++(-0.5,0) -| (i1);
+        \draw [arrow] (i1) ++(0,0.2) -- (y);
+    \end{tikzpicture}
+    \caption{Añadir img de la arquitectura LSTM, \cite{nntikz}}
     \label{fig_mlp_9}
 \end{figure}
 
+\begin{figure}[h]
+    \centering
+    \begin{tikzpicture}[
+        >=LaTeX, % Use default LaTeX arrows
+        % Styles 
+        cell/.style={ % RNN cell
+            rectangle, 
+            rounded corners=5mm, 
+            draw,
+            very thick,
+            minimum height=4cm,
+            minimum width=6cm
+        }, 
+        cellc/.style={ % RNN cells in a chain
+            cell,
+            on chain,
+            join
+        },
+        input/.style={ % Input or output node
+            circle,
+            minimum width=2.25em,
+            draw,
+            fill=gray!10,
+            thick
+        },
+        hidden/.style={ % Hidden state
+        },
+        func/.style={ % Functions
+            rectangle,
+            draw,
+            inner sep=2pt,
+            minimum height=0.4cm
+        },
+        op/.style={ % Operators
+            circle,
+            draw,
+            inner sep=-0.5pt,
+            minimum height=0.4cm,
+        },
+        pointwise/.style={ % Pointwise operations and functions
+            fill=gray!50,
+        },
+        arrow/.style={
+            -latex,
+            very thick
+        },
+        arrowc1/.style={ % Arrows with rounded corners
+            arrow,
+            rounded corners=.25cm
+        },
+        arrowc2/.style={ % Arrows with big rounded corners
+            arrow,
+            rounded corners=.5cm
+        },
+        backprop/.style={ % Backpropagation arrows
+            arrow,
+            dashed,
+            gray
+        }
+    ]
+    
+        % GRU cell
+        \node [cell] at (0,0){};
+
+        % Internal functions and operators
+        \node [func] (sigr) at (-0.75,-0.75) {$\sigma$};
+        \node [func] (sigz) at (0,-0.75) {$\sigma$};
+        \node [func] (tanh) at (2,-0.75) {$\tanh$};
+        \node [func, pointwise] (minus) at (0,0.5) {$1-$};
+        \node [op, pointwise] (mulr) at (-1.5,0) {$\times$};
+        \node [op, pointwise] (mulz) at (0,1.5) {$\times$};
+        \node [op, pointwise] (add) at (2,1.5) {$+$};
+        \node [op, pointwise] (mulh) at (2,0) {$\times$};
+
+        % Inputs, outputs and hidden states
+        \node[hidden] (ht-1) at (-4,1.5) {$\mathbf{h}_{t-1}$};
+        \node[input] (x) at (-2.5,-3) {$\mathbf{x}_{t}$};
+        \node[hidden] (ht) at (4,1.5) {$\mathbf{h}_{t}$};
+        \node[input] (y) at (2.5,3) {$\hat{\mathbf{y}}_{t}$};
+
+        % Arrows from input and previous hidden states h_{t-1}
+        \draw [arrowc1] (ht-1) -- (mulz) -- (add) -- (ht);
+        \draw [arrowc1, -] (x) |- (-2.25, -1.4) ++(sigr);
+        \draw [arrowc1, -] (x) |- (-2.25, -1.75) ++(sigr);
+        \draw [arrowc1, -] (x -| sigz) ++(-1, 1.6) -| (sigz);
+        \draw [arrowc1, -] (x -| sigr) ++(-1.5, 1.6) -| (sigr);
+        \draw [arrowc1, -] (ht-1.east) -| (mulr);
+        \draw [arrowc1, -] (ht-1) -| (-2.5,0) ++(x);
+        \draw [arrowc1, -] (x) ++(0,3) |- (-1,-1.4) ++(tanh);
+        \draw [arrowc2, -] (x -| tanh) ++(-4.25, 1.25) -| (tanh);
+
+        % Arrows for operation flow within LSTM gates
+        \draw [arrowc1, -] (mulr) -- ++(0,-1.3);
+        \draw [arrowc1, -] (mulr) ++(0,-1.55) |- (0,-1.75) ++(tanh);
+        \draw [arrowc1] (sigr) |-  node[midway, shift={(-2pt,4pt)}] {$\mathbf{r}_t$} (mulr.east);
+        \draw [arrowc2] (sigz) |- (mulh);
+        \draw [arrowc2] (tanh) -- node[midway, shift={(12pt,1.5pt)}] {$\tilde{\mathbf{h}}_t$} (mulh);
+        \draw [arrowc2] (minus) -- (mulz);
+        \draw [arrowc2] (sigz) -- node[midway, left] {$\mathbf{z}_t$} (minus);
+        \draw [arrowc2] (mulh) -- (add);
+
+        % Arrows to output and current hidden states h_t
+        \draw [arrowc1] (add) coordinate[auto] -|(y);
+    \end{tikzpicture}
+    \caption{Añadir img de la arquitectura GRU, \cite{nntikz}}
+    \label{fig_mlp_10}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img de las capas de las redes LSTM}
+    \label{fig_mlp_11}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img de las capas de las redes GRU}
+    \label{fig_mlp_12}
+\end{figure}
+
 La decisión de usar dos etapas de clasificación es debido al desvalanceo de clases
+
+% \begin{tikzpicture}[
+%   font=\sffamily\footnotesize,
+%   node distance = 4.5mm,
+%   %
+%   % Generic rounded box
+%   blk/.style = {
+%     draw, rounded corners=5pt,
+%     minimum width=6.2cm, minimum height=10mm,
+%     align=center, text depth=1pt,
+%     blur shadow={shadow blur steps=4, shadow xshift=.8pt,
+%                  shadow yshift=-.8pt, shadow opacity=25}
+%   },
+%   % Specific fills
+%   Iblk/.style = {blk, fill=Cblue,   draw=Cblue.b},
+%   Gblk/.style = {blk, fill=Cgreen,  draw=Cgreen.b},
+%   Ablk/.style = {blk, fill=Camber,  draw=Camber.b},
+%   Yblk/.style = {blk, fill=Cyellow, draw=Cyellow.b},
+%   Pblk/.style = {blk, fill=Cpurple, draw=Cpurple.b},
+%   Sblk/.style = {blk, fill=Csalmon, draw=Csalmon.b, minimum width=6.2cm},
+%   Dblk/.style = {blk, fill=Cgray,   draw=Cgray.b,   minimum width=6.2cm},
+%   Oblk/.style = {blk, fill=Cteal,   draw=Cteal.b},
+%   %
+%   % Arrow
+%   arr/.style  = {-{Stealth[length=5.5pt, width=4.5pt]}, line width=1.2pt, color=black!55},
+%   %
+%   % Group-label style
+%   glbl/.style = {font=\sffamily\scriptsize\bfseries, anchor=west},
+% ]
+ 
+% %% ── TITLE ──────────────────────────────────────────────────────────
+% \node[font=\sffamily\normalsize\bfseries, text=black!80]
+%   (title) {\texttt{GoldGRU\_L2\_Dir}  –  arquitectura de capas};
+ 
+% %% ── LAYER NODES ────────────────────────────────────────────────────
+% \node[Iblk, below=7mm of title]  (input)
+%   {$\mathbf{X}\;\in\;\mathbb{R}^{B\;\times\;T\;\times\;d_{\mathrm{in}}}$};
+ 
+% \node[Gblk, below=of input]  (gru1)
+%   {GRU – capa 1 \quad $d_{\mathrm{in}} \!\to\! 128$};
+ 
+% \node[Gblk, below=of gru1]   (gru2)
+%   {GRU – capa 2 \quad $128 \!\to\! 128$,\;dropout $= 0.3$};
+ 
+% \node[Ablk, below=of gru2]   (attn)
+%   {Atención: \;Linear$(128\!\to\!1)$ + Softmax\;($\alpha_t$)};
+ 
+% \node[Yblk, below=of attn]   (wsum)
+%   {Suma ponderada: \;$\displaystyle\sum_t \alpha_t\,\mathbf{h}_t
+%     \;\in\;\mathbb{R}^{B\times 128}$};
+ 
+% \node[Yblk, below=of wsum]   (ln)
+%   {LayerNorm$(128)$};
+ 
+% %% Head
+% \node[Pblk, below=of ln]     (lin1) {Linear\;$128\!\to\!64$};
+% \node[Sblk, below=of lin1]   (ge1)  {GELU};
+% \node[Dblk, below=of ge1]    (dr1)  {Dropout\;$(p=0.3)$};
+ 
+% \node[Pblk, below=of dr1]    (lin2) {Linear\;$64\!\to\!32$};
+% \node[Sblk, below=of lin2]   (ge2)  {GELU};
+% \node[Dblk, below=of ge2]    (dr2)  {Dropout\;$(p=0.2)$};
+ 
+% \node[Pblk, below=of dr2]    (lin3) {Linear\;$32\!\to\!2$};
+ 
+% \node[Oblk, below=of lin3]   (out)
+%   {Logits:\;\textbf{[SELL,\;BUY]}};
+ 
+% %% ── ARROWS ─────────────────────────────────────────────────────────
+% \foreach \A/\B in {
+%   input/gru1, gru1/gru2, gru2/attn, attn/wsum, wsum/ln,
+%   ln/lin1, lin1/ge1, ge1/dr1, dr1/lin2,
+%   lin2/ge2, ge2/dr2, dr2/lin3, lin3/out}
+% {\draw[arr] (\A) -- (\B);}
+ 
+% %% ── BACKGROUND GROUP BOXES ─────────────────────────────────────────
+% \begin{scope}[on background layer]
+ 
+%   \node[fit=(gru1)(gru2),
+%         draw=Cgreen.b, fill=Cgreen!18,
+%         rounded corners=7pt, inner sep=5pt,
+%         label={[glbl, text=Cgreen.b]right:{GRU Encoder}}] {};
+ 
+%   \node[fit=(attn)(wsum),
+%         draw=Camber.b, fill=Camber!18,
+%         rounded corners=7pt, inner sep=5pt,
+%         label={[glbl, text=Camber.b]right:{Attention\\[-1pt]Pooling}}] {};
+ 
+%   \node[fit=(ln),
+%         draw=Cyellow.b, fill=Cyellow!18,
+%         rounded corners=7pt, inner sep=5pt,
+%         label={[glbl, text=Cyellow.b]right:{Normaliz.}}] {};
+ 
+%   \node[fit=(lin1)(ge1)(dr1)(lin2)(ge2)(dr2)(lin3),
+%         draw=Cpurple.b, fill=Cpurple!12,
+%         rounded corners=7pt, inner sep=5pt,
+%         label={[glbl, text=Cpurple.b]right:{FC\\[-1pt]Head}}] {};
+ 
+% \end{scope}
+ 
+% %% ── DIM ANNOTATIONS on the left ────────────────────────────────────
+% \newcommand{\dimlbl}[2]{%   #1=node, #2=text
+%   \node[font=\sffamily\tiny, text=black!45, anchor=east,
+%         xshift=-4pt] at (#1.west) {#2};}
+ 
+% \dimlbl{gru1}{$(B,T,128)$}
+% \dimlbl{gru2}{$(B,T,128)$}
+% \dimlbl{wsum}{$(B,128)$}
+% \dimlbl{ln}  {$(B,128)$}
+% \dimlbl{lin1}{$(B,64)$}
+% \dimlbl{lin2}{$(B,32)$}
+% \dimlbl{out} {$(B,2)$}
+ 
+% \end{tikzpicture}
+
 
 \subsection{Aprendizaje no supervisado}
 
