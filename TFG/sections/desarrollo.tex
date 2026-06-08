@@ -248,9 +248,12 @@ El uso de modelos de aprendizaje supervisado se centra en modelos de clasificaci
 utilizan dos modelos de aprendizaje profundo usando PyTorch, LSTM y GRU. Cada uno de los modelos utilizados tiene una función, LSTM ..., por su parte
 GRU. Para ambas fases se realiza una votación equitativa, si la media supera el umbral indicado para cada fase se pasa a la siguiente. Existe una
 tercera capa que tambien usa ambos modelos pero en vez de ser de clasificación es de regresión, se usan los valores de ambas regresiones para realizar
-la votación, en mi caso uso una regresión que predice el retorno logarítmicos a X velas.
+la votación, en mi caso uso una regresión que predice el retorno logarítmicos a X velas, de este modo se le puede dar más importancia a la que prediga
+mayor retorno en vez de hacer la media aritmética.
 
 Había pensado también en usar modelos de aprendizaje automático clásicos porque pueden captar otras cosas.
+
+\notes{Indicar por qué usar dos modelos diferentes qué features captura cada uno}
 
 \notes{Probar a ver otros métodos de votación además de usar la media}
 
@@ -502,7 +505,15 @@ Existe una tercera etapa, en este caso de regresión que sigue la misma lógica,
     \label{fig_mlp_12}
 \end{figure}
 
-La decisión de usar dos etapas de clasificación es debido al desvalanceo de clases
+La decisión de usar dos etapas de clasificación es debido al desbalanceo de clases al generar el valor a predecir me doy cuenta de que aproximadamente
+el 70\% de las velas terminan tocando la barrera del tiempo y los otros dos se reparten 15\% cada uno, en un inicio probé modelos con salida triple
+pero debido al desbalance no daba muy buenos resultados incluso modificando los pesos de los valores dando mayor peso a ambas barreras no temporales
+no habían resultados favorables por ello decidí pasar a dos fases binarias, una primera predice si hay movimiento, si toca cualquiera de las dos
+barreras laterales y en caso de superar un umbral que se establece después se pasa a la siguiente fase donde se decide la dirección del movimiento,
+aquí tambien se decide más adelante el umbral a partir del cual se considera valido, existen dos opciones de decisión, que exista un umbral mínimo o
+que con que uno supere al otro por más mínima diferencia se decanta por ese, al final después de probar me decanté por añadir un umbral mínimo.
+
+\notes{Se me ha olvidado qué queria poner de más}
 
 % \begin{tikzpicture}[
 %   font=\sffamily\footnotesize,
