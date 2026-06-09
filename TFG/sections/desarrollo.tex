@@ -634,6 +634,41 @@ que con que uno supere al otro por más mínima diferencia se decanta por ese, a
 El entrenamiento de los modelos se hace para cada modelo por separado, entrenando las tres fases juntos, se usa un sistema de walk forward con moving
 window, que es la técnica requerida para entrenamiento con series temporales.
 
+\notes{Explicar qué es el entrenamiento en walk forward y la variante con moving window}
+
+Lo primero es calcular los hiperparámetros idóneos para cada entrenamiento teniendo en cuenta el tamaño de cada dataset, el periodo de muestreo y el
+número de velas a futuro a predecir. Se obtienen así los siguiente hiperparámetros.
+
+\begin{description}
+    \item[\textbf{lookback}] \hfill \\
+    Número de velas hacia atrás que se pasa a cada momento temporal
+
+    \item[\textbf{train\_size}] \hfill \\
+    Tamaño del bloque de entrenamiento para cada iteración
+
+    \item[\textbf{test\_size}] \hfill \\
+    Tamaño del bloque de prueba para cada iteración
+
+    \item[\textbf{gap}] \hfill \\
+    Número de velas de separación entre el final de una iteración y el comienzo de la siguiente. Sirve para evitar filtrado de datos
+\end{description}
+
+Después de obtener estos datos pasamos a crear los dataset que se van a usar en cada época teniendo en cuenta el lookback calculado en el paso
+anterior.
+
+Pasamos al entrenamiento en sí, como se mencionaba antes entrenamos todas las capas a la vez pero de manera independiente. Lo primero que se hace es
+para cada etapa separar los datos en train y test acto seguido se usa un scaler para escalar los datos de entrenamiento, se hace en este orden para
+evitar leakage que ocurriria si se aplicase el scaler directamente a train y test. Se entrena primero L1 y después L2 y por último L3. El resultado
+del entrenamiento es un dataset con la predicción de cada capa y la confianza que tiene en dicha predicción.
+
+Depués de entrenar se decide primero buscar los umbrales de confianza adecuados para las dos primeras capas, ya que la tercera al ser una capa de
+regresión no cuenta con una confianza. Se usa la métrica de aprendizaje automático de f1 macro ya que no se ve afectada por el desbalance de clases
+como sí ocurre con accuray, precision o recall.
+
+Se guardan los modelos en archivos pth, junto al último scaler, ya que el scaler se actualiza con cada grupo de datos. Además de guardar las features
+usadas para poder filtrar después durante el backtest y la operación y los parámetros del modelo usado, como el umbral de confianza.
+\notes{Faltan cosas por explicar}
+
 \subsection{Aprendizaje no supervisado}
 
 \notes{Pasar a planes de futuro}
@@ -680,6 +715,22 @@ ver si es mejor.
     \caption{Añadir img con una simulación del Backtest}
     \label{fig_mlp_5}
 \end{figure}
+
+Tras el entrenamiento de los modelos es necesario analizar qué tan buenos son, primero usando métricas puras tanto de clasificación como de regresión
+y después también métricas de trading.
+
+En el primero caso, para clasificación existe el classification report que nos da un conjunto de las métricas más populares. Para regresión calculamos
+las métricas
+
+Después de comprobar que nos convencen los resultados pasamos al backtest, que es parecido a simular una operación real con los modelos solo que
+carece de algunas desventajas como la latencia o el spread. Aún así es un muy punto de partida para ver qué tal se deselvuenve el modelo. En este caso
+las métricas a usar son Max Drawdown, Sharpe Ratio y Alpha
+
+\begin{description}
+    \item[Max Drawdown] 
+    \item[Sharpe Ratio] 
+    \item[Alpha] 
+\end{description}
 
 \subsection{Gestión de cartera}
 
@@ -728,6 +779,8 @@ Para ello sigo los siguiente paso para una optimización de un objetivo, en este
 
 \notes{Comparar respecto a usar todo el capital en un solo activo}
 
+Pasamos a realizar otro backtest, además de comparar con la operaciónde un solo activo.
+
 \subsection{Simulación de Monte Carlo}
 
 \begin{figure}[h]
@@ -736,6 +789,8 @@ Para ello sigo los siguiente paso para una optimización de un objetivo, en este
     \caption{Añadir img con una simulación de Monte Carlo}
     \label{fig_mlp_3}
 \end{figure}
+
+Como complemento de los backtest he decidido realizar una simulación de montecarlo
 
 \subsection{Manejo del riesgo}
 
@@ -785,8 +840,64 @@ La operación tendrá los siguientes pasos
 Como los futuros tienen fecha de caducidad obtengo una lista para cada futuro con el número de contratos activos y los ordeno para obtener el contrato
 con mayor volumen, minimizando el spread. En el caso de estar corriendo el código durante varios días seguidos el sistema realiza esta consulta una
 vez al día. En caso de que sigan habiendo contratos abiertos existen dos posibilidad dependiendo de cómo esté configurado, en el primer caso cierra
-esos contratos directamente, en el segundo caso comprueba la diferencia de volumen y si es menor de un umbral decide seguir con el contrato anterio,
+esos contratos directamente, en el segundo caso comprueba la diferencia de volumen y si es menor de un umbral decide seguir con el contrato anterior,
 si no, hace como en el primer caso y cierra las posiciones.
+
+Existe la posibilidad de elegir el comportamiento a la hora de comprar un activo, la opción más sencilla es que si sale que hay movimiento se hace
+long o short abriendo una sola posición, podría usarse el log return para decidir abrir más posiciones siempre respetando los límites de capital
+impuestos por el brocker y por uno mismo. Otra opción es a la hora de una segunda y sucesivas predicciones, como se ha mencionado antes se puede
+decidir no hacer nada en caso de seguir con la misma predicción pero también se puede decidir añadir más posiciones ya sea usando el mismo umbral de
+confianza o pidiendo un umbral mayor, y que en este caso si no supera el nuevo umbral pero si el original mantener la posición. En el caso de que la
+señal sea la opuesta que la original se cierra la posición anteriormente abierta y abrir una posición opuesta a la anterior, en el caso de una
+predicción neutra se puede elegir si cerrar o dejar que siga hasta llegar a alguna de las tres barreras o a alguna predicción diferente, todo esto se
+configura en un json.
+
+En otro json se guardan todas las operaciones que se realizan
+
+\begin{minted}{json}
+    {
+        "id": 1248,
+        "symbol": "GC",
+        "status": "closed",
+        "side": "long",
+        "quantity": 1,
+
+        "timestamp_open": "2024-03-12T10:40:00Z",
+        "timestamp_close": "2024-03-13T14:00:00Z",
+
+        "entry_price": 2145.3,
+        "exit_price": 2162.7,
+        "stop_loss": 2138.0,
+        "take_profit": 2170.0,
+
+        "pnl": 174.0,
+        "pnl_pct": 0.81,
+        "return": 0.0081,
+
+        "max_favorable_excursion": 0.0124,
+        "max_adverse_excursion": -0.0048,
+
+        "model_signal": "BUY",
+        "model_confidence_l1": 0.87,
+        "model_confidence_l2": 0.72,
+        "model_reg_value": 0.0045,
+        "thresholds_used": {
+            "threshold_move": 0.55,
+            "threshold_dir": 0.60
+        },
+
+        "commission": 2.5,
+        "slippage": 0.0,
+
+        "equity_before": 10234.5,
+        "equity_after": 10408.5,
+
+        "bar_index_open": 58291,
+        "bar_index_close": 58347,
+        "duration_bars": 56,
+        "duration_minutes": 1344
+    }
+\end{minted}
 
 \subsection{Logging}
 
@@ -813,9 +924,12 @@ Por cómo he desarrollado el sistema y por velocidad todo va a estar incluido en
 
 No requiere demasiados cambios ya que voy a copiar los códigos desarrollados dentro del contenedor.
 
-De este modo se logra tener un entorno estático donde se han seleccionado todas las versiones de los diferentes paquetes usados en el proyecto
+De este modo se logra tener un entorno estático donde se han seleccionado todas las versiones de los diferentes paquetes usados en el proyecto.
 
-Ademá, esto permite agrupar todas las funcionalidades que quiero implementar en un mismo lugar, diferentes contenedores con funciones dedicadas.
+Además, esto permite agrupar todas las funcionalidades que quiero implementar en un mismo lugar, en lugar de tener diferentes contenedores con
+funciones dedicadas.
+
+El contenedor ejecuta el código de operación que se encarga de todo.
 
 \subsection{Bases de datos}
 
@@ -861,17 +975,17 @@ tags         & JSONB             & Información adicional (símbolo, timeframe, 
 
 \subsection{Visualización}
 
-Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
-directo y en diferido
+Por último, una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
+directo y en diferido.
 
 Para ello uso varios contenedores, pushgateway, prometheus, loki, promtail, y grafana.
 
 Prometheus y Pushgateway gestionan métricas; Promtail y Loki gestionan logs. Pushgateway y Promtail son los recolectores, mientras que Prometheus y
-Loki son los motores de almacenamiento y consulta.
+Loki son los motores de almacenamiento y consulta. Por parte de SQL, Grafana tiene conexión directa con el contenedor de Docker que lo alberga.
 
 Toda la información se consume después en un \textit{dashboard} en grafana donde se agrupa toda la información.
 
-En la visualización se observan diferentes métricas empezando por las relacionadas con el rendimiento del sistema. Equity curve, max drawdown, sharpe
+En la visualización se observan diferentes métricas empezando por las relacionadas con el rendimiento del sistema, Equity curve, max drawdown, sharpe
 ratio, volatilidad diaria, profit factor, win rate, rendimiento por futuro. Por otra parte están
 
 \begin{figure}[h]
@@ -883,10 +997,13 @@ ratio, volatilidad diaria, profit factor, win rate, rendimiento por futuro. Por 
 
 \subsection{Alertas y avisos}
 
-Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
-directo y en diferido
+% Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
+% directo y en diferido
 
-Uso Prometheus, Grafana y Alertmanager este último conectado a otro servicio que se conecta a la API de whatsapp
+% Uso Prometheus, Grafana y Alertmanager este último conectado a otro servicio que se conecta a la API de whatsapp
+
+Además de grafana consideraba buena idea tener un sistema de alerta para recibir notificaciones de grandes eventos, estos se definer por reglas en
+Alertmanager. Cuando salta alguna de las reglas el sistema envia una notificación al móvil a través de Slack que se ha configurado usando una API key.
 
 \begin{figure}[h]
     \centering
