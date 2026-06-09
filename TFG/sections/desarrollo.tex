@@ -247,7 +247,7 @@ determinado.
 El uso de modelos de aprendizaje supervisado se centra en modelos de clasificación binaria, en este caso en dos etapas, y dentro de cada etapa se
 utilizan dos modelos de aprendizaje profundo usando PyTorch, LSTM y GRU. Cada uno de los modelos utilizados tiene una función, LSTM ..., por su parte
 GRU. Para ambas fases se realiza una votación equitativa, si la media supera el umbral indicado para cada fase se pasa a la siguiente. Existe una
-tercera capa que tambien usa ambos modelos pero en vez de ser de clasificación es de regresión, se usan los valores de ambas regresiones para realizar
+tercera capa que también usa ambos modelos pero en vez de ser de clasificación es de regresión, se usan los valores de ambas regresiones para realizar
 la votación, en mi caso uso una regresión que predice el retorno logarítmicos a X velas, de este modo se le puede dar más importancia a la que prediga
 mayor retorno en vez de hacer la media aritmética.
 
@@ -510,7 +510,7 @@ el 70\% de las velas terminan tocando la barrera del tiempo y los otros dos se r
 pero debido al desbalance no daba muy buenos resultados incluso modificando los pesos de los valores dando mayor peso a ambas barreras no temporales
 no habían resultados favorables por ello decidí pasar a dos fases binarias, una primera predice si hay movimiento, si toca cualquiera de las dos
 barreras laterales y en caso de superar un umbral que se establece después se pasa a la siguiente fase donde se decide la dirección del movimiento,
-aquí tambien se decide más adelante el umbral a partir del cual se considera valido, existen dos opciones de decisión, que exista un umbral mínimo o
+aquí también se decide más adelante el umbral a partir del cual se considera valido, existen dos opciones de decisión, que exista un umbral mínimo o
 que con que uno supere al otro por más mínima diferencia se decanta por ese, al final después de probar me decanté por añadir un umbral mínimo.
 
 \notes{Se me ha olvidado qué queria poner de más}
@@ -629,6 +629,10 @@ que con que uno supere al otro por más mínima diferencia se decanta por ese, a
  
 % \end{tikzpicture}
 
+\notes{Explicar entrenamiento}
+
+El entrenamiento de los modelos se hace para cada modelo por separado, entrenando las tres fases juntos, se usa un sistema de walk forward con moving
+window, que es la técnica requerida para entrenamiento con series temporales.
 
 \subsection{Aprendizaje no supervisado}
 
@@ -736,19 +740,31 @@ Para ello sigo los siguiente paso para una optimización de un objetivo, en este
 \subsection{Manejo del riesgo}
 
 Una vez entrenados los modelos y antes de pasar a la operación es necesario definir el riesgo que uno está dispuesto a tener. La métrica más
-importante en este sentido es el \textit{Max Drawdown}, que define la mayor caida del valor neto de la cartera. En mi caso lo defino como un valor
-porcentual. Relacionado con esto está el porcentaje máximo de activo en posiciones abiertas que estoy dispuesto a mantener simultáneamente, es decir,
-el porcentaje máximo del equity expuesto. Esta métrica define el límite superior de capital que puede estar comprometido en operaciones abiertas en un
-momento dado, independientemente del apalancamiento implícito de cada instrumento \textit{Exposure Limit}.
+importante en este sentido es el \textit{Max Drawdown}, que define la mayor caida del valor neto de la cartera que estamos dispuestos a aceptar, si se
+llega a ese límite, se cierran todas las posiciones del resto de activos. En mi caso lo defino como un valor porcentual. Relacionado con esto está el
+porcentaje máximo de activo en posiciones abiertas que estoy dispuesto a mantener simultáneamente, es decir, el porcentaje máximo del equity expuesto.
+Esta métrica define el límite superior de capital que puede estar comprometido en operaciones abiertas en un momento dado, independientemente del
+apalancamiento implícito de cada instrumento \textit{Exposure Limit}.
 
 Por otra parte a la hora de operar hay que tener en cuenta que el spread al inicio y al final de las sesiones puede ser mayor que durante el resto del
-tiempo, por ello al tener información de las horas de mercado es posible decidir que para esos instantes temporales en vez de operar a en punto
-atrasar la toma de decisiones a 15 minutos después o una vez que se supere un umbral de volumen.
+tiempo, por ello al tener información de las horas de mercado es posible decidir que para esos instantes temporales en vez de operar a en punto,
+decido atrasar la toma de decisiones a 15 minutos después o una vez que se supere un umbral de volumen en la apertura y adelantar 15 minutos o más si
+el volumen disminuye. El volumen puede servir en todas las horas para evitar slippage.
 
 Por último como medida para estar al día con los datos de los futuros, cada semana se entrenan nuevos modelos o se afinan los modelos actuales y se
-comparan con los modelos actuales para comprobar cuales son mejores predictores de los datos de la última semana o mes
+comparan con los modelos actuales para comprobar cuales son mejores predictores de los datos de la última semana o mes. Esto se explicará en más
+detalle en la sección de orquestración.
 
 \notes{Ver donde colocar mejor el último parrafo}
+
+En el caso de haber seguido con el clustering usando aprendizaje no supervisado también se podría indicar un umbral máximo de exposición por grupo,
+evitando así que en el caso de que las señales positivas pertenezcan todas a un único grupo y este haya sido predicho incorrectamente perder demasiado
+capital.
+
+También se realizan comprobación para la integridad de los datos que Open esté entre Low y High, etc
+
+\notes{Poner más ejemplos}
+
 
 \subsection{Operación}
 
