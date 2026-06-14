@@ -218,6 +218,11 @@ diferentes características, donde destacan la gran cantidad de valores nulos en
 rellenar los valores faltantes con el último valor disponible. Hay algunas características que requieren de cierto número de velas inciiales para su
 cálculo, estas primeras filas se puede eliminar sin problema ya que representan un porcentaje ínfimo del total de filas de datos.
 
+\notes{Hacer alusión al libro}
+
+En un inicio añadí solo todas las features que aparecian en el libro de \cite{Trullas2024} pero decidí añadir más para tener mayor variedad con
+features más complejas.
+
 \subsection{Selección de características}
 
 Una vez calculadas todas las características es necesario reducir ese número porque es posible que muchas de ellas estén interrelacionadas.
@@ -642,6 +647,8 @@ window, que es la técnica requerida para entrenamiento con series temporales.
 
 \notes{Explicar qué es el entrenamiento en walk forward y la variante con moving window}
 
+\notes{Explicar por qué para series temporales no sirve cross validation clásico}
+
 Lo primero es calcular los hiperparámetros idóneos para cada entrenamiento teniendo en cuenta el tamaño de cada dataset, el periodo de muestreo y el
 número de velas a futuro a predecir. Se obtienen así los siguiente hiperparámetros.
 
@@ -674,6 +681,10 @@ como sí ocurre con accuray, precision o recall.
 Se guardan los modelos en archivos pth, junto al último scaler, ya que el scaler se actualiza con cada grupo de datos. Además de guardar las features
 usadas para poder filtrar después durante el backtest y la operación y los parámetros del modelo usado, como el umbral de confianza.
 \notes{Faltan cosas por explicar}
+
+\notes{Quizás meter shap con deepexplainer}
+
+\notes{Explicar por qué usar un tipo de scaler y no otro}
 
 \subsection{Aprendizaje no supervisado}
 
@@ -732,6 +743,10 @@ Después de comprobar que nos convencen los resultados pasamos al backtest, que 
 carece de algunas desventajas como la latencia o el spread. Aún así es un muy punto de partida para ver qué tal se deselvuenve el modelo. En este caso
 las métricas a usar son Max Drawdown, Sharpe Ratio y Alpha
 
+\notes{Ver si se puede meter un contador con racha de victorias y derrotas}
+
+\notes{Indicar diferencias backtest vs real}
+
 \begin{description}
     \item[Max Drawdown] 
     \item[Sharpe Ratio] 
@@ -788,6 +803,16 @@ Para ello sigo los siguiente paso para una optimización de un objetivo, en este
 Pasamos a realizar otro backtest, además de comparar con la operaciónde un solo activo.
 
 \subsection{Simulación de Monte Carlo}
+
+Existen dos grandes grupos de simulaciones de Monte Carlo, basados en los resultados del backtest y los que alteran los valores de entrada de los
+modelos.
+
+En el primer grupo
+
+En el segundo grupo
+
+En mi caso veo a usar una de las variantes del primer grupo denominado Bootstraping Monte Carlo donde se permutan grupos pequeños de
+resutlados en vez de uno solo
 
 \begin{figure}[h]
     \centering
