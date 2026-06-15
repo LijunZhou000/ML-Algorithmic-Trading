@@ -50,6 +50,136 @@ def evaluate_model_classification(full_results):
 
     return {"accuracy": acc, "f1_macro": f1}
 
+
+def evaluate_model_classification_3level(full_results):
+    """
+    Evalúa el modelo 3-level completo: L1 (movimiento), L2 (dirección), L3 (log_return)
+    """
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+    
+    df = full_results.copy()
+    
+    y_true = df['actual'].astype(int)
+    y_pred = df['pred'].astype(int)
+    
+    print("\n" + "="*80)
+    print("📊 EVALUACIÓN COMPLETA DEL MODELO 3-LEVEL")
+    print("="*80)
+    
+    # ===== NIVEL 1: MOVIMIENTO (0/1) =====
+    print("\n🔹 NIVEL 1 - MOVIMIENTO (¿Hay acción?)")
+    print("-" * 50)
+    y_l1_true = (y_true != 1).astype(int)  # Reconstruir: 0=HOLD, 1=ACCIÓN
+    y_l1_pred = (y_pred != 1).astype(int)
+    
+    from sklearn.metrics import precision_score, recall_score
+    l1_prec = precision_score(y_l1_true, y_l1_pred, zero_division=0)
+    l1_rec = recall_score(y_l1_true, y_l1_pred, zero_division=0)
+    l1_f1 = f1_score(y_l1_true, y_l1_pred, zero_division=0)
+    
+    print(f"Precision (detectar movimiento): {l1_prec:.4f}")
+    print(f"Recall (no perder movimientos):  {l1_rec:.4f}")
+    print(f"F1-Score:                        {l1_f1:.4f}")
+    
+    # ===== NIVEL 2: DIRECCIÓN (0/1 = SELL/BUY, solo donde L1=1) =====
+    print("\n🔹 NIVEL 2 - DIRECCIÓN (¿SELL o BUY? | Solo si L1=1)")
+    print("-" * 50)
+    
+    # Filtrar solo donde hay movimiento real (y_true != 1)
+    mask_l2 = (y_true != 1)
+    if mask_l2.sum() > 0:
+        y_l2_true_all = np.where(y_true == 2, 1, 0)  # 0=SELL(0), 1=BUY(2)
+        y_l2_pred_all = np.where(y_pred == 2, 1, 0)
+        
+        y_l2_true = y_l2_true_all[mask_l2]
+        y_l2_pred = y_l2_pred_all[mask_l2]
+        
+        l2_prec = precision_score(y_l2_true, y_l2_pred, zero_division=0)
+        l2_rec = recall_score(y_l2_true, y_l2_pred, zero_division=0)
+        l2_f1 = f1_score(y_l2_true, y_l2_pred, zero_division=0)
+        
+        print(f"Muestras con movimiento real: {mask_l2.sum()} / {len(y_true)}")
+        print(f"Precision (acertar dirección): {l2_prec:.4f}")
+        print(f"Recall (no perder BUYs):       {l2_rec:.4f}")
+        print(f"F1-Score:                      {l2_f1:.4f}")
+    else:
+        print("⚠️ No hay movimientos en los datos")
+    
+    # ===== NIVEL 3: LOG RETURN =====
+    if 'pred_logret' in df.columns:
+        print("\n🔹 NIVEL 3 - PREDICCIÓN DE LOG RETURN (magnitud)")
+        print("-" * 50)
+        
+        pred_logret = df['pred_logret'].values
+        
+        # Asumir que tenemos ground truth de log_return si no, usar NA
+        if 'actual_logret' in df.columns:
+            actual_logret = df['actual_logret'].values
+            valid_idx = ~np.isnan(actual_logret)
+            
+            if valid_idx.sum() > 0:
+                mae = mean_absolute_error(actual_logret[valid_idx], pred_logret[valid_idx])
+                rmse = np.sqrt(mean_squared_error(actual_logret[valid_idx], pred_logret[valid_idx]))
+                
+                print(f"Muestras con log_return: {valid_idx.sum()} / {len(df)}")
+                print(f"MAE (Log Return):        {mae:.6f}")
+                print(f"RMSE (Log Return):       {rmse:.6f}")
+                print(f"Media de predicciones:   {pred_logret[valid_idx].mean():.6f}")
+                print(f"Std de predicciones:     {pred_logret[valid_idx].std():.6f}")
+        else:
+            print(f"Predicciones de log_return (media):  {pred_logret.mean():.6f}")
+            print(f"Predicciones de log_return (std):    {pred_logret.std():.6f}")
+            print(f"Predicciones de log_return (min):    {pred_logret.min():.6f}")
+            print(f"Predicciones de log_return (max):    {pred_logret.max():.6f}")
+    
+    # ===== RESUMEN GLOBAL =====
+    print("\n" + "="*80)
+    print("⭐ RESUMEN GLOBAL")
+    print("="*80)
+    
+    f1_macro = f1_score(y_true, y_pred, average='macro')
+    acc = accuracy_score(y_true, y_pred)
+    
+    print(f"Accuracy Overall:          {acc:.4f}")
+    print(f"F1-Score Macro (0/1/2):    {f1_macro:.4f}")
+    
+    # Confusion Matrix
+    cm = confusion_matrix(y_true, y_pred)
+    cm_norm = confusion_matrix(y_true, y_pred, normalize='true')
+    
+    fig, ax = plt.subplots(1, 2, figsize=(13, 5))
+    
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax[0], 
+                xticklabels=['SELL(0)', 'HOLD(1)', 'BUY(2)'], 
+                yticklabels=['SELL(0)', 'HOLD(1)', 'BUY(2)'])
+    ax[0].set_title("Confusion Matrix (Conteos Absolutos)")
+    ax[0].set_ylabel("Real")
+    ax[0].set_xlabel("Predicción")
+    
+    sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='RdYlGn', ax=ax[1],
+                xticklabels=['SELL(0)', 'HOLD(1)', 'BUY(2)'], 
+                yticklabels=['SELL(0)', 'HOLD(1)', 'BUY(2)'])
+    ax[1].set_title("Confusion Matrix (Recall Normalizado)")
+    ax[1].set_ylabel("Real")
+    ax[1].set_xlabel("Predicción")
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Classification Report completo
+    print("\n📋 CLASSIFICATION REPORT DETALLADO:")
+    print(classification_report(y_true, y_pred, 
+                               target_names=['SELL (0)', 'HOLD (1)', 'BUY (2)'], 
+                               zero_division=0))
+    
+    return {
+        "accuracy": acc, 
+        "f1_macro": f1_macro,
+        "l1_f1": l1_f1,
+        "l2_f1": l2_f1 if 'l2_f1' in locals() else None,
+    }
+
+
 def tune_threshold_wf(
     all_step_results,
     move_thresholds=np.arange(0.50, 0.95, 0.05),
@@ -131,6 +261,145 @@ def tune_threshold_wf(
 
     return {'threshold_move': best_tm, 'threshold_dir': best_td, 'score_train': best_score, 'score_val': score_val}
 
+
+def tune_threshold_wf_3level(
+    all_step_results,
+    move_thresholds=np.arange(0.50, 0.95, 0.05),
+    dir_thresholds=list(np.arange(0.50, 0.80, 0.05)) + [None],
+    logret_thresholds=None,  # None = no usar L3 en filtering; list = umbrales de magnitude
+    train_split=0.7,
+    metric='f1_macro',
+    use_logret_weighting=False,  # Si True, ponderar confianza por |log_return|
+):
+    """
+    Búsqueda de thresholds óptimos para 3-level considerando L3 (log_return).
+    
+    Args:
+        all_step_results: List de DataFrames con predictions y prob_*
+        move_thresholds: Array de thresholds para L1
+        dir_thresholds: Array de thresholds para L2
+        logret_thresholds: Array de magnitudes mínimas de log_return (None = ignorar)
+        use_logret_weighting: Si True, ponderar pred por |pred_logret|
+        metric: 'f1_macro', 'f1_sell', 'f1_buy', 'precision_sell'
+    """
+    from sklearn.metrics import f1_score, precision_score
+    from itertools import product
+    
+    n_folds = len(all_step_results)
+    split = int(n_folds * train_split)
+    
+    df_tr = pd.concat(all_step_results[:split]).reset_index(drop=True)
+    df_va = pd.concat(all_step_results[split:]).reset_index(drop=True)
+    
+    # Default: no filtrar por log_return
+    if logret_thresholds is None:
+        logret_thresholds = [0.0]
+    
+    def apply_thresholds_3level(df, tm, td, tlr, use_weighting=False):
+        """
+        Aplicar thresholds considerando L3
+        tm: threshold movement (L1)
+        td: threshold direction (L2)
+        tlr: threshold log_return magnitude (L3)
+        """
+        prob_move = df['prob_move'].values
+        prob_buy = df['prob_buy'].values
+        prob_sell = df['prob_sell'].values
+        
+        preds = np.ones(len(df), dtype=int)  # HOLD por defecto
+        move_mask = prob_move > tm
+        
+        # Inicializar dirección predicha
+        if td is None:
+            dir_pred = np.where(prob_buy > prob_sell, 2, 0)
+        else:
+            buy_conf = prob_buy > td
+            sell_conf = prob_sell > td
+            conflict = buy_conf & sell_conf
+            
+            dir_pred = np.full(len(df), -1)
+            dir_pred[buy_conf & ~conflict] = 2
+            dir_pred[sell_conf & ~conflict] = 0
+        
+        # Filtrar por L3 (log_return magnitude)
+        if 'pred_logret' in df.columns:
+            logret_magnitude = np.abs(df['pred_logret'].values)
+            logret_mask = logret_magnitude > tlr
+        else:
+            logret_mask = np.ones(len(df), dtype=bool)
+        
+        # Aplicar thresholds
+        if td is None:
+            apply_mask = move_mask & logret_mask
+            preds[apply_mask] = dir_pred[apply_mask]
+        else:
+            apply_mask = move_mask & (dir_pred != -1) & logret_mask
+            preds[apply_mask] = dir_pred[apply_mask]
+        
+        return preds
+    
+    def score(y_true, y_pred):
+        if metric == 'f1_macro':
+            return f1_score(y_true, y_pred, average='macro', zero_division=0)
+        elif metric == 'f1_sell':
+            return f1_score(y_true, y_pred, average=None, zero_division=0, labels=[0,1,2])[0]
+        elif metric == 'f1_buy':
+            return f1_score(y_true, y_pred, average=None, zero_division=0, labels=[0,1,2])[2]
+        elif metric == 'precision_sell':
+            return precision_score(y_true, y_pred, average=None, zero_division=0, labels=[0,1,2])[0]
+    
+    y_tr = df_tr['actual'].astype(int).values
+    y_va = df_va['actual'].astype(int).values
+    
+    best_score, best_tm, best_td, best_tlr = 0, 0.7, None, 0.0
+    results_grid = []
+    
+    print(f"\n🔍 Búsqueda de thresholds óptimos...")
+    print(f"   Combinaciones: {len(move_thresholds)} × {len(dir_thresholds)} × {len(logret_thresholds)} = {len(move_thresholds) * len(dir_thresholds) * len(logret_thresholds)}")
+    
+    for tm, td, tlr in product(move_thresholds, dir_thresholds, logret_thresholds):
+        preds_tr = apply_thresholds_3level(df_tr, tm, td, tlr)
+        s = score(y_tr, preds_tr)
+        
+        results_grid.append({
+            'tm': round(float(tm), 2),
+            'td': td,
+            'tlr': round(float(tlr), 4),
+            'score_train': round(s, 4)
+        })
+        
+        if s > best_score:
+            best_score, best_tm, best_td, best_tlr = s, tm, td, tlr
+    
+    # Validar en folds reservados
+    preds_va = apply_thresholds_3level(df_va, best_tm, best_td, best_tlr)
+    score_val = score(y_va, preds_va)
+    degradation = best_score - score_val
+    
+    print(f"\n✅ Thresholds óptimos encontrados:")
+    print(f"   L1 (move):        {best_tm:.2f}")
+    print(f"   L2 (direction):   {best_td}")
+    print(f"   L3 (logret min):  {best_tlr:.4f}")
+    print(f"\n📊 Scores:")
+    print(f"   {metric} (train): {best_score:.4f}")
+    print(f"   {metric} (val):   {score_val:.4f}")
+    print(f"   Degradation:      {degradation:.4f} {'⚠️ posible overfit' if degradation > 0.02 else '✅ estable'}")
+    
+    # Top 10 en train
+    df_grid = pd.DataFrame(results_grid).sort_values('score_train', ascending=False)
+    print(f"\n🏆 Top 10 combinaciones (train):")
+    print(df_grid.head(10).to_string(index=False))
+    
+    return {
+        'threshold_move': best_tm,
+        'threshold_dir': best_td,
+        'threshold_logret': best_tlr,
+        'score_train': best_score,
+        'score_val': score_val,
+        'degradation': degradation
+    }
+
+
 def save_trading_model_2level(model_l1, model_l2, scaler, features_list, model_params, best_thresholds=None, path="trading_model_2level"):
     """Guarda los dos modelos del pipeline de dos niveles."""
     if not os.path.exists(path):
@@ -174,3 +443,72 @@ def load_trading_model_2level(model_class_l1, model_class_l2, path="trading_mode
     
     print(f"🚀 Pipeline 2-Level listo. Inputs: {model_params['input_dim']} features.")
     return model_l1, model_l2, scaler, features_list, best_thresholds
+
+
+def save_trading_model_3level(model_l1, model_l2, model_l3, scaler_x, scaler_l3, features_list, model_params, best_thresholds=None, path="trading_model_3level"):
+    """Guarda los tres modelos del pipeline 3-level."""
+    if not os.path.exists(path):
+        os.makedirs(path)
+    
+    # Modelos
+    torch.save(model_l1.state_dict(), os.path.join(path, "model_l1_weights.pth"))
+    torch.save(model_l2.state_dict(), os.path.join(path, "model_l2_weights.pth"))
+    torch.save(model_l3.state_dict(), os.path.join(path, "model_l3_weights.pth"))
+    
+    # Scalers
+    joblib.dump(scaler_x,  os.path.join(path, "scaler_features.pkl"))
+    joblib.dump(scaler_l3, os.path.join(path, "scaler_logret.pkl"))
+    
+    # Metadatos
+    joblib.dump(features_list, os.path.join(path, "features.pkl"))
+    joblib.dump(model_params,  os.path.join(path, "model_params.pkl"))
+    
+    # Thresholds óptimos
+    if best_thresholds is not None:
+        joblib.dump(best_thresholds, os.path.join(path, "best_thresholds.pkl"))
+    
+    print(f"✅ Modelos 3-Level guardados en: {path}")
+    print(f"   ├─ model_l1_weights.pth")
+    print(f"   ├─ model_l2_weights.pth")
+    print(f"   ├─ model_l3_weights.pth")
+    print(f"   ├─ scaler_features.pkl")
+    print(f"   ├─ scaler_logret.pkl")
+    print(f"   ├─ features.pkl")
+    print(f"   ├─ model_params.pkl")
+    if best_thresholds is not None:
+        print(f"   └─ best_thresholds.pkl")
+
+
+def load_trading_model_3level(model_class_l1, model_class_l2, model_class_l3, path="trading_model_3level", device="cpu"):
+    """Carga los tres modelos del pipeline 3-level."""
+    # Metadatos
+    model_params  = joblib.load(os.path.join(path, "model_params.pkl"))
+    features_list = joblib.load(os.path.join(path, "features.pkl"))
+    scaler_x      = joblib.load(os.path.join(path, "scaler_features.pkl"))
+    scaler_l3     = joblib.load(os.path.join(path, "scaler_logret.pkl"))
+    best_thresholds = joblib.load(os.path.join(path, "best_thresholds.pkl")) if os.path.exists(os.path.join(path, "best_thresholds.pkl")) else None
+
+    # L1
+    model_l1 = model_class_l1(**model_params)
+    model_l1.load_state_dict(torch.load(os.path.join(path, "model_l1_weights.pth"), map_location=device))
+    model_l1.to(device)
+    model_l1.eval()
+    
+    # L2
+    model_l2 = model_class_l2(**model_params)
+    model_l2.load_state_dict(torch.load(os.path.join(path, "model_l2_weights.pth"), map_location=device))
+    model_l2.to(device)
+    model_l2.eval()
+    
+    # L3
+    model_l3 = model_class_l3(**model_params)
+    model_l3.load_state_dict(torch.load(os.path.join(path, "model_l3_weights.pth"), map_location=device))
+    model_l3.to(device)
+    model_l3.eval()
+    
+    print(f"🚀 Pipeline 3-Level listo. Inputs: {model_params['input_dim']} features.")
+    print(f"   L1: Movimiento (output_dim=2)")
+    print(f"   L2: Dirección (output_dim=2)")
+    print(f"   L3: Log Return (output_dim=1)")
+    
+    return model_l1, model_l2, model_l3, scaler_x, scaler_l3, features_list, best_thresholds

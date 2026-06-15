@@ -4,18 +4,60 @@
 
 \vspace{-1.3cm}
 
-\section{XXXXXXXXXX}
+\section{Tendencias en el trading algorítmico}
 
-\notes{Quizás explicar lo que son LSTM y GRU aunque sean bastante antiguos}
+El trading algorítmico ha evolucionado en las últimas décadas, pasando de estratégias basadas exclusivamente en indicadores técnicos a sistemas que
+integran técnicas de aprendizaje automático y modelos de aprendizaje profundo. El estado del arte actual combina ingeniería de datos, ingeniería de
+características, modelado predictivo, análisis cuantitativo y técnicas de optimización, con el objetivo de capturar patrones complejos en series
+temporales financieras altamente ruidosas y no estacionarias.
 
-Los dos modelos de aprendizaje automático profundo que se van a implementar en este trabajo son dos Redes Neuronales Recurrentes \cite{elman1990rnn}, un
-tipo de red presentada en 1990, apartir de ahí se han creado diferentes redes mejoradas, de las dos mencionadas primero se publicó el paper de LSTM
-(Long-Short Term Memory) \cite{hochreiter1997lstm} en 1997 y después, GRU (Gated Recurrent Unit) en 2014 \cite{cho2014gru}
+Las Redes Neuronales Recurrentes (RNN) clasicas \cite{elman1990rnn} fueron diseñadas para modelar dependencias temporales, pero presentan el problema
+del desvanecimiento del gradiente. Para resolver este problema se propusieron dos arquitecturas mejoradas LSTM (Long Short-Term Memory)
+\cite{hochreiter1997lstm} y GRU (Gated Recurrent Unit) \cite{cho2014gru}. 
 
-\notes{tendendias en el trading}
+El gradiente desvaneciente (vanishing gradient) es un problema que aparece al entrenar redes profundas o redes recurrentes.
+Durante la retropropagación, los gradientes se multiplican repetidamente por derivadas de funciones de activación como sigmoid o tanh, que son menores
+que 1. Provocando $\frac{\partial L}{\partial W}\approx0$ cuando la red tiene muchas capas o muchos pasos temporales, como resultado las capas
+iniciales reciben gradientes casi nulo por lo tanto no aprenden, la red solo aprende dependencias cortas.
+
+\subsection{LSTM}
+
+Las LSTM introducen una memoria interna (cell state) y tres compuertas que regulan el flujo de información, permitiendo capturar dependencias de largo
+plazo.
+
+\begin{figure}[H]
+    \centering
+    \input{figures/lstm.tex}
+    \caption{Arquitectura LSTM, \cite{nntikz}}
+    \label{fig_mlp_9}
+\end{figure}
+
+\subsection{GRU}
+
+Las GRU simplifican esta estructura mediante dos compuertas, reduciendo el número de parámetros y acelerando el entrenamiento, manteniendo un
+rendimiento comparable.
+
+\begin{figure}[H]
+    \centering
+    \input{figures/gru.tex}
+    \caption{Aarquitectura GRU, \cite{nntikz}}
+    \label{fig_mlp_10}
+\end{figure}
+
+Ambas arquitecturas han demostrado ser especialmente útiles en series temporales financieras debido a su capacidad para
+modelar dinámicas no lineales y dependencias temporales complejas.
 
 Los modelos de aprendizaje profundo tienen como ventaja poder captar la no linealidad y dependencias temporales aunque por desgracia son cajas negras
 para la hora de interpretar la razón de la salida.
+
+\section{Tendencias en el trading algorítmico v2}
+
+Las tendencias recientes en el trading cuantitativo incluyen el uso de modelos basados en Transformers para series temporales, técnicas de
+meta-learning, modelos híbridos que combinan indicadores tradicionales con aprendizaje profundo, y métodos de detección de regímenes de mercado
+mediante clustering no supervisado. Asimismo, los estudios de ablation se han convertido en una herramienta fundamental para evaluar la contribución
+real de cada componente del sistema y evitar sobreajuste.
+
+\todo{Revisar}
 
 \notes{indicadores vs ml clasfico vs ml profundo vs ia}
 

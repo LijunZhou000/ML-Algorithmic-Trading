@@ -10,26 +10,44 @@ import pandas as pd
 def create_lstm_dataset(df, features, target_col, lookback=14):
     """
     Crea el dataset para LSTM usando NumPy strides (ultra rápido).
+    
+    Args:
+        df: DataFrame con features y targets
+        features: list de nombres de columnas de features
+        target_col: str o dict. Si es dict, devuelve múltiples targets
+        lookback: número de períodos anteriores para la ventana
+    
+    Returns:
+        Si target_col es str: (X, y)
+        Si target_col es dict: (X, {target_name: y_array, ...})
     """
-    # 1. Convertimos a NumPy array (importante para velocidad)
+    # 1. Convertimos features a NumPy array
     feature_array = df[features].values
-    target_array = df[target_col].values
     
     # 2. Calculamos las dimensiones
     num_samples = len(df) - lookback
     num_features = len(features)
     
     # 3. Magia de NumPy Strides: Creamos ventanas sin bucles
-    # (samples, lookback, features)
     shape = (num_samples, lookback, num_features)
     strides = (feature_array.strides[0], feature_array.strides[0], feature_array.strides[1])
     
     X = np.lib.stride_tricks.as_strided(feature_array, shape=shape, strides=strides)
     
-    # 4. El target es simplemente el valor DESPUÉS de la ventana
-    y = target_array[lookback:]
-    
-    return X, y
+    # 4. Manejar uno o múltiples targets
+    if isinstance(target_col, dict):
+        # Devolver diccionario de targets
+        result_targets = {}
+        for name, col in target_col.items():
+            target_array = df[col].values
+            y = target_array[lookback:]
+            result_targets[name] = y
+        return X, result_targets
+    else:
+        # Devolver un solo target (comportamiento original)
+        target_array = df[target_col].values
+        y = target_array[lookback:]
+        return X, y
 
 # def train_walk_forward_2level(
 #     df,
@@ -408,6 +426,232 @@ def train_walk_forward_2level(
         torch.cuda.empty_cache()
 
     return pd.concat(all_results, ignore_index=True), all_results, model_l1, model_l2, sc
+
+
+def train_walk_forward_3level(
+    df,
+    feature_cols,
+    target_col,           # columna original: 0=SELL, 1=HOLD, 2=BUY
+    logreturn_col,        # columna con log_return del triple barrier
+    model_class_l1,       # GoldLSTM_L1_Move
+    model_class_l2,       # GoldLSTM_L2_Dir
+    model_class_l3,       # Red de regresión (output_dim=1)
+    train_size=40000,
+    test_size=10000,
+    gap=2,
+    lookback=24,
+    epochs=15,
+    batch_size=256,
+    lr=5e-4,
+    threshold_move=0.5,
+    threshold_dir=0.5
+):
+    """
+    Entrenamiento en 3 niveles: L1 (movimiento), L2 (dirección), L3 (log_return)
+    L2 y L3 se entrenan solo con muestras donde L1_train == 1
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    all_results = []
+
+    df = df.copy()
+    df['_target_l1'] = (df[target_col] != 1).astype(int)
+    df['_target_l2'] = (df[target_col] == 2).astype(int)
+    df['_target_l3'] = df[logreturn_col]
+
+    # Generar secuencias para todos los targets
+    X_all, y_dict = create_lstm_dataset(
+        df,
+        feature_cols,
+        {'_target_l1': '_target_l1', '_target_l2': '_target_l2', '_target_l3': '_target_l3'},
+        lookback
+    )
+    y_l1_all = y_dict['_target_l1']
+    y_l2_all = y_dict['_target_l2']
+    y_l3_all = y_dict['_target_l3']
+
+    dt_all = df['datetime'].values[lookback:]
+    total_samples = len(X_all)
+
+    for start in tqdm(range(0, total_samples - train_size - test_size - gap, test_size), desc="WF 3-Level"):
+
+        train_end = start + train_size
+        test_start = train_end + gap
+        test_end = test_start + test_size
+
+        # --- SPLIT ---
+        X_train = X_all[start:train_end]
+        X_test = X_all[test_start:test_end]
+        y_l1_train = y_l1_all[start:train_end]
+        y_l1_test = y_l1_all[test_start:test_end]
+        y_l2_train = y_l2_all[start:train_end]
+        y_l3_train = y_l3_all[start:train_end]
+        dt_test = dt_all[test_start:test_end]
+
+        # --- ESCALADO FEATURES ---
+        sc = RobustScaler()
+        N_train, L, F = X_train.shape
+        X_train_scaled = sc.fit_transform(X_train.reshape(-1, F)).reshape(N_train, L, F)
+        N_test = X_test.shape[0]
+        X_test_scaled = sc.transform(X_test.reshape(-1, F)).reshape(N_test, L, F)
+
+        # --- ESCALADO L3 (log_returns) ---
+        sc_l3 = RobustScaler()
+        y_l3_train_scaled = sc_l3.fit_transform(y_l3_train.reshape(-1, 1)).ravel()
+
+        X_train_t = torch.tensor(X_train_scaled, dtype=torch.float32).to(device)
+        X_test_t = torch.tensor(X_test_scaled, dtype=torch.float32).to(device)
+
+        # =====================================================
+        # NIVEL 1 — ¿Hay movimiento?
+        # =====================================================
+        y_l1_train_t = torch.tensor(y_l1_train, dtype=torch.long).to(device)
+
+        counts_l1 = np.bincount(y_l1_train.astype(int), minlength=2)
+        w_l1 = 1.0 / (counts_l1 / len(y_l1_train) + 1e-6)
+        w_l1[1] *= 2.0   # penalizar fallar en ACCIÓN
+        w_l1 = w_l1 / w_l1.sum()
+        w_l1_t = torch.tensor(w_l1, dtype=torch.float32).to(device)
+
+        model_l1 = model_class_l1(input_dim=len(feature_cols), output_dim=2).to(device)
+        opt_l1 = torch.optim.Adam(model_l1.parameters(), lr=lr)
+        crit_l1 = nn.CrossEntropyLoss(weight=w_l1_t)
+        sched_l1 = torch.optim.lr_scheduler.OneCycleLR(
+            opt_l1, max_lr=lr,
+            steps_per_epoch=max(1, (len(X_train) + batch_size - 1) // batch_size),
+            epochs=epochs, pct_start=0.3
+        )
+        scaler_amp = torch.amp.GradScaler(enabled=(device.type == "cuda"))
+        loader_l1 = DataLoader(TensorDataset(X_train_t, y_l1_train_t),
+                               batch_size=batch_size, shuffle=True)
+
+        model_l1.train()
+        for epoch in range(epochs):
+            for bx, by in loader_l1:
+                opt_l1.zero_grad()
+                with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
+                    loss = crit_l1(model_l1(bx), by)
+                scaler_amp.scale(loss).backward()
+                scaler_amp.unscale_(opt_l1)
+                nn.utils.clip_grad_norm_(model_l1.parameters(), 1.0)
+                scaler_amp.step(opt_l1)
+                scaler_amp.update()
+                sched_l1.step()
+
+        # =====================================================
+        # NIVEL 2 & 3 — Entrenados solo con movimiento (L1_train == 1)
+        # =====================================================
+        mask_move = (y_l1_train == 1)
+        X_l23_train = X_train_scaled[mask_move]
+        y_l2_train_filt = y_l2_train[mask_move]
+        y_l3_train_filt = y_l3_train_scaled[mask_move]
+
+        y_l2_train_t = torch.tensor(y_l2_train_filt, dtype=torch.long).to(device)
+        y_l3_train_t = torch.tensor(y_l3_train_filt, dtype=torch.float32).to(device)
+        X_l23_train_t = torch.tensor(X_l23_train, dtype=torch.float32).to(device)
+
+        # --------- NIVEL 2 ---------
+        counts_l2 = np.bincount(y_l2_train_filt.astype(int), minlength=2)
+        w_l2 = 1.0 / (counts_l2 / len(y_l2_train_filt) + 1e-6)
+        w_l2 = w_l2 / w_l2.sum()
+        w_l2_t = torch.tensor(w_l2, dtype=torch.float32).to(device)
+
+        model_l2 = model_class_l2(input_dim=len(feature_cols), output_dim=2).to(device)
+        opt_l2 = torch.optim.Adam(model_l2.parameters(), lr=lr)
+        crit_l2 = nn.CrossEntropyLoss(weight=w_l2_t)
+        sched_l2 = torch.optim.lr_scheduler.OneCycleLR(
+            opt_l2, max_lr=lr,
+            steps_per_epoch=max(1, (len(X_l23_train) + batch_size - 1) // batch_size),
+            epochs=epochs, pct_start=0.3
+        )
+        loader_l2 = DataLoader(TensorDataset(X_l23_train_t, y_l2_train_t),
+                               batch_size=batch_size, shuffle=True)
+
+        model_l2.train()
+        for epoch in range(epochs):
+            for bx, by in loader_l2:
+                opt_l2.zero_grad()
+                with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
+                    loss = crit_l2(model_l2(bx), by)
+                scaler_amp.scale(loss).backward()
+                scaler_amp.unscale_(opt_l2)
+                nn.utils.clip_grad_norm_(model_l2.parameters(), 1.0)
+                scaler_amp.step(opt_l2)
+                scaler_amp.update()
+                sched_l2.step()
+
+        # --------- NIVEL 3 (REGRESIÓN) ---------
+        model_l3 = model_class_l3(input_dim=len(feature_cols), output_dim=1).to(device)
+        opt_l3 = torch.optim.Adam(model_l3.parameters(), lr=lr)
+        crit_l3 = nn.HuberLoss(delta=1.0)  # Robusto a outliers
+        sched_l3 = torch.optim.lr_scheduler.OneCycleLR(
+            opt_l3, max_lr=lr,
+            steps_per_epoch=max(1, (len(X_l23_train) + batch_size - 1) // batch_size),
+            epochs=epochs, pct_start=0.3
+        )
+        loader_l3 = DataLoader(TensorDataset(X_l23_train_t, y_l3_train_t),
+                               batch_size=batch_size, shuffle=True)
+
+        model_l3.train()
+        for epoch in range(epochs):
+            for bx, by in loader_l3:
+                opt_l3.zero_grad()
+                with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
+                    pred = model_l3(bx).squeeze()
+                    loss = crit_l3(pred, by)
+                scaler_amp.scale(loss).backward()
+                scaler_amp.unscale_(opt_l3)
+                nn.utils.clip_grad_norm_(model_l3.parameters(), 1.0)
+                scaler_amp.step(opt_l3)
+                scaler_amp.update()
+                sched_l3.step()
+
+        # =====================================================
+        # INFERENCIA
+        # =====================================================
+        model_l1.eval()
+        model_l2.eval()
+        model_l3.eval()
+
+        with torch.no_grad():
+            probs_l1 = torch.softmax(model_l1(X_test_t), dim=1).cpu().numpy()
+            probs_l2 = torch.softmax(model_l2(X_test_t), dim=1).cpu().numpy()
+            logrets_l3_scaled = model_l3(X_test_t).squeeze().cpu().numpy()
+            # Inverse transform log_returns
+            if logrets_l3_scaled.ndim == 0:
+                logrets_l3_scaled = logrets_l3_scaled.reshape(-1)
+            logrets_l3 = sc_l3.inverse_transform(logrets_l3_scaled.reshape(-1, 1)).ravel()
+
+        preds = np.ones(len(probs_l1), dtype=int)
+
+        for i in range(len(probs_l1)):
+            if probs_l1[i, 1] > threshold_move:
+                if threshold_dir is None:
+                    preds[i] = 2 if probs_l2[i, 1] > probs_l2[i, 0] else 0
+                else:
+                    if probs_l2[i, 1] > threshold_dir:
+                        preds[i] = 2
+                    elif probs_l2[i, 0] > threshold_dir:
+                        preds[i] = 0
+
+        original_test = df[target_col].values[lookback:][test_start:test_end]
+
+        step_res = pd.DataFrame({
+            'datetime': dt_test,
+            'actual': original_test,
+            'pred': preds,
+            'prob_move': probs_l1[:, 1],
+            'prob_sell': probs_l2[:, 0],
+            'prob_buy': probs_l2[:, 1],
+            'pred_logret': logrets_l3,
+        })
+
+        all_results.append(step_res)
+
+        del y_l1_train_t, y_l2_train_t, y_l3_train_t, X_l23_train_t
+        torch.cuda.empty_cache()
+
+    return pd.concat(all_results, ignore_index=True), all_results, model_l1, model_l2, model_l3, sc, sc_l3
+
 
 def grid_search_thresholds(
     results,

@@ -40,6 +40,7 @@ def target_triple_barrier_interday(
         swing_lows = df["last_swing_low_price"].values
 
     labels = np.full(len(df), np.nan)
+    log_returns = np.full(len(df), np.nan)
 
     for i in range(len(df) - max_steps):
 
@@ -76,6 +77,7 @@ def target_triple_barrier_interday(
         lower_barrier = entry_price - sl_ticks * tick_size
 
         label = 0  # HOLD por defecto
+        log_ret = np.nan
 
         for j in range(1, max_steps + 1):
             hit_tp = high[i + j] >= upper_barrier
@@ -83,20 +85,25 @@ def target_triple_barrier_interday(
 
             if hit_tp and hit_sl:
                 label = np.nan  # conflicto intrabarra → ambiguo, descartar
+                log_ret = np.nan
                 break
             elif hit_tp:
                 label = 1
+                log_ret = np.log(upper_barrier / entry_price)
                 break
             elif hit_sl:
                 label = -1
+                log_ret = np.log(lower_barrier / entry_price)
                 break
 
         labels[i] = label
+        log_returns[i] = log_ret
 
     df[f"target_tb_{return_horizon_days}d"] = pd.Series(labels, index=df.index).map({
         -1: 0,
         0: 1,
         1: 2,
     })
+    df[f"logreturn_tb_{return_horizon_days}d"] = log_returns
 
     return df.dropna(subset=[f"target_tb_{return_horizon_days}d"])

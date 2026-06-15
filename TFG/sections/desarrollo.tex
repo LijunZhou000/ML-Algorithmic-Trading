@@ -4,15 +4,64 @@
 
 \vspace{-1.3cm}
 
-\section{Desarrollo del autómata}
+\section{Pipeline}
 
-El desarrollo del sistema se divide en diferentes fases dentro de la ETL, destacando la carga de datos históricos, su limpieza y filtrado,
+El desarrollo del sistema se divide en diferentes fases dentro de la ETL (Extract Transform Load), destacando la carga de datos históricos, su limpieza y filtrado,
 su transformación en las diferentes características para alimentar a los modelos de aprendizaje automático, el análisis para comprobar que el
 entrenamiento ha sido exitoso, usando diferentes métricas y datos históricos no vistos por el modelo, y la operación, donde se obtienen datos en vivo.
 
-% Además, están las partes de 
+Este flujo de trabajo se organiza siguiendo la arquitectura medallón, donde los datos pasan por tres capas:
 
-% Se quiere usar una arquitectura de medallón, para representar la utilidad de los datos, en primer lugar están los datos en crudo que se cargan
+\begin{description}
+    \item[\textbf{Bronce}]:  \hfill \\
+    Contiene los datos históricos y en vivo en su forma cruda.
+    \item[\textbf{Plata}]:  \hfill \\
+    Se limpian los datos, se validan y se normalizan.
+    \item[\textbf{Oro}]:  \hfill \\
+    Se transforman en features y targets listos para el entrenamiento y la inferencia.
+\end{description}
+
+A continuación muestro un mapa conceptual de las diferentes etapas y los hitos más importantes que se van a desarrollar en este trabajo.
+
+\begin{enumerate}
+    \item Cargar los datos minuto a minuto de uno de los futuros
+    \item Estandarizar el tiempo que aparece en las muestras a UTC
+    % \item[$\blacksquare$] Se estandariza el tiempo que aparece en las muestras a UTC
+    \item Eliminar los datos que son claramente erróneos (fines de semana)
+    % \item[$\blacksquare$] Se recortan los dataset para tener los mismos periodos para todos los futuros
+    \item Añadir el día de negociación al que pertenece cada dato
+    \item Visualizar los datos originales limpios 
+    % \item[$\blacksquare$] Visualizar los datos originales limpios 
+    \item Obtener la información actualizada de los diferentes futuros
+    \item Muestreo de los datos en periodos de 4 horas
+    % \item Muestreo de los datos en diferentes periodos
+    \item Cálculo de los datos acumulados a partir de los datos originales
+    \item Cálculo de las características que se usarán para entrenar los modelos de aprendizaje automático
+    \item Analizar las nuevas características para revisar si la información tiene sentido y si se han filtrado datos futuros por usar mal las
+    fórmulas
+    \item Decidir algunas de las características que no se usarán manualmente por criterios como la no estacionalidad
+    \item Calcular las variables objetivo que los modelos supervisados tratarán de predecir
+    \item Filtrar más características usando modelos supervisados tradicionales que permitan mayor explicabilidad
+    \item Calcular los parámetros que se utilizaran para definir el entrenamiento de los modelos
+    \item Entrenar los modelos por separado
+    % \item[$\blacksquare$] Durante cada época del entrenamiento se usan los modelos no supervisado para detectar el régimen de mercado actual y usar esta información
+    % como características adicionales para el modelo
+    \item Búsqueda de los umbrales de confianza más adecuados para cada modelo y etapa y evaluación de los resultados de la predicción usando métricas
+    estandar de clasificación y regresión y métricas dedicadas de finanzas
+    \item Guardar los mejores modelos y todo lo necesario para su uso, scaler, lista de features definitiva, configuración
+    \item Optimizar la operación de la cartera de futuros
+    % \item Usar optimización para poder operar todos los futuros a la vez con una cartera, evitando gastar más de lo que tenemos
+    \item Comprobar que este modo es mejor que dejar todo en un solo futuro 
+    \item Definir los límites extremos de seguridad para la operación
+    \item Ejecutar el sistema
+    \item Monitorizar y guardar la información
+    \item Analizar el rendimiento del sistema para poder añadir mejoras
+    \item Dockerizar todo el sistema
+    \item Añadir sistema de visualización de la información
+    \item Añadir sistema de alertas
+\end{enumerate}
+
+\section{Desarrollo del autómata}
 
 El objetivo es poder generalizar el código, que no importe de qué activos sean los datos, que el flujo de datos puede reutilizarse. Facicitando a su
 vez la posibilidad futura de operar usando otros tipos de activos financieros agregando código nuevo con los mismos formatos que el código existente.
@@ -253,6 +302,8 @@ de 8 horas. Por ello he decidido optar por esta otra opción. Aún así los usar
 
 \notes{Justificar por qué no swings clásicos, los patrones}
 
+Log return con triple barrier
+
 \subsection{Aprendizaje supervisado}
 
 El uso de modelos de aprendizaje supervisado se centra en modelos de clasificación binaria, en este caso en dos etapas, y dentro de cada etapa se
@@ -281,226 +332,6 @@ Existe una tercera etapa, en este caso de regresión que sigue la misma lógica,
 \end{tabular}
 \end{center}
 \end{table}
-
-\notes{Explicar qué son LSTM y GRU}
-
-\begin{figure}[h]
-    \centering
-    \begin{tikzpicture}[
-        >=LaTeX, % Use default LaTeX arrows
-        % Styles 
-        cell/.style={ % RNN cell
-            rectangle, 
-            rounded corners=5mm, 
-            draw,
-            very thick,
-            minimum height=4cm,
-            minimum width=6cm
-        }, 
-        cellc/.style={ % RNN cells in a chain
-            cell,
-            on chain,
-            join
-        },
-        input/.style={ % Input or output node
-            circle,
-            minimum width=2.25em,
-            draw,
-            fill=gray!10,
-            thick
-        },
-        hidden/.style={ % Hidden state
-        },
-        func/.style={ % Functions
-            rectangle,
-            draw,
-            inner sep=2pt,
-            minimum height=0.4cm
-        },
-        op/.style={ % Operators
-            circle,
-            draw,
-            inner sep=-0.5pt,
-            minimum height=0.4cm,
-        },
-        pointwise/.style={ % Pointwise operations and functions
-            fill=gray!50,
-        },
-        arrow/.style={
-            -latex,
-            very thick
-        },
-        arrowc1/.style={ % Arrows with rounded corners
-            arrow,
-            rounded corners=.25cm
-        },
-        arrowc2/.style={ % Arrows with big rounded corners
-            arrow,
-            rounded corners=.5cm
-        },
-        backprop/.style={ % Backpropagation arrows
-            arrow,
-            dashed,
-            gray
-        }
-    ]
-    
-        % LSTM cell
-        \node [cell] at (0,0){};
-    
-        % Internal functions and operators
-        \node [func] (sigf) at (-2,-0.75) {$\sigma$};
-        \node [func] (sigi) at (-1.4,-0.75) {$\sigma$};
-        \node [func] (tanhi) at (-0.5,-0.75) {$\tanh$};
-        \node [func] (sigo) at (0.5,-0.75) {$\sigma$};
-        \node [func, pointwise] (tanho) at (1.5,0.75) {$\tanh$};
-        \node [op, pointwise] (mulf) at (-2,1.5) {$\times$};
-        \node [op, pointwise] (add) at (-0.5,1.5) {+};
-        \node [op, pointwise] (muli) at (-0.5,0) {$\times$};
-        \node [op, pointwise] (mulo) at (1.5,0) {$\times$};
-    
-        % Inputs, outputs and hidden states
-        \node[hidden] (ct-1) at (-4,1.5) {$\mathbf{c}_{t-1}$};
-        \node[hidden] (ht-1) at (-4,-1.5) {$\mathbf{h}_{t-1}$};
-        \node[input] (x) at (-2.5,-3) {$\mathbf{x}_{t}$};
-        \node[hidden] (ct) at (4,1.5) {$\mathbf{c}_{t}$};
-        \node[hidden] (ht) at (4,-1.5) {$\mathbf{h}_{t}$};
-        \node[input] (y) at (2.5,3) {$\hat{\mathbf{y}}_{t}$};
-    
-        % Arrows from input and previous hidden states h_{t-1} and c_{t-1}
-        \draw [arrowc1, -] (x) -- (x |- ht-1) -| (tanhi);
-        \draw [arrowc2, -] (ht-1) -| (sigo);
-        \draw [arrowc1, -] (ht-1 -| sigf)++(-0.5,0) -| (sigf); 
-        \draw [arrowc1, -] (ht-1 -| sigi)++(-0.5,0) -| (sigi);
-        \draw [arrowc1, -] (ht-1 -| tanhi)++(-0.5,0) -| (tanhi);
-        \draw [arrow] (ct-1) -- (mulf) -- (add) -- (ct);
-    
-        % Arrows for operation flow within LSTM gates
-        \draw [arrow] (sigf) -- node[midway, left] {$\mathbf{f}_t$} (mulf);
-        \draw [arrowc2] (sigi) |- node[midway, xshift=-1.5, yshift=1.5] {$\mathbf{i}_t$} (muli);
-        \draw [arrow] (tanhi) -- node[midway, xshift=12, yshift=1.5] {$\tilde{\mathbf{c}}_t$} (muli);
-        \draw [arrowc2] (sigo) |- node[midway, xshift=-1.5, yshift=1.5] {$\mathbf{o}_t$} (mulo);
-        \draw [arrow] (muli) -- (add);
-        \draw [arrowc1] (add -| tanho) ++(-0.5,0) -| (tanho);
-        \draw [arrow] (tanho) -- (mulo);
-    
-        % Arrows to output and current hidden states h_t
-        \draw [arrowc2] (mulo) |- (ht);
-        \draw (ct -| y) ++(0,-0.1) coordinate (i1);
-        \draw [arrowc2, -] (ht -| y) ++(-0.5,0) -| (i1);
-        \draw [arrow] (i1) ++(0,0.2) -- (y);
-    \end{tikzpicture}
-    \caption{Añadir img de la arquitectura LSTM, \cite{nntikz}}
-    \label{fig_mlp_9}
-\end{figure}
-
-\begin{figure}[h]
-    \centering
-    \begin{tikzpicture}[
-        >=LaTeX, % Use default LaTeX arrows
-        % Styles 
-        cell/.style={ % RNN cell
-            rectangle, 
-            rounded corners=5mm, 
-            draw,
-            very thick,
-            minimum height=4cm,
-            minimum width=6cm
-        }, 
-        cellc/.style={ % RNN cells in a chain
-            cell,
-            on chain,
-            join
-        },
-        input/.style={ % Input or output node
-            circle,
-            minimum width=2.25em,
-            draw,
-            fill=gray!10,
-            thick
-        },
-        hidden/.style={ % Hidden state
-        },
-        func/.style={ % Functions
-            rectangle,
-            draw,
-            inner sep=2pt,
-            minimum height=0.4cm
-        },
-        op/.style={ % Operators
-            circle,
-            draw,
-            inner sep=-0.5pt,
-            minimum height=0.4cm,
-        },
-        pointwise/.style={ % Pointwise operations and functions
-            fill=gray!50,
-        },
-        arrow/.style={
-            -latex,
-            very thick
-        },
-        arrowc1/.style={ % Arrows with rounded corners
-            arrow,
-            rounded corners=.25cm
-        },
-        arrowc2/.style={ % Arrows with big rounded corners
-            arrow,
-            rounded corners=.5cm
-        },
-        backprop/.style={ % Backpropagation arrows
-            arrow,
-            dashed,
-            gray
-        }
-    ]
-    
-        % GRU cell
-        \node [cell] at (0,0){};
-
-        % Internal functions and operators
-        \node [func] (sigr) at (-0.75,-0.75) {$\sigma$};
-        \node [func] (sigz) at (0,-0.75) {$\sigma$};
-        \node [func] (tanh) at (2,-0.75) {$\tanh$};
-        \node [func, pointwise] (minus) at (0,0.5) {$1-$};
-        \node [op, pointwise] (mulr) at (-1.5,0) {$\times$};
-        \node [op, pointwise] (mulz) at (0,1.5) {$\times$};
-        \node [op, pointwise] (add) at (2,1.5) {$+$};
-        \node [op, pointwise] (mulh) at (2,0) {$\times$};
-
-        % Inputs, outputs and hidden states
-        \node[hidden] (ht-1) at (-4,1.5) {$\mathbf{h}_{t-1}$};
-        \node[input] (x) at (-2.5,-3) {$\mathbf{x}_{t}$};
-        \node[hidden] (ht) at (4,1.5) {$\mathbf{h}_{t}$};
-        \node[input] (y) at (2.5,3) {$\hat{\mathbf{y}}_{t}$};
-
-        % Arrows from input and previous hidden states h_{t-1}
-        \draw [arrowc1] (ht-1) -- (mulz) -- (add) -- (ht);
-        \draw [arrowc1, -] (x) |- (-2.25, -1.4) ++(sigr);
-        \draw [arrowc1, -] (x) |- (-2.25, -1.75) ++(sigr);
-        \draw [arrowc1, -] (x -| sigz) ++(-1, 1.6) -| (sigz);
-        \draw [arrowc1, -] (x -| sigr) ++(-1.5, 1.6) -| (sigr);
-        \draw [arrowc1, -] (ht-1.east) -| (mulr);
-        \draw [arrowc1, -] (ht-1) -| (-2.5,0) ++(x);
-        \draw [arrowc1, -] (x) ++(0,3) |- (-1,-1.4) ++(tanh);
-        \draw [arrowc2, -] (x -| tanh) ++(-4.25, 1.25) -| (tanh);
-
-        % Arrows for operation flow within LSTM gates
-        \draw [arrowc1, -] (mulr) -- ++(0,-1.3);
-        \draw [arrowc1, -] (mulr) ++(0,-1.55) |- (0,-1.75) ++(tanh);
-        \draw [arrowc1] (sigr) |-  node[midway, shift={(-2pt,4pt)}] {$\mathbf{r}_t$} (mulr.east);
-        \draw [arrowc2] (sigz) |- (mulh);
-        \draw [arrowc2] (tanh) -- node[midway, shift={(12pt,1.5pt)}] {$\tilde{\mathbf{h}}_t$} (mulh);
-        \draw [arrowc2] (minus) -- (mulz);
-        \draw [arrowc2] (sigz) -- node[midway, left] {$\mathbf{z}_t$} (minus);
-        \draw [arrowc2] (mulh) -- (add);
-
-        % Arrows to output and current hidden states h_t
-        \draw [arrowc1] (add) coordinate[auto] -|(y);
-    \end{tikzpicture}
-    \caption{Añadir img de la arquitectura GRU, \cite{nntikz}}
-    \label{fig_mlp_10}
-\end{figure}
 
 \begin{figure}[h]
     \centering
