@@ -6,6 +6,11 @@
 
 \section{Resultados}
 
+Como se han mencionado en cápitulos anteriores el resultado de las pruebas ha sido positivo
+
+En la gráfica siguiente se muestra cómo va evolucionando el capital de la cuenta simulada, se puede observar todas las predicciones que realizan los
+modelos y el sharpe ratio final.
+
 \begin{figure}[h]
     \centering
     \includegraphics[scale=0.45]{./img/ml_process.pdf}
@@ -13,9 +18,29 @@
     \label{fig_mlp_6}
 \end{figure}
 
+Para poner en perspectiva los resultados he decidido compararlos con los obtenidos por los participantes de la competición Robotrader, competición en
+la cuál iba a participar en un inicio pero que por imcopatibilidad con el desarrollo de este proyecto no acabé participando. Como se puede observar la
+curva mejora a muchos de los sistemas presentados.
+
+La competición se realizó durante los meses de marzo a mayo, estos datos nunca se han usado para entrenar los modelos para evitar leakage. No es una
+comparación perfecta ya que no se tienen en cuenta todos los problemas que pueden haber en vivo pero se han intentado simular lo mejor posible.
+
 \begin{figure}[h]
     \centering
     \includegraphics[scale=0.45]{./img/ml_process.pdf}
     \caption{Añadir img comparativa del Backtest vs Robotrader}
     \label{fig_mlp_13}
 \end{figure}
+
+Además de mostrar los datos teóricos que se hubiesen conseguido también he querido comparar con los datos de la simulación de Monte Carlo.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img comparativa del Monte Carlo vs Robotrader}
+    \label{fig_mlp_14}
+\end{figure}
+
+\notes{Añadir grafica de la evolución del equity, comparativa contra Robotrader} 
+
+\notes{Añadir Monte Carlo}

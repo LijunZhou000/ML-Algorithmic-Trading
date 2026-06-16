@@ -35,39 +35,58 @@
 % \end{tabular}}}
 % \label{tab:presupuesto}
 % \end{table}
-\afterpage{
-\clearpage
-\thispagestyle{empty}
-\begin{landscape}
-
 \begin{table}[ht]
 \centering
-\resizebox{\linewidth}{!}{
+\makebox[\textwidth][c]{%
+\resizebox{1.25\linewidth}{!}{
 \begin{tabular}{|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}}
 \hline
 \multicolumn{5}{|l|}{\textbf{COSTE DE MANO DE OBRA (coste directo)}} & \multicolumn{2}{c|}{\textbf{Horas}} & \multicolumn{1}{c|}{\textbf{Precio/hora}} & \multicolumn{1}{c|}{\textbf{Total}} \\ \hline
-\multicolumn{5}{c}{} & \multicolumn{2}{|c|}{360} & \multicolumn{1}{c|}{15 €} & \multicolumn{1}{c|}{\textbf{5.400 €}} \\ \cline{6-9}
+\multicolumn{5}{c}{} & \multicolumn{2}{|c|}{360} & \multicolumn{1}{c|}{25 €} & \multicolumn{1}{c|}{\textbf{9.000 €}} \\ \cline{6-9}
 \multicolumn{4}{l}{} &  & \multicolumn{2}{l}{} &  &  \\ \hline
 \multicolumn{4}{|l|}{\textbf{COSTE DE RECURSOS MATERIALES (coste directo)}} & \multicolumn{1}{c|}{\textbf{\begin{tabular}[c]{@{}c@{}}Precio \\ de compra\end{tabular}}} & \multicolumn{2}{c|}{\textbf{\begin{tabular}[c]{@{}c@{}}Uso en \\ meses\end{tabular}}} & \multicolumn{1}{c|}{\textbf{\begin{tabular}[c]{@{}c@{}}Amortización \\ (en años)\end{tabular}}} & \multicolumn{1}{c|}{\textbf{Total}} \\ \hline
 \multicolumn{4}{|l|}{Ordenador personal (Software incluido)} & \multicolumn{1}{c|}{1.500,00 €} & \multicolumn{2}{c|}{6} & \multicolumn{1}{c|}{5} & \multicolumn{1}{c|}{\textbf{150,00 €}} \\ \hline
-\multicolumn{4}{|l|}{Impresora láser} & \multicolumn{1}{c|}{500,00 €} & \multicolumn{2}{c|}{6} & \multicolumn{1}{c|}{5} & \multicolumn{1}{c|}{\textbf{50,00 €}} \\ \hline
-\multicolumn{4}{|l|}{Otro equipamiento} & \multicolumn{1}{c|}{} & \multicolumn{2}{c|}{X} & \multicolumn{1}{c|}{X} & \multicolumn{1}{c|}{X €} \\ \hline
 \multicolumn{4}{l}{} &  & \multicolumn{2}{l}{} &  &  \\ \hline
-\multicolumn{8}{|l|}{\textbf{COSTE TOTAL DE RECURSOS MATERIALES}} & \multicolumn{1}{c|}{\textbf{200,00 €}} \\ \hline
+\multicolumn{8}{|l|}{\textbf{COSTE TOTAL DE RECURSOS MATERIALES}} & \multicolumn{1}{c|}{\textbf{150,00 €}} \\ \hline
 \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} &  \\ \hline
-\multicolumn{2}{|l|}{\textbf{GASTOS GENERALES (costes indirectos)}} & \multicolumn{2}{c|}{15\%} & \multicolumn{4}{c|}{sobre CD} & \multicolumn{1}{c|}{\textbf{840,00 €}} \\ \hline
-\multicolumn{2}{|l|}{\textbf{BENEFICIO INDUSTRIAL}} & \multicolumn{2}{c|}{6\%} & \multicolumn{4}{c|}{sobre CD+CI} & \multicolumn{1}{c|}{\textbf{336.00 €}} \\ \hline
+\multicolumn{2}{|l|}{\textbf{GASTOS GENERALES (costes indirectos)}} & \multicolumn{2}{c|}{15\%} & \multicolumn{4}{c|}{sobre CD} & \multicolumn{1}{c|}{\textbf{1372,50 €}} \\ \hline
+\multicolumn{2}{|l|}{\textbf{BENEFICIO INDUSTRIAL}} & \multicolumn{2}{c|}{6\%} & \multicolumn{4}{c|}{sobre CD+CI} & \multicolumn{1}{c|}{\textbf{631,35 €}} \\ \hline
 \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} &  \\ \hline
-\multicolumn{9}{|l|}{\textbf{MATERIAL FUNGIBLE}} \\ \hline
-\multicolumn{8}{|l|}{Impresión} & \multicolumn{1}{c|}{\textbf{100,00 €}} \\ \hline
-\multicolumn{8}{|l|}{Encuadernación} & \multicolumn{1}{c|}{\textbf{300,00 €}} \\ \hline
 \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} &  \\ \hline
-\multicolumn{8}{|l|}{\textbf{SUBTOTAL PRESUPUESTO}} & \multicolumn{1}{c|}{\textbf{7.176,00 €}} \\ \hline
-\multicolumn{7}{|l|}{\textbf{IVA APLICABLE}} & \multicolumn{1}{c|}{21\%} & \multicolumn{1}{c|}{\textbf{1.507,00 €}} \\ \hline
-\multicolumn{8}{|l|}{\textbf{TOTAL PRESUPUESTO}} & \multicolumn{1}{c|}{\textbf{8.683,00 €}} \\ \hline
-\end{tabular}}
-\label{tab:presupuesto}
+\multicolumn{8}{|l|}{\textbf{SUBTOTAL PRESUPUESTO}} & \multicolumn{1}{c|}{\textbf{11.153,85 €}} \\ \hline
+\multicolumn{7}{|l|}{\textbf{IVA APLICABLE}} & \multicolumn{1}{c|}{21\%} & \multicolumn{1}{c|}{\textbf{2.342,3085 €}} \\ \hline
+\multicolumn{8}{|l|}{\textbf{TOTAL PRESUPUESTO}} & \multicolumn{1}{c|}{\textbf{13.496,1585 €}} \\ \hline
+\end{tabular}}}
+\label{tab:presupuesto2}
 \end{table}
-\end{landscape}
-\clearpage
-}
+% \afterpage{
+% \clearpage
+% \thispagestyle{empty}
+% \begin{landscape}
+
+% \begin{table}[ht]
+% \centering
+% \resizebox{\linewidth}{!}{
+% \begin{tabular}{|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}}
+% \hline
+% \multicolumn{5}{|l|}{\textbf{COSTE DE MANO DE OBRA (coste directo)}} & \multicolumn{2}{c|}{\textbf{Horas}} & \multicolumn{1}{c|}{\textbf{Precio/hora}} & \multicolumn{1}{c|}{\textbf{Total}} \\ \hline
+% \multicolumn{5}{c}{} & \multicolumn{2}{|c|}{360} & \multicolumn{1}{c|}{25 €} & \multicolumn{1}{c|}{\textbf{9.000 €}} \\ \cline{6-9}
+% \multicolumn{4}{l}{} &  & \multicolumn{2}{l}{} &  &  \\ \hline
+% \multicolumn{4}{|l|}{\textbf{COSTE DE RECURSOS MATERIALES (coste directo)}} & \multicolumn{1}{c|}{\textbf{\begin{tabular}[c]{@{}c@{}}Precio \\ de compra\end{tabular}}} & \multicolumn{2}{c|}{\textbf{\begin{tabular}[c]{@{}c@{}}Uso en \\ meses\end{tabular}}} & \multicolumn{1}{c|}{\textbf{\begin{tabular}[c]{@{}c@{}}Amortización \\ (en años)\end{tabular}}} & \multicolumn{1}{c|}{\textbf{Total}} \\ \hline
+% \multicolumn{4}{|l|}{Ordenador personal (Software incluido)} & \multicolumn{1}{c|}{1.500,00 €} & \multicolumn{2}{c|}{6} & \multicolumn{1}{c|}{5} & \multicolumn{1}{c|}{\textbf{150,00 €}} \\ \hline
+% \multicolumn{4}{l}{} &  & \multicolumn{2}{l}{} &  &  \\ \hline
+% \multicolumn{8}{|l|}{\textbf{COSTE TOTAL DE RECURSOS MATERIALES}} & \multicolumn{1}{c|}{\textbf{150,00 €}} \\ \hline
+% \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} &  \\ \hline
+% \multicolumn{2}{|l|}{\textbf{GASTOS GENERALES (costes indirectos)}} & \multicolumn{2}{c|}{15\%} & \multicolumn{4}{c|}{sobre CD} & \multicolumn{1}{c|}{\textbf{1372,50 €}} \\ \hline
+% \multicolumn{2}{|l|}{\textbf{BENEFICIO INDUSTRIAL}} & \multicolumn{2}{c|}{6\%} & \multicolumn{4}{c|}{sobre CD+CI} & \multicolumn{1}{c|}{\textbf{631,35 €}} \\ \hline
+% \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} &  \\ \hline
+% \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} & \multicolumn{2}{l}{} &  \\ \hline
+% \multicolumn{8}{|l|}{\textbf{SUBTOTAL PRESUPUESTO}} & \multicolumn{1}{c|}{\textbf{11.153,85 €}} \\ \hline
+% \multicolumn{7}{|l|}{\textbf{IVA APLICABLE}} & \multicolumn{1}{c|}{21\%} & \multicolumn{1}{c|}{\textbf{2.342,3085 €}} \\ \hline
+% \multicolumn{8}{|l|}{\textbf{TOTAL PRESUPUESTO}} & \multicolumn{1}{c|}{\textbf{13.496,1585 €}} \\ \hline
+% \end{tabular}}
+% \label{tab:presupuesto}
+% \end{table}
+% \end{landscape}
+% \clearpage
+% }

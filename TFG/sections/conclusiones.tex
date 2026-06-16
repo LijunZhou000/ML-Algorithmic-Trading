@@ -6,28 +6,58 @@
 
 \section{Conclusiones}
 
-\notes{Añadir grafica de la evolución del equity, comparativa contra Robotrader} 
+Como conclusiones finales de este proyecto, estoy muy satisfecho con lo que he desarrollado en el transcurso de estos meses. Además, viendo los
+resultados obtenidos se puede concluir que el sistema ha funcionado como se esperaba.
 
-\notes{Añadir Monte Carlo}
+He podido aplicar los conocimientos que he adquirido durante estos 4 años de carrera aunque hayan habido teoría de asignaturas que me gustaría haber
+podido aplicar que se han quedado fuera por falta de tiempo. Aún así también he podido ampliar mis conocimientos sobre diseño de redes neuronales.
 
 \section{Líneas futuras}
 
 \notes{Preguntar si demasiadas lineas futuras demuestra poco o mucho interes en el trabajo}
 
-Por limitaciones del tiempo dejo pendiente dos mejoras
+Por limitaciones del tiempo dejo pendiente varias mejoras e implementaciones nuevas
 
-Por una parte añadir una interfaz gráfica independiente de grafana para tener personalización total
+Lo primero y de lo que se ha hablado en el desarrollo, es la implementación de modelos no supervisados en diferentes puntos del pipeline, por una
+parte como feature extra, por otra parte como segmentador de régimenes de mercado y por último como agrupador de futuros.
 
-Y por otra parte añadir en esa misma página un chatbot usando RASA o un LLM para responder preguntas a partir de toda la información disponible (NLP)
+Además, también me gustaría añadir el despliegue de MLflow y Airflow ya que son partes esenciales del trabajo como ingeniero y científico de datos,
+aportarian mucho valor.
 
-\notes{Indicar todo lo que no me ha dado tiempo aunque tenía pensado meter, Shannon, Markov, sentiment analysis usando NLP}
+A parte de estas implementaciones que se han comentado en los apartados de desarrollo también existen otras cosas que me gustaría añadir a futuro.
 
-\notes{Añadir Great Expectations, para validación de datos}
+Por una parte añadir una interfaz gráfica independiente de grafana para tener personalización total. Durante la carrera he tenido asignaturas de
+desarrollo Front-End que me gustaría aplicar, serviría para mostrar más información a parte de la que permite grafana además de incluir la posibilidad
+de interactuar con los sistemas, poder parar o arrancar el bot, decidir la lista de activos a operar, etc.
 
-\notes{Pasar a pipeline/engine, lo aprendido en las prácticas}
+En relación con lo anterior, me gustaría añadir en esa misma página un chatbot usando RASA o un LLM para responder preguntas a partir de toda la
+información disponible. RASA es mucho más sencillo pero un LLM permite mayor variedad de respuestas además de que que afuturo se podría implementar
+una API MCP (Model Context Protocol)
 
-\notes{Hablar sobre otros productos financieros aunque ya se hable al inicio, como usar esos datos como apoyo, acciones, opciones, etc}
+Más relacionado con la carrera seríá aplicar conceptos como la entropía de Shannon, las cadenas de Markov junto con las FSM (Finite State Machine) y
+el análisis de sentimientos usando NLP con BERT y MarIA
 
-\notes{Hablar de bid y ask price, obtenidos de la API, para qué podría servir}
+\begin{description}
+    \item[Entropía de Shannon y teoría de la información]  \hfill \\
+        La entropía mide la incertidumbre del mercado
+    \item[Cadenas de Markov y FSM]  \hfill \\
+        Modelan la probabilidad de transición entre estados de mercado, las FSM estructuran el comportamiento del bot
+    \item[Análisis de sentimientos]  \hfill \\
+        Permiten incluir información textual de noticias y redes sociales como adición a indicadores cuantitativos.
+\end{description}
 
-\notes{Hablar dentro de mlflow y airflow además de comparar nuevo vs viejo cómo detectar si un modelo debería de ser jubilado}
+Además de todo lo ya mencionado a continuación quiero listar una seríe de mejoras que se me han ido ocurriendo al final del trabajo y durante mis
+jornadas estando de prácticas
+
+\begin{description}
+    \item[Great Expectations] \hfill \\
+        Como complemento a la validación manual de los datos
+    \item[Engine/pipeline] \hfill \\
+        Durante mis prácticas pude observar cómo trabajaban en un pipeline real de datos en un banco, se organizaban como un pipeline, cada paso es
+        una función única y todas comparten un contexto común
+    \item[Otros productos financieros] \hfill \\
+        Aunque ya se justificó por qué le decidió elegir los futuros aún así se puede experimentar con otros productos como las acciones, opciones,
+        etc. Además, se podría optar a usar los datos de los otros productos como features
+    \item[Mayor nivel de profundidad de datos] \hfill \\
+        Aunque los datos históricos son solo OHLCV, IB tiene más información, de la que descataca es la diferenciación de los precios de bid y ask
+\end{description}

@@ -63,8 +63,9 @@ A continuación muestro un mapa conceptual de las diferentes etapas y los hitos 
 
 \section{Desarrollo del autómata}
 
-El objetivo es poder generalizar el código, que no importe de qué activos sean los datos, que el flujo de datos puede reutilizarse. Facicitando a su
-vez la posibilidad futura de operar usando otros tipos de activos financieros agregando código nuevo con los mismos formatos que el código existente.
+Unos de los objetivos principales del proyecto es garantizar que el sistema sea modular, reutilizable y fácilmente extensible, independientemente del
+activo financiero con el que se trabaje.
+
 
 Para lograr este objetivo he decidido implementar la lógica del código dentro de un paquete instalable de python usando
 \mintinline{bash}{pip install -e} y he decidido usar la siguiente estructura organizativa.
@@ -892,3 +893,5 @@ Comparativa de modelos, entre el modelo en uso y nuevos modelos
 % \subsection{MLOps}
 
 % Uso de MLflow
+
+\notes{Hablar dentro de mlflow y airflow además de comparar nuevo vs viejo cómo detectar si un modelo debería de ser jubilado}
