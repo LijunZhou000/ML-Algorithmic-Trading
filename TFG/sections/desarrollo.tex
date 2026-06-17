@@ -287,8 +287,10 @@ del volumen.
 
 Una vez obtenidas todas las características se realiza una primera comprobación, donde se intenta ver si existen muchos valores nulos en las
 diferentes características, donde destacan la gran cantidad de valores nulos en los swings debido a la naturaleza de este dato, en este caso opto por
-rellenar los valores faltantes con el último valor disponible. Hay algunas características que requieren de cierto número de velas inciiales para su
-cálculo, estas primeras filas se puede eliminar sin problema ya que representan un porcentaje ínfimo del total de filas de datos.
+rellenar los valores faltantes con el último valor disponible. Hay algunas características que requieren de cierto número de velas iniciales para su
+cálculo, estas primeras filas se puede eliminar sin problema ya que representan un porcentaje ínfimo del total de filas de datos. Debido a que algunos
+idicadores necesitan 12 o 14 velas para poder calcular el primer valor no me ha sido posible agrupar los datos por días ya que una de las ideas que
+tenía era reiniciar los inidcadores todos los días, además tampoco tiene tanto sentido al tener una estrategia multidía.
 
 \notes{Hacer alusión al libro}
 
@@ -300,49 +302,48 @@ features más complejas.
 Una vez calculadas todas las características es necesario reducir ese número porque es posible que muchas de ellas estén interrelacionadas.
 
 Para ello se aplican varias técnicas, empezando por la más básica, un filtro de alta correlación, además de eliminar las características que puedan
-predecir el futuro, las no cíclicas o no estacionarias pueden confundir a los modelos indicando que en valor que quizás representaba el día de la
-semana sea considerado como más importante a mayor número.
+predecir el futuro por data leakage, las no cíclicas o no estacionarias pueden confundir a los modelos indicando que un valor que quizás representaba
+el día de la semana sea considerado como más importante a mayor número.
 
 También filtro usando el algorítmo de LASSO usando un modelo de aprendizaje automático clásico de sklearn que permité mayor explicabilidad, de este
-modo reduzco a la mita el número de características al decidir quedame con el 50 por ciento de características más importantes.
+modo reduzco a la mitad el número de características al decidir quedame con el 50 por ciento de características más importantes.
 
-Todo esto ayuda a reducir el problema de la maldición de la dimensionalidad, aunque no tiene el efecto negativo que sí tiene sobre modelos de
+Todo esto ayuda a reducir el problema de la maldición de la dimensionalidad, que aunque no tiene el efecto negativo que sí tiene sobre modelos de
 aprendizaje automático clásicos sigue siendo útil para evitar sobreajuste y disminuye los tiempos de entrenamiento.
 
 \subsection{Definición y cálculo de la clase objetivo}
 
 Para este proyecto se ha decidido usar el método de la triple barrera, las tres barreras son, SL (Stop Loss), TP (Take Profit) y la barrera temporal.
-A partir de un límite temporal se define qué pasa primero, salta SL en el caso en el que el precio alcanca un nivel de pérdida predefinido, SL lo
+A partir de un límite temporal se define qué pasa primero, salta SL en el caso en el que el precio alcance un nivel de pérdida predefinido, TP es lo
 mismo pero con beneficio, y en caso de no llegar en el tiempo definido se considera que ha tocado la barrera del tiempo, en el caso de que en una vela
 se haya llegado a SL y TP nos ponemos en el peor de los caso y decidimos que ha sido SL. Los umbrales se definen por el ATR multiplicado por un valor
 determinado.
-
-\notes{Justificar SL sobre TP}
 
 Aunque en un inicio se esperaba realizar una predicción de patrones de swing durante el periodo de investigación me dí cuenta de que los swings tenían
 diferentes desventajas, partiendo por el hecho de que necesitan velas de confirmación, normalmente 2, lo que en mi caso se traducen a tener un retraso
 de 8 horas. Por ello he decidido optar por esta otra opción. Aún así los usaré como características para entrenar los modelos.
 
-\notes{Justificar por qué no swings clásicos, los patrones}
-
-Log return con triple barrier
+Además de generar una etiqueta discreta también se guarda información del retorno, en mi caso el retorno logarítmico, información que será útil para
+la capa de regresión, como se explicará más adelante en la próxima sección. Además, permite evaluar mejor la clasificación ya que no es lo mismo un
+retorno del 0.2\% que del 2\%. Se usa el retorno logarítmico porque ofrece aditividad temporal, simetría y normalidad aproximada y permite
+comparaciones entre activos con volatilidades distintas.
 
 \subsection{Aprendizaje supervisado}
 
-El uso de modelos de aprendizaje supervisado se centra en modelos de clasificación binaria, en este caso en dos etapas, y dentro de cada etapa se
-utilizan dos modelos de aprendizaje profundo usando PyTorch, LSTM y GRU. Cada uno de los modelos utilizados tiene una función, LSTM ..., por su parte
-GRU. Para ambas fases se realiza una votación equitativa, si la media supera el umbral indicado para cada fase se pasa a la siguiente. Existe una
-tercera capa que también usa ambos modelos pero en vez de ser de clasificación es de regresión, se usan los valores de ambas regresiones para realizar
-la votación, en mi caso uso una regresión que predice el retorno logarítmicos a X velas, de este modo se le puede dar más importancia a la que prediga
-mayor retorno en vez de hacer la media aritmética.
+Llegados al núcleo del proyecto, el siguiente paso consiste en definir las arquitecturas de los modelos de aprendizaje supervisado que se van a
+utilizar. La arquitectura se resume en un sistema de dos modelos paralelos con tres capas secuenciales y acoplados mediante un mecanismo de
+soft-voting que combina las predicciones de cada etapa.
 
-Había pensado también en usar modelos de aprendizaje automático clásicos porque pueden captar otras cosas.
+Las dos primeras etapas son de clasificación binaria y la tercera de regresión. Ambos modelos están definidos usando PyTorch. Cada uno de los modelos
+elegidos tienen una función, LSTM está orientado a capturar dependencias a largo plazo y patrones más suaves en al secuencia, mientras que GRU tiende
+a reaccionar mejor a cambios rápidos, transiciones de régimen y estructuras más volátiles.
 
-\notes{Indicar por qué usar dos modelos diferentes qué features captura cada uno}
+En un inicio para las dos fases de clasificación se decide realizar una votación equitativa, y si la media supera un umbral indicado para cada fase se
+pasa a la siguiente. Pero después decidí añadir la tercera capa para dinamizar la votación, usando el retorno esperado como ponderación, por lo que si
+uno de los modelos considera que va a haber mayor retorno se le da mayor peso a su predicción. El retorno se calcula a X velas.
 
-\notes{Probar a ver otros métodos de votación además de usar la media}
-
-Existe una tercera etapa, en este caso de regresión que sigue la misma lógica, usando los dos modelos que servirá para ayudar 
+Había pensado también en usar modelos de aprendizaje automático clásicos porque pueden captar patrones que no tienen dependencias temporales, como
+XGBoost y Random Forest. Pero he querido centrarme en los modelos profundos porque se adaptan mejor a las secuencias.
 
 \begin{table}[H]
 \caption{Tabla comparativa de parámetros de los modelos}
@@ -356,154 +357,36 @@ Existe una tercera etapa, en este caso de regresión que sigue la misma lógica,
 \end{center}
 \end{table}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
     \includegraphics[scale=0.45]{./img/ml_process.pdf}
     \caption{Añadir img de las capas de las redes LSTM}
     \label{fig_mlp_11}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
     \includegraphics[scale=0.45]{./img/ml_process.pdf}
     \caption{Añadir img de las capas de las redes GRU}
     \label{fig_mlp_12}
 \end{figure}
 
-La decisión de usar dos etapas de clasificación es debido al desbalanceo de clases al generar el valor a predecir me doy cuenta de que aproximadamente
-el 70\% de las velas terminan tocando la barrera del tiempo y los otros dos se reparten 15\% cada uno, en un inicio probé modelos con salida triple
-pero debido al desbalance no daba muy buenos resultados incluso modificando los pesos de los valores dando mayor peso a ambas barreras no temporales
-no habían resultados favorables por ello decidí pasar a dos fases binarias, una primera predice si hay movimiento, si toca cualquiera de las dos
-barreras laterales y en caso de superar un umbral que se establece después se pasa a la siguiente fase donde se decide la dirección del movimiento,
-aquí también se decide más adelante el umbral a partir del cual se considera valido, existen dos opciones de decisión, que exista un umbral mínimo o
-que con que uno supere al otro por más mínima diferencia se decanta por ese, al final después de probar me decanté por añadir un umbral mínimo.
+La decisión de usar dos etapas de clasificación es debido al desbalanceo de clases, al generar el valor a predecir me doy cuenta de que
+aproximadamente el 70\% de las velas terminan tocando la barrera del tiempo y los otros dos se reparten 15\% cada uno, en un inicio probé modelos con
+salida triple pero debido al desbalance no daba muy buenos resultados incluso modificando los pesos de los valores dando mayor peso a ambas barreras
+no temporales no habían resultados favorables por ello decidí pasar a dos fases binarias, una primera predice si hay movimiento, si toca cualquiera de
+las dos barreras laterales y en caso de superar un umbral que se establece después, se pasa a la siguiente fase donde se decide la dirección del
+movimiento, aquí también se decide más adelante el umbral a partir del cuál se considera valido, existen dos opciones de decisión, que exista un
+umbral mínimo o que con que uno supere al otro por más mínima diferencia se decanta por ese, al final después de probar me decanté por añadir un
+umbral mínimo del 0.55.
 
 \notes{Se me ha olvidado qué queria poner de más}
 
-% \begin{tikzpicture}[
-%   font=\sffamily\footnotesize,
-%   node distance = 4.5mm,
-%   %
-%   % Generic rounded box
-%   blk/.style = {
-%     draw, rounded corners=5pt,
-%     minimum width=6.2cm, minimum height=10mm,
-%     align=center, text depth=1pt,
-%     blur shadow={shadow blur steps=4, shadow xshift=.8pt,
-%                  shadow yshift=-.8pt, shadow opacity=25}
-%   },
-%   % Specific fills
-%   Iblk/.style = {blk, fill=Cblue,   draw=Cblue.b},
-%   Gblk/.style = {blk, fill=Cgreen,  draw=Cgreen.b},
-%   Ablk/.style = {blk, fill=Camber,  draw=Camber.b},
-%   Yblk/.style = {blk, fill=Cyellow, draw=Cyellow.b},
-%   Pblk/.style = {blk, fill=Cpurple, draw=Cpurple.b},
-%   Sblk/.style = {blk, fill=Csalmon, draw=Csalmon.b, minimum width=6.2cm},
-%   Dblk/.style = {blk, fill=Cgray,   draw=Cgray.b,   minimum width=6.2cm},
-%   Oblk/.style = {blk, fill=Cteal,   draw=Cteal.b},
-%   %
-%   % Arrow
-%   arr/.style  = {-{Stealth[length=5.5pt, width=4.5pt]}, line width=1.2pt, color=black!55},
-%   %
-%   % Group-label style
-%   glbl/.style = {font=\sffamily\scriptsize\bfseries, anchor=west},
-% ]
- 
-% %% ── TITLE ──────────────────────────────────────────────────────────
-% \node[font=\sffamily\normalsize\bfseries, text=black!80]
-%   (title) {\texttt{GoldGRU\_L2\_Dir}  –  arquitectura de capas};
- 
-% %% ── LAYER NODES ────────────────────────────────────────────────────
-% \node[Iblk, below=7mm of title]  (input)
-%   {$\mathbf{X}\;\in\;\mathbb{R}^{B\;\times\;T\;\times\;d_{\mathrm{in}}}$};
- 
-% \node[Gblk, below=of input]  (gru1)
-%   {GRU – capa 1 \quad $d_{\mathrm{in}} \!\to\! 128$};
- 
-% \node[Gblk, below=of gru1]   (gru2)
-%   {GRU – capa 2 \quad $128 \!\to\! 128$,\;dropout $= 0.3$};
- 
-% \node[Ablk, below=of gru2]   (attn)
-%   {Atención: \;Linear$(128\!\to\!1)$ + Softmax\;($\alpha_t$)};
- 
-% \node[Yblk, below=of attn]   (wsum)
-%   {Suma ponderada: \;$\displaystyle\sum_t \alpha_t\,\mathbf{h}_t
-%     \;\in\;\mathbb{R}^{B\times 128}$};
- 
-% \node[Yblk, below=of wsum]   (ln)
-%   {LayerNorm$(128)$};
- 
-% %% Head
-% \node[Pblk, below=of ln]     (lin1) {Linear\;$128\!\to\!64$};
-% \node[Sblk, below=of lin1]   (ge1)  {GELU};
-% \node[Dblk, below=of ge1]    (dr1)  {Dropout\;$(p=0.3)$};
- 
-% \node[Pblk, below=of dr1]    (lin2) {Linear\;$64\!\to\!32$};
-% \node[Sblk, below=of lin2]   (ge2)  {GELU};
-% \node[Dblk, below=of ge2]    (dr2)  {Dropout\;$(p=0.2)$};
- 
-% \node[Pblk, below=of dr2]    (lin3) {Linear\;$32\!\to\!2$};
- 
-% \node[Oblk, below=of lin3]   (out)
-%   {Logits:\;\textbf{[SELL,\;BUY]}};
- 
-% %% ── ARROWS ─────────────────────────────────────────────────────────
-% \foreach \A/\B in {
-%   input/gru1, gru1/gru2, gru2/attn, attn/wsum, wsum/ln,
-%   ln/lin1, lin1/ge1, ge1/dr1, dr1/lin2,
-%   lin2/ge2, ge2/dr2, dr2/lin3, lin3/out}
-% {\draw[arr] (\A) -- (\B);}
- 
-% %% ── BACKGROUND GROUP BOXES ─────────────────────────────────────────
-% \begin{scope}[on background layer]
- 
-%   \node[fit=(gru1)(gru2),
-%         draw=Cgreen.b, fill=Cgreen!18,
-%         rounded corners=7pt, inner sep=5pt,
-%         label={[glbl, text=Cgreen.b]right:{GRU Encoder}}] {};
- 
-%   \node[fit=(attn)(wsum),
-%         draw=Camber.b, fill=Camber!18,
-%         rounded corners=7pt, inner sep=5pt,
-%         label={[glbl, text=Camber.b]right:{Attention\\[-1pt]Pooling}}] {};
- 
-%   \node[fit=(ln),
-%         draw=Cyellow.b, fill=Cyellow!18,
-%         rounded corners=7pt, inner sep=5pt,
-%         label={[glbl, text=Cyellow.b]right:{Normaliz.}}] {};
- 
-%   \node[fit=(lin1)(ge1)(dr1)(lin2)(ge2)(dr2)(lin3),
-%         draw=Cpurple.b, fill=Cpurple!12,
-%         rounded corners=7pt, inner sep=5pt,
-%         label={[glbl, text=Cpurple.b]right:{FC\\[-1pt]Head}}] {};
- 
-% \end{scope}
- 
-% %% ── DIM ANNOTATIONS on the left ────────────────────────────────────
-% \newcommand{\dimlbl}[2]{%   #1=node, #2=text
-%   \node[font=\sffamily\tiny, text=black!45, anchor=east,
-%         xshift=-4pt] at (#1.west) {#2};}
- 
-% \dimlbl{gru1}{$(B,T,128)$}
-% \dimlbl{gru2}{$(B,T,128)$}
-% \dimlbl{wsum}{$(B,128)$}
-% \dimlbl{ln}  {$(B,128)$}
-% \dimlbl{lin1}{$(B,64)$}
-% \dimlbl{lin2}{$(B,32)$}
-% \dimlbl{out} {$(B,2)$}
- 
-% \end{tikzpicture}
+\notes{Explicar el tema de los umbrales}
 
 \notes{Explicar entrenamiento}
 
-El entrenamiento de los modelos se hace para cada modelo por separado, entrenando las tres fases juntos, se usa un sistema de walk forward con moving
-window, que es la técnica requerida para entrenamiento con series temporales.
-
-\notes{Explicar qué es el entrenamiento en walk forward y la variante con moving window}
-
-\notes{Explicar por qué para series temporales no sirve cross validation clásico}
-
-Lo primero es calcular los hiperparámetros idóneos para cada entrenamiento teniendo en cuenta el tamaño de cada dataset, el periodo de muestreo y el
+Antes de pasar al entrenamiento es necesario calcular los hiperparámetros idóneos para cada entrenamiento teniendo en cuenta el tamaño de cada dataset, el periodo de muestreo y el
 número de velas a futuro a predecir. Se obtienen así los siguiente hiperparámetros.
 
 \begin{description}
@@ -520,11 +403,30 @@ número de velas a futuro a predecir. Se obtienen así los siguiente hiperparám
     Número de velas de separación entre el final de una iteración y el comienzo de la siguiente. Sirve para evitar filtrado de datos
 \end{description}
 
-Después de obtener estos datos pasamos a crear los dataset que se van a usar en cada época teniendo en cuenta el lookback calculado en el paso
-anterior.
+El entrenamiento de los modelos se hace para cada modelo por separado, entrenando las tres fases juntas, se usa un sistema de walk forward con moving
+window, que es la técnica requerida para entrenamiento con series temporales. A diferencia del entrenamiento normal este método respeta la estructura
+temporal de los datos y evita data leakage.
 
-Pasamos al entrenamiento en sí, como se mencionaba antes entrenamos todas las capas a la vez pero de manera independiente. Lo primero que se hace es
-para cada etapa separar los datos en train y test acto seguido se usa un scaler para escalar los datos de entrenamiento, se hace en este orden para
+El walk forward (rolling forecast origin) consiste en entrenar el modelo en un bloque de inicial de datos históricos y evaluarlo en el siguiente
+bloque inmediatamente posterior y después se avanza hacia el siguiente bloque dejando algunas velas de margen y se repite este proceso hasta completar
+el entrenamiento con todos los datos posibles. La variante con moving window define cuántos datos históricos se usan en cada entrenamiento, en mi caso
+es una ventana de tamaño fija, existe otra opción llamada expanding window donde la ventana va aumentando de tamaño.
+
+En las series temporales no sirve el cross validation clásico porque mezcla aleatoriamente los datos, divide los folds sin respetar el orden temporal,
+esto provoca que el modelo pueda entrenar con datos del futuro introudciendo data leakage masivo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img de walk forward}
+    \label{fig_mlp_16}
+\end{figure}
+
+Una vez explicado el método a utilizar y después de obtener estos datos pasamos a crear los dataset que se van a usar en cada época teniendo en cuenta
+el lookback calculado en el paso anterior.
+
+Pasamos al entrenamiento en sí, como se mencionaba antes, entrenamos todas las capas a la vez pero de manera independiente. Lo primero que se hace es
+para cada etapa separar los datos en train y test, acto seguido se usa un scaler para escalar los datos de entrenamiento, se hace en este orden para
 evitar leakage que ocurriria si se aplicase el scaler directamente a train y test. Se entrena primero L1 y después L2 y por último L3. El resultado
 del entrenamiento es un dataset con la predicción de cada capa y la confianza que tiene en dicha predicción.
 
@@ -532,26 +434,37 @@ Depués de entrenar se decide primero buscar los umbrales de confianza adecuados
 regresión no cuenta con una confianza. Se usa la métrica de aprendizaje automático de f1 macro ya que no se ve afectada por el desbalance de clases
 como sí ocurre con accuray, precision o recall.
 
-Se guardan los modelos en archivos pth, junto al último scaler, ya que el scaler se actualiza con cada grupo de datos. Además de guardar las features
-usadas para poder filtrar después durante el backtest y la operación y los parámetros del modelo usado, como el umbral de confianza.
+Se guardan los modelos en archivos pth, junto al último scaler, ya que el scaler se actualiza en cada ventana, y por lo tanto sus parámetros cambian
+(media, desviación estandar, etc). Además, se guardan las features usadas para poder filtrar después durante el backtest y la operación, y los
+parámetros del modelo usado, como el umbral de confianza. 
+
+El scaler que he decidido usar es el RobustScaler, ya que ofrece varias ventajas, usa la mediana y el rango intercuartil (IQR) para escalar los datos,
+lo que lo hace resistente a valores atípicos conocidos como cisnes negros, y a cambios bruscos del mercado. Existen otras opciones como StandarScaler
+y MinMaxScaler, el primero produce escalados inestables y el segundo usa un rango fijo.
+
+La votación solo ocurre si ambos modelos pasan a la segunda fase y predicen la misma dirección si no no se hace nada.
+
+Una de mis ideas es que a futuro se puedan ir actualizando tanto el modelo como el scaler de manera semanal, pero esto se explicará más adelante. La
+idea es poder adaptarse mejor a los cambios de régimen del mercado.
+
 \notes{Faltan cosas por explicar}
 
-\notes{Quizás meter shap con deepexplainer}
-
-\notes{Explicar por qué usar un tipo de scaler y no otro}
+Anteriormente se ha mencionado el uso de modelos clásicos para permitir mayor explicabilidad, en deep learning existe la opción de usar Shap
+DeepExplainer para ver el peso de las diferentes características en la predicción de un modelo pero aunque sea una herramienta potente para evitar que
+las redes neuronales sean cajas negras, Shap asume que las características son independientes entre sí. Además, Shap es costoso y proporciona
+explicaciones locales, por cada predicicón, por lo que no necesariamente da una visión global.
 
 \subsection{Aprendizaje no supervisado}
 
-\notes{Pasar a planes de futuro}
-
-Además de usar modelos de aprendizaje supervisado tenía la idea de usar modelos no supervisados para un par de tareas
+Además de usar modelos de aprendizaje supervisado tenía la idea de usar modelos no supervisados para varias tareas.
 
 En primer lugar, para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias, por ejemplo, todas las monedas
 juntas, dejo que el sistema decida cuales son los activos más parecidos. De este modo podría generar más características derivadas de la comparación
-de los activos, basandome en el concepto de \textit{Pairs Trading} donde se comparan un par de activos que se saben que son correlados y cointegrados,
-y si uno de ellos sube más que el otro se abre una posición en corto y si uno de ellos baja más que el otro se abre una posición en largo.
+de los activos, basandome en el concepto de \textit{Pairs Trading} donde se comparan un par de activos que se saben que están correlados y
+cointegrados, y si uno de ellos sube más que el otro se abre una posición en corto y si uno de ellos baja más que el otro se abre una posición en
+largo.
 
-El problema que le encuentro a este primer caso de uso es la disparidad de datos, por una parte los datos históricos proporcionados no son de las
+El problema que le encuentro a este primer caso de uso es la disparidad de datos, por una parte, los datos históricos proporcionados no son de las
 mismas fechas, esto se soluciona fácilmente al recortar los datos más antiguos ya que además podrían causar problemas a los modelos. Pero donde
 existen más problemas es el tema de los horarios de las diferentes bolsas, la idea sería usar la función de rellenado hacia adelante para los
 momentos donde faltasen datos de alguno de los futuros. Otra opción sería comparar cada futuro con el centroide (el centro de cada cluster) del
@@ -561,24 +474,42 @@ cluster.
 Además de este problema está la necesidad de tomar la decisión de qué tipo de modelo no supervisado usar, si uno donde se predefine el número de
 clusters o uno donde el propio modelo decide el número (Decidir entre modelos paramétricos (k fijo) o modelos no paramétricos (k variable))
 
+Y el problema principal sería sobre qué agrupar qué características usar para la agrupación.
+
 El segundo uso es el de segmentar los régimenes de mercado. Con esta información hay dos opciones de acción, por una parte, usarlo como una
 característica más para complementar al resto, aunque puede no ser tan útil al usar modelos de aprendizaje supervisado profundo que al estar diseñados
-para manejar series temporales pueden inferir los régimenes de mercado por si solos. La segunda opción es usar la diferencia de régimenes para entrenar
-modelos dedicados para cada régimen consiguiendo modelos más especializados en cada régimen. Este uso tiene los mismos problemas que el primero
+para manejar series temporales pueden inferir los régimenes de mercado por si solos. La segunda opción es usar la diferencia de régimenes para
+entrenar modelos dedicados para cada régimen consiguiendo modelos más especializados en cada régimen. Este uso tiene los mismos problemas que el
+primero.
 
-Otra utilidad relacionada con la agrupación es poder comparar modelos entrenados para otros activos pero aplicados a un activo del mismo grupo para
-ver si es mejor. 
-
-\notes{Revisar esta afirmación}
-% Pasando ahora a los modelos, primero voy a explicar las dos situaciones donde voy a implementar modelos de aprendizaje no supervisado
-
-% En primer lugar para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias por ejemplo todas las monedas
-% juntas dejo que el sistema decida cuales son los activos más parecidos
+% Otra utilidad relacionada con la agrupación es poder comparar modelos entrenados para otros activos pero aplicados a un activo del mismo grupo para
+% ver si es mejor. Aunque tiene como problemas que el clustering no garantiza similitud operativa.
 
 % \todo{Decidir el algoritmo a usar para UL}
 % \review{Prueba cuadro \textbackslash review}
 
-\subsection{Análisis de resultados de entrenamiento y Backtest de las predicciones}
+\subsection{Análisis de resultados de entrenamiento}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
+    \label{fig_mlp_17}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con evolución de las métricas dependiendo de los umbrales}
+    \label{fig_mlp_18}
+\end{figure}
+
+Tras el entrenamiento de los modelos es necesario analizar qué tan buenos son usando métricas tanto de clasificación como de regresión.
+
+En el primero caso, para clasificación, existe el classification report que nos da un conjunto de las métricas más populares. Para regresión
+calculamos las métricas.
+
+\subsection{Backtest de las predicciones}
 
 \begin{figure}[h]
     \centering
@@ -587,25 +518,37 @@ ver si es mejor.
     \label{fig_mlp_5}
 \end{figure}
 
-Tras el entrenamiento de los modelos es necesario analizar qué tan buenos son, primero usando métricas puras tanto de clasificación como de regresión
-y después también métricas de trading.
-
-En el primero caso, para clasificación existe el classification report que nos da un conjunto de las métricas más populares. Para regresión calculamos
-las métricas
-
-Después de comprobar que nos convencen los resultados pasamos al backtest, que es parecido a simular una operación real con los modelos solo que
-carece de algunas desventajas como la latencia o el spread. Aún así es un muy punto de partida para ver qué tal se deselvuenve el modelo. En este caso
-las métricas a usar son Max Drawdown, Sharpe Ratio y Alpha
+Después de comprobar que nos convencen los resultados pasamos al backtest, la idea es tener unas condiciones lo más parecido a simular una operación
+real con los modelos solo que carece de algunas desventajas como la latencia o el spread. Aún así es un muy punto de partida para ver qué tal se
+deselvuenve el modelo. En este caso las métricas a usar son Max Drawdown, Sharpe Ratio y Alpha
 
 \notes{Ver si se puede meter un contador con racha de victorias y derrotas}
-
-\notes{Indicar diferencias backtest vs real}
 
 \begin{description}
     \item[Max Drawdown] 
     \item[Sharpe Ratio] 
     \item[Alpha] 
 \end{description}
+
+\subsection{Simulación de Monte Carlo}
+
+Como paso siguiente al backtest pasamos a una simulación de Monte Carlo sencilla. Existen dos posibilidades, reordenar las predicciones ya hechas o
+intentar generar nuevos datos OHLCV con los que alimentar los modelos, los datos se generarian a aprtir de medias y varianzas.
+
+Para este proyecto he preferido quedarme con la versión simple porque se puede obtener una aproximación fiable de la dispersión de las métricas sin la
+necesidad de generar nuevos datos.
+
+La versión de Monte Carlo utilizada en este proyecto se basa en un block bootstrap con solapamiento, consiste en remuestrear por bloques en vez de por
+valores sueltes para mantener parte de la relación temporal, y tiene solapamiento para garantizar que todos los posibles segmentos de la serie
+original puedan aparecer en la simulación y no solo bloques fijos de x observaciones. En mi caso uso bloques de 24 velas, aproximadamente una semana
+de predicciones.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con una simulación de Monte Carlo}
+    \label{fig_mlp_19}
+\end{figure}
 
 \subsection{Gestión de cartera}
 
@@ -616,25 +559,28 @@ En el primer caso se realizan los siguientes pasos
 
 \begin{enumerate}
     \item Realizar todas las predicciones para todos los futuros disponibles en el momento temporal
-    \item Ordenar por nivel de confianza total
+    \item Ordenar por nivel de confianza total todos los que hayan pasado de la primera capa
     \item Iterar sobre cada predicción por este orden e ir comprobando si cumple con los requisitos para poder operar como la disponibilidad de
-    capital suficiente
+    capital suficiente y las restricciones como el Value at Risk, exposición máxima
     \item Ejecutar las diferentes operaciones
 \end{enumerate}
 
-Una vez que tuve el sistema funcionando paso a implementar un optimizador usando Pyomo
+Una vez que tuve el sistema funcionando paso a implementar un optimizador usando Pyomo, para solvertar algunas limitaciones que tiene el método
+manual, principalmente el hecho de que una predicicón con menor confianza pueda generar mayor beneficio.
 
 \notes{Explicar qué es Pyomo}
 
 Para ello sigo los siguiente paso para una optimización de un objetivo, en este caso máximizar el \textit{Sharpe Ratio}
 
 \begin{enumerate}
-    \item Definir variables
-    \item \dots
+    \item Definir variables, conjunto de activos, 
+    \item Definir parámetros, retorno esperado, volatilidad, matriz de covarianza, capital disponible, límite de exposición, restricciones de riesgo
+    \item Definir variable de decisión, abrir o no una posición
+    \item Definir restricciones, suma de pesos, límite de exposición, restricciones de riesgo, restricciones operativas
+    \item Definir función opjetivo, Sharpe Ratio
+    \item Seleccionar solver
+    \item Interpretar solución
 \end{enumerate}
-
-\notes{Explicar qué es Sharpe Ratio}
-
 
 \review{Implementar la gestión de cartera}
 
@@ -650,23 +596,30 @@ Para ello sigo los siguiente paso para una optimización de un objetivo, en este
 \end{center}
 \end{table}
 
-\subsection{Análisis de resultados de optimización y Backtest de las optimizaciones}
+\subsection{Análisis de resultados de optimización y Backtest de las optimizaciones y Simulación de Monte Carlo}
 
 \notes{Comparar respecto a usar todo el capital en un solo activo}
 
 Pasamos a realizar otro backtest, además de comparar con la operaciónde un solo activo.
 
-\subsection{Simulación de Monte Carlo}
+Realizamos otra simulación de Monte Carlo
 
-Existen dos grandes grupos de simulaciones de Monte Carlo, basados en los resultados del backtest y los que alteran los valores de entrada de los
-modelos.
+% Existen dos grandes grupos de simulaciones de Monte Carlo, basados en los resultados del backtest y los que alteran los valores de entrada de los
+% modelos.
 
-En el primer grupo
+% En el primer grupo
 
-En el segundo grupo
+% En el segundo grupo
 
-En mi caso veo a usar una de las variantes del primer grupo denominado Bootstraping Monte Carlo donde se permutan grupos pequeños de
-resutlados en vez de uno solo
+% En mi caso veo a usar una de las variantes del primer grupo denominado Bootstraping Monte Carlo donde se permutan grupos pequeños de
+% resutlados en vez de uno solo
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con Backtest}
+    \label{fig_mlp_20}
+\end{figure}
 
 \begin{figure}[h]
     \centering
@@ -675,7 +628,7 @@ resutlados en vez de uno solo
     \label{fig_mlp_3}
 \end{figure}
 
-Como complemento de los backtest he decidido realizar una simulación de montecarlo
+% Como complemento de los backtest he decidido realizar una simulación de Monte Carlo
 
 \subsection{Manejo del riesgo}
 
