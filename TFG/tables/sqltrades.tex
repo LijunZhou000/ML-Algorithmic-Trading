@@ -1,0 +1,51 @@
+\begin{longtable}{l l l}
+\caption{Estructura de la tabla \texttt{trades}} \\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{3}{r}{\textit{Continúa en la siguiente página}} \\
+\midrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+id                     & SERIAL            & Identificador único \\
+symbol                 & TEXT              & Símbolo del futuro \\
+contract               & TEXT              & Contrato específico\\
+status                 & TEXT              & Estado de la operación\\
+side                   & TEXT              & Dirección\\
+quantity               & INTEGER           & Número de contratos \\
+timestamp\_open        & TIMESTAMPTZ       & Momento de apertura \\
+timestamp\_close       & TIMESTAMPTZ       & Momento de cierre\\
+entry\_price           & DOUBLE PRECISION  & Precio de entrada \\
+exit\_price            & DOUBLE PRECISION  & Precio de salida \\
+stop\_loss             & DOUBLE PRECISION  & Stop loss asignado \\
+take\_profit           & DOUBLE PRECISION  & Take profit asignado \\
+pnl                    & DOUBLE PRECISION  & Beneficio/pérdida absoluto \\
+pnl\_pct               & DOUBLE PRECISION  & Beneficio/pérdida porcentual \\
+return                 & DOUBLE PRECISION  & Retorno relativo \\
+max\_favorable\_excursion & DOUBLE PRECISION & Máximo movimiento a favor \\
+max\_adverse\_excursion   & DOUBLE PRECISION & Máximo movimiento en contra \\
+model\_signal          & TEXT              & Señal generada por el modelo \\
+model\_confidence\_l1  & DOUBLE PRECISION  & Confianza del modelo (nivel 1) \\
+model\_confidence\_l2  & DOUBLE PRECISION  & Confianza del modelo (nivel 2) \\
+model\_reg\_value      & DOUBLE PRECISION  & Valor regresivo del modelo \\
+thresholds\_used       & JSONB             & Umbrales usados en la decisión \\
+commission             & DOUBLE PRECISION  & Comisión aplicada \\
+slippage               & DOUBLE PRECISION  & Slippage registrado \\
+equity\_before         & DOUBLE PRECISION  & Equity antes de la operación \\
+equity\_after          & DOUBLE PRECISION  & Equity después de la operación \\
+bar\_index\_open       & INTEGER           & Índice de barra de apertura \\
+bar\_index\_close      & INTEGER           & Índice de barra de cierre \\
+duration\_bars         & INTEGER           & Duración en barras \\
+duration\_minutes      & INTEGER           & Duración en minutos \\
+\end{longtable}

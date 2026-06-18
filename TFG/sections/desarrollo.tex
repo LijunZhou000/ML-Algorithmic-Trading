@@ -118,7 +118,7 @@ El orden mostrado en la imagen superior representa el orden lógico en el que se
 \begin{figure}[h]
     \centering
     \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con el diagrama de cómo funcioan todo}
+    \caption{Añadir img con el diagrama de cómo funciona todo}
     \label{fig_mlp_7}
 \end{figure}
 
@@ -648,45 +648,45 @@ Por último como medida para estar al día con los datos de los futuros, cada se
 comparan con los modelos actuales para comprobar cuales son mejores predictores de los datos de la última semana o mes. Esto se explicará en más
 detalle en la sección de orquestración.
 
-\notes{Ver donde colocar mejor el último parrafo}
+% \notes{Ver donde colocar mejor el último parrafo}
 
 En el caso de haber seguido con el clustering usando aprendizaje no supervisado también se podría indicar un umbral máximo de exposición por grupo,
 evitando así que en el caso de que las señales positivas pertenezcan todas a un único grupo y este haya sido predicho incorrectamente perder demasiado
 capital.
 
-También se realizan comprobación para la integridad de los datos que Open esté entre Low y High, etc
-
-\notes{Poner más ejemplos}
-
+También se realizan comprobación para la integridad de los datos, por ejemplo que Open y Close estén entre Low y High, que Low sea menor o igual a
+High, volumen no negativo, que no hayan duplicados.
 
 \subsection{Operación}
 
 Una vez con todo preparado llega el momento de unir todo en un único código que será el que se conecte a la API de Interactive Brokers para realizar
 las operaciones.
 
-La operación tendrá los siguientes pasos
+La operación tendrá los siguientes pasos de manera resumida
 
 \begin{enumerate}
     \item Conexión a la API de Interactive Brokers
-    \item Lectura de los futuros sobre los que se van a operar
-    \item Descarga de los datos necesarios para realizar las predicciones
+    \item Lectura de los futuros sobre los que se van a operar y obtener los contratos específicos a operar
+    \item Descarga de los datos históricos necesarios para realizar las predicciones iniciales
     \item Carga de la información de configuración del sistema
     \item Carga de los modelos, los escaladores, y la configuración individual de cada futuro
     \item Cada X minutos realizar las predicciones de cada futuro
+    \item Tener watchdog de vigilancia para control del riesgo
 \end{enumerate}
 
 Como los futuros tienen fecha de caducidad obtengo una lista para cada futuro con el número de contratos activos y los ordeno para obtener el contrato
 con mayor volumen, minimizando el spread. En el caso de estar corriendo el código durante varios días seguidos el sistema realiza esta consulta una
 vez al día. En caso de que sigan habiendo contratos abiertos existen dos posibilidad dependiendo de cómo esté configurado, en el primer caso cierra
-esos contratos directamente, en el segundo caso comprueba la diferencia de volumen y si es menor de un umbral decide seguir con el contrato anterior,
-si no, hace como en el primer caso y cierra las posiciones.
+esos contratos directamente, en el segundo caso comprueba la diferencia de volumen y si es menor de un umbral decide seguir con el contrato anterior
+aunque las predicciones futuras ya se realizan sobre el contrato con mayor volumen, si se supera el umbral, hace como en el primer caso y cierra
+las posiciones.
 
 Existe la posibilidad de elegir el comportamiento a la hora de comprar un activo, la opción más sencilla es que si sale que hay movimiento se hace
-long o short abriendo una sola posición, podría usarse el log return para decidir abrir más posiciones siempre respetando los límites de capital
-impuestos por el brocker y por uno mismo. Otra opción es a la hora de una segunda y sucesivas predicciones, como se ha mencionado antes se puede
-decidir no hacer nada en caso de seguir con la misma predicción pero también se puede decidir añadir más posiciones ya sea usando el mismo umbral de
-confianza o pidiendo un umbral mayor, y que en este caso si no supera el nuevo umbral pero si el original mantener la posición. En el caso de que la
-señal sea la opuesta que la original se cierra la posición anteriormente abierta y abrir una posición opuesta a la anterior, en el caso de una
+long o short abriendo una sola posición, podría usarse el log return o la volatilidad para decidir abrir más posiciones siempre respetando los límites
+de capital impuestos por el brocker y por uno mismo. Otra opción es a la hora de una segunda y sucesivas predicciones, como se ha mencionado antes se
+puede decidir no hacer nada en caso de seguir con la misma predicción pero también se puede decidir añadir más posiciones ya sea usando el mismo
+umbral de confianza o pidiendo un umbral mayor, y que en este caso si no supera el nuevo umbral pero si el original mantener la posición. En el caso
+de que la señal sea la opuesta que la original se cierra la posición anteriormente abierta y se abre una posición opuesta, en el caso de una
 predicción neutra se puede elegir si cerrar o dejar que siga hasta llegar a alguna de las tres barreras o a alguna predicción diferente, todo esto se
 configura en un json.
 
@@ -699,22 +699,17 @@ En otro json se guardan todas las operaciones que se realizan
         "status": "closed",
         "side": "long",
         "quantity": 1,
-
         "timestamp_open": "2024-03-12T10:40:00Z",
         "timestamp_close": "2024-03-13T14:00:00Z",
-
         "entry_price": 2145.3,
         "exit_price": 2162.7,
         "stop_loss": 2138.0,
         "take_profit": 2170.0,
-
         "pnl": 174.0,
         "pnl_pct": 0.81,
         "return": 0.0081,
-
         "max_favorable_excursion": 0.0124,
         "max_adverse_excursion": -0.0048,
-
         "model_signal": "BUY",
         "model_confidence_l1": 0.87,
         "model_confidence_l2": 0.72,
@@ -723,13 +718,10 @@ En otro json se guardan todas las operaciones que se realizan
             "threshold_move": 0.55,
             "threshold_dir": 0.60
         },
-
         "commission": 2.5,
         "slippage": 0.0,
-
         "equity_before": 10234.5,
         "equity_after": 10408.5,
-
         "bar_index_open": 58291,
         "bar_index_close": 58347,
         "duration_bars": 56,
@@ -742,7 +734,12 @@ En otro json se guardan todas las operaciones que se realizan
 No es una fase per se, es algo que se debe implementar en las diferentes etapas del flujo para saber qué está pasando en cada parte y para poder
 llevar un registro de todo.
 
-\notes{Ejemplos de donde añadir logging}
+Por ejemplo, en la fase de entrenamiento se pueden mostrar mensajes sobre qué futuros se están entrenando y los resultados que se están obteniendo,
+lo mismo con los backtest y simulaciones.
+
+El punto más importante donde tener logs es durante la operación, donde se muestran información como el número de posiciones abiertas, el estado de
+conexión con la API, qué contrato se ha seleccionado, si se han descargado bien los datos, si se han cargado los datos, información de las
+configuraciones cargadas, las predicciones realizadas, las órdenes de ejecución, el watchdog.
 
 \section{Despliegue usando contenedores de Docker}
 
@@ -752,7 +749,7 @@ docker para facilitar el despliegue en otros equipos
 \begin{figure}[h]
     \centering
     \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con el diagrama de cómo funcioan todo, los puertos usados, etc}
+    \caption{Añadir img con el diagrama de cómo funciona todo, los puertos usados, etc}
     \label{fig_mlp_8}
 \end{figure}
 
@@ -760,7 +757,7 @@ docker para facilitar el despliegue en otros equipos
 
 Por cómo he desarrollado el sistema y por velocidad todo va a estar incluido en un único contenedor.
 
-No requiere demasiados cambios ya que voy a copiar los códigos desarrollados dentro del contenedor.
+No requiere demasiados cambios ya que voy a copiar los códigos desarrollados a dentro del contenedor.
 
 De este modo se logra tener un entorno estático donde se han seleccionado todas las versiones de los diferentes paquetes usados en el proyecto.
 
@@ -769,10 +766,12 @@ funciones dedicadas.
 
 El contenedor ejecuta el código de operación que se encarga de todo.
 
+Solo es necesario tener P5Operation.py en el contenedor y el paquete desarrollado para poder acceder a todas las funciones necesarias. El
+entrenamiento se puede hacer directamente desde local.
+
 \subsection{Bases de datos}
 
-Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas. Por facilidad
-voy a guardar las estadísticas en archivos sqlite, aunque a futuro existe la posibilidad de pasar a MySQL si necesito más rendimiento
+Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas. 
 
 Uso una base de datos relacional para guardar métricas de la operación y el historial de operaciones, además de guardarlo como archivos json como lo
 hacia antes. En este caso uso PostgreSQL y para poder visualizar con mayor facilidad los datos uso PgAdmin aunque también se puede ver parte de la
@@ -782,34 +781,13 @@ Como he mencionado anteriormente voy a guardar varios tipos de datos, por ello n
 
 \notes{Detallar las tablas}
 
-\begin{longtable}{l l l}
-\caption{Estructura de la tabla \texttt{metrics}} \\
-\toprule
-\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
-\midrule
-\endfirsthead
+\input{tables/sqlmetrics.tex}
 
-\toprule
-\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
-\midrule
-\endhead
+\input{tables/sqlrisk.tex}
 
-\midrule
-\multicolumn{3}{r}{\textit{Continúa en la siguiente página}} \\
-\midrule
-\endfoot
+\input{tables/sqlsignals.tex}
 
-\bottomrule
-\endlastfoot
-
-id           & SERIAL            & Identificador único \\
-ts           & TIMESTAMPTZ       & Marca temporal de la métrica \\
-metric\_name & TEXT              & Nombre de la métrica (pnl, sharpe, latency, etc.) \\
-value        & DOUBLE PRECISION  & Valor numérico de la métrica \\
-tags         & JSONB             & Información adicional (símbolo, timeframe, etc.) \\
-\end{longtable}
-
-\notes{Ver si con sqlite vale o pasar directamente a MySQL}
+\input{tables/sqltrades.tex}
 
 \subsection{Visualización}
 
@@ -861,12 +839,21 @@ En general el uso de Airflow está muy ligado al uso de MLflow ya que será el u
 
 En MLflow 
 
-Comparativa de modelos, entre el modelo en uso y nuevos modelos
+Apache Airflow es un orquestador de flujos de trabajo que permite programar, monitorizar y ejecutar tareas complejas de forma secuencial o paralela
+mediante DAGs (Directed Acyclic Graphs).
 
-\review{No me da la RAM, hay que separar, despliegue de solo MLflow y Airflow}
+MLflow es una plataforma para gestionar el ciclo de vida de modelos de Machine Learning: tracking, versionado, artefactos, modelos, comparaciones y
+despliegue.
 
-% \subsection{MLOps}
+Los usos principales de MLflow para mí son el registro de experimentos, que en vez de realizar los entrenamiento manualmente se realicen aquí
+permitiendo guardar toda la información de cada entrenamiento, permite comprar diferentes modelos y de este modo decidir si es hora de cambiar un
+modelo por una versión actualizada o un nuevo modelo, permite llevar un registro de los modelos que se están utilizando, de los usados o los que están
+probandose. Facilita la búsqueda de parámetros de los modelos.
 
-% Uso de MLflow
+Airflow por su parte sirve para orquestar muchas de las funcionalidades de MLflow, orquestración del ciclo de vida del modelo, entrenamientos
+semanales, fine tuning incremental con los datos, evaluación automática de nuevos modelos, comparación contra el modelo actual, promoción del mejor
+modelo a producción, también permite automatización del bot, que despliegue el bot los sábados por la tarde y lo pare el viernes por la tarde,
+reinicios controlados.
 
-\notes{Hablar dentro de mlflow y airflow además de comparar nuevo vs viejo cómo detectar si un modelo debería de ser jubilado}
+El problema principal es que Airflow es muy pesado y consume mucha RAM por lo que algunas de las funcionalidades no se pueden realizar aún así se
+podría activar manualmente los fines de semana para poder realizar las tareas relacionadas con el ciclo de vida de los modelos.

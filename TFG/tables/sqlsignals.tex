@@ -1,0 +1,31 @@
+\begin{longtable}{l l l}
+\caption{Estructura de la tabla \texttt{signals}} \\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{3}{r}{\textit{Continúa en la siguiente página}} \\
+\midrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+id                & SERIAL            & Identificador único \\
+ts                & TIMESTAMPTZ       & Marca temporal de la señal \\
+symbol            & TEXT              & Símbolo del futuro \\
+contract          & TEXT              & Contrato específico \\
+signal\_value     & DOUBLE PRECISION  & Valor de la señal \\
+model\_version    & TEXT              & Versión del modelo \\
+features          & JSONB             & Features usadas en la predicción \\
+decision          & TEXT              & accepted / rejected \\
+reason            & TEXT              & Motivo del rechazo (spread, volumen, riesgo...) \\
+tags              & JSONB             & Información adicional \\
+\end{longtable}

@@ -1,0 +1,26 @@
+\begin{longtable}{l l l}
+\caption{Estructura de la tabla \texttt{metrics}} \\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{3}{r}{\textit{Continúa en la siguiente página}} \\
+\midrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+id           & SERIAL            & Identificador único \\
+ts           & TIMESTAMPTZ       & Marca temporal de la métrica \\
+metric\_name & TEXT              & Nombre de la métrica (pnl, sharpe, latency, etc.) \\
+value        & DOUBLE PRECISION  & Valor numérico de la métrica \\
+tags         & JSONB             & Información adicional (símbolo, timeframe, etc.) \\
+\end{longtable}

@@ -1,0 +1,26 @@
+\begin{longtable}{l l l}
+\caption{Estructura de la tabla \texttt{risk\_events}} \\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{3}{r}{\textit{Continúa en la siguiente página}} \\
+\midrule
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+id           & SERIAL            & Identificador único \\
+ts           & TIMESTAMPTZ       & Momento del evento \\
+event\_type  & TEXT              & Tipo de evento (drawdown, latency, stale\_data...) \\
+severity     & TEXT              & Nivel (info, warn, critical) \\
+details      & JSONB             & Información adicional del evento \\
+\end{longtable}
