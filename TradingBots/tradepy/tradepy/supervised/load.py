@@ -26,6 +26,7 @@ from tradepy.features.quality_check import data_quality_report
 
 def prepare_all(symbol, minutes, return_horizon_min, json_config_path="features_config.json"):
     df, spec = load_future(symbol)
+    df["datetime"] = df["datetime_utc"]
     df = add_trading_date_by_gap(df)
     df_resampled = resample_ohlcv(df, period=f"{minutes}min")
     df_cumulative = daily_ohlcv_cummulative(df_resampled)

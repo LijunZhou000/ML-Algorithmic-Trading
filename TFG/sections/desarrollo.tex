@@ -190,12 +190,14 @@ o nula actividad, con ello puedo inferir la zona horaría usada.
 
 La siguiente imágen es un ejemplo de cómo lo he hecho, como se puede observar en el volumen del oro, hay una hora de descanso cada día esa es de
 16:00h a 17:00h hora de Chicago, con esto sabemos cómo ajustar a UTC. Este es uno de los pocos procesos que no he conseguido automatizar y he tenido
-que hacer a mano, aún así creo que podría generalizar para cada mercado, CME, etc.ç
+que hacer a mano, aún así creo que podría generalizar para cada mercado, CME, etc.
+
+\notes{Sí se generaliza por mercados -6 y +1}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con el gap}
+    \includegraphics[width=\textwidth]{./img/utc_compare.png}
+    \caption{Comparación antes y después de ajustar}
     \label{fig_mlp_15}
 \end{figure}
 
@@ -492,7 +494,7 @@ primero.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \includegraphics[width=\textwidth]{./img/classification_report.png}
     \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
     \label{fig_mlp_17}
 \end{figure}

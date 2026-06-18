@@ -66,7 +66,7 @@ def _prep(df: pd.DataFrame) -> pd.DataFrame:
 
 def _plot_hourly_bars(ax: plt.Axes, d: pd.DataFrame, column = "hour") -> None:
     """1. Histograma: número de velas por hora."""
-    counts = d.groupby('column').size()
+    counts = d.groupby(column).size()
     ax.bar(counts.index, counts.values, color=PALETTE['primary'], alpha=0.8, width=0.7)
     ax.set_title("Velas por hora", fontweight='bold')
     ax.set_xlabel("Hora UTC")
@@ -290,7 +290,7 @@ def plot_comparation_utc(
     
     d = _prep(df)
 
-    fig = plt.figure(figsize=(18, 28))
+    fig = plt.figure(figsize=(18, 10))
     fig.suptitle(
         f"Diagnóstico de limpieza — {ticker.upper()}",
         fontsize=18,
@@ -314,5 +314,5 @@ def plot_comparation_utc(
     _plot_heatmap(fig.add_subplot(gs[0, 1]), d)
     
     # ── Row 1
-    _plot_hourly_bars(fig.add_subplot(gs[0, 0]), d, column = "hour_utc")
-    _plot_heatmap(fig.add_subplot(gs[0, 1]), d, column = "hour_utc")
+    _plot_hourly_bars(fig.add_subplot(gs[1, 0]), d, column = "hour_utc")
+    _plot_heatmap(fig.add_subplot(gs[1, 1]), d, column = "hour_utc")
