@@ -1,0 +1,15 @@
+{
+    "AD": { "time_offset": -6 },
+    "BP": { "time_offset": -6 },
+    "CL": { "time_offset": -6 },
+    "EC": { "time_offset": -6 },
+    "ES": { "time_offset": -6 },
+    "GC": { "time_offset": -6 },
+    "MFXI": { "time_offset": 1 },
+    "NG": { "time_offset": -6 },
+    "NQ": { "time_offset": -6 },
+    "YM": { "time_offset": -6 },
+    "ZB": { "time_offset": -6 },
+    "ZN": { "time_offset": -6 },
+    "ZS": { "time_offset": -6 }
+}

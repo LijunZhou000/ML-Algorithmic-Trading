@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tradepy.paths import PARQUET_DIR, FUTURES_STATIC, FUTURES_DYNAMIC
+from tradepy.paths import PARQUET_DIR, FUTURES_STATIC, FUTURES_DYNAMIC, TIME_OFFSET
 
 log = logging.getLogger(__name__)
 
@@ -88,6 +88,24 @@ def load_future(ticker: str) -> tuple[pd.DataFrame, dict]:
         df['date'].astype(str) + ' ' + df['time'].astype(str)
     )
     df = df.sort_values('datetime').reset_index(drop=True)
+    
+    # Cargar offset del JSON
+    with open(TIME_OFFSET, 'r') as f:
+        offsets = json.load(f)
+
+    ticker_u = ticker.upper()
+    if ticker_u not in offsets:
+        raise KeyError(f"No offset definido para '{ticker_u}' en time_offset.json")
+
+    offset_hours = offsets[ticker_u]['time_offset']
+
+    # Convertir a UTC
+    df['datetime_utc'] = df['datetime'] - pd.to_timedelta(offset_hours, unit='h')
+
+    # Ordenar y limpiar duplicados
+    df = df.sort_values('datetime_utc').drop_duplicates(subset='datetime_utc').reset_index(drop=True)
+
+    log.info(f"[{ticker}] {len(df):,} filas cargadas (UTC).")
 
     log.info(f"[{ticker}] {len(df):,} filas cargadas.")
 

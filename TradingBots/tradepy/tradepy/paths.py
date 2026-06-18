@@ -27,6 +27,7 @@ INFO_DIR = ROOT / 'Info' # Información de los futuros
 # ── Config ────────────────────────────────────────────────────────────────────
 FUTURES_STATIC  = INFO_DIR / 'base_info.json'
 FUTURES_DYNAMIC = INFO_DIR / 'dynamic_info.json'
+TIME_OFFSET = INFO_DIR / 'time_offset.json'
 SYSTEM_CONFIG   = CONFIG_DIR / 'system.json'
 FEATURE_CONFIG   = CONFIG_DIR / 'features.json'
 EXCLUDE_CONFIG   = CONFIG_DIR / 'exclude.json'

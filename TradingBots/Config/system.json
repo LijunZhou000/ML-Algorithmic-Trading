@@ -9,8 +9,8 @@
     "wavelet": "db4",
     "wavelet_level": 1,
     "swing_n": 3,
-    "roll_over": "mantener", //Qué hacer cuando está por terminar un contrato pero siguen habiendo posiciones abiertas. Opciones: "mantener" (mantener la posición abierta), "cerrar" (cerrar la posición antes de que termine el contrato)
-    "min_volumen": 1000, //Volumen mínimo para considerar un contrato como válido
-    "min_roll_over_volumen": 500 //Volumen mínimo a partir del cual se hace roll over a un nuevo contrato
+    "roll_over": "mantener",
+    "min_volumen": 1000,
+    "min_roll_over_volumen": 500
 
 }

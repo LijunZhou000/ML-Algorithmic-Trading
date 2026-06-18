@@ -56,15 +56,17 @@ def _prep(df: pd.DataFrame) -> pd.DataFrame:
     d['day_name'] = d.index.day_name()
     d['year']     = d.index.year
     d['gap_mins'] = d.index.to_series().diff().dt.total_seconds().div(60)
+    if 'datetime_utc' in d.columns:
+        d["hour_utc"] = pd.to_datetime(d["datetime_utc"]).dt.hour
 
     return d
 
 
 # ── Plots individuales ────────────────────────────────────────────────────────
 
-def _plot_hourly_bars(ax: plt.Axes, d: pd.DataFrame) -> None:
+def _plot_hourly_bars(ax: plt.Axes, d: pd.DataFrame, column = "hour") -> None:
     """1. Histograma: número de velas por hora."""
-    counts = d.groupby('hour').size()
+    counts = d.groupby('column').size()
     ax.bar(counts.index, counts.values, color=PALETTE['primary'], alpha=0.8, width=0.7)
     ax.set_title("Velas por hora", fontweight='bold')
     ax.set_xlabel("Hora UTC")
@@ -78,10 +80,10 @@ def _plot_hourly_bars(ax: plt.Axes, d: pd.DataFrame) -> None:
         ax.axvline(h, color=PALETTE['accent'], linewidth=1.2, linestyle='--', alpha=0.7)
 
 
-def _plot_heatmap(ax: plt.Axes, d: pd.DataFrame) -> None:
+def _plot_heatmap(ax: plt.Axes, d: pd.DataFrame, column = "hour") -> None:
     """2. Heatmap: velas por día de semana y hora."""
     hmap = (
-        d.groupby(['day_name', 'hour'])
+        d.groupby(['day_name', column])
         .size()
         .unstack(fill_value=0)
         .reindex([day for day in DAYS_ORDER if day in d['day_name'].unique()])
@@ -278,3 +280,39 @@ def plot_cleaning(
         plt.show()
     else:
         plt.close(fig)
+        
+def plot_comparation_utc(
+    df: pd.DataFrame,
+    ticker: str = "Future",
+    show: bool = True,
+    save: bool = False,
+) -> None:
+    
+    d = _prep(df)
+
+    fig = plt.figure(figsize=(18, 28))
+    fig.suptitle(
+        f"Diagnóstico de limpieza — {ticker.upper()}",
+        fontsize=18,
+        fontweight="bold",
+        y=0.98,
+    )
+
+    gs = gridspec.GridSpec(
+        2, 2,
+        figure=fig,
+        hspace=0.45,
+        wspace=0.35,
+        top=0.95,
+        bottom=0.05,
+        left=0.07,
+        right=0.97,
+    )
+
+    # ── Row 0
+    _plot_hourly_bars(fig.add_subplot(gs[0, 0]), d)
+    _plot_heatmap(fig.add_subplot(gs[0, 1]), d)
+    
+    # ── Row 1
+    _plot_hourly_bars(fig.add_subplot(gs[0, 0]), d, column = "hour_utc")
+    _plot_heatmap(fig.add_subplot(gs[0, 1]), d, column = "hour_utc")
