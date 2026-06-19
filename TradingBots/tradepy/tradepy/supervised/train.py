@@ -427,7 +427,6 @@ def train_walk_forward_2level(
 
     return pd.concat(all_results, ignore_index=True), all_results, model_l1, model_l2, sc
 
-
 def train_walk_forward_3level(
     df,
     feature_cols,
@@ -442,23 +441,24 @@ def train_walk_forward_3level(
     lookback=24,
     epochs=15,
     batch_size=256,
-    lr=5e-4,
-    threshold_move=0.5,
-    threshold_dir=0.5
+    lr=5e-4
 ):
     """
-    Entrenamiento en 3 niveles: L1 (movimiento), L2 (dirección), L3 (log_return)
-    L2 y L3 se entrenan solo con muestras donde L1_train == 1
+    Entrenamiento en 3 niveles libre de NaNs: L1 (movimiento), L2 (dirección), L3 (log_return)
+    Garantiza predicciones completas para todas las ventanas del Walk-Forward.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     all_results = []
+
+    # 1. LIMPIEZA PREVENTIVA CRÍTICA: Eliminar filas con NaNs en features o targets antes de procesar
+    df = df.dropna(subset=feature_cols + [target_col, logreturn_col]).reset_index(drop=True)
 
     df = df.copy()
     df['_target_l1'] = (df[target_col] != 1).astype(int)
     df['_target_l2'] = (df[target_col] == 2).astype(int)
     df['_target_l3'] = df[logreturn_col]
 
-    # Generar secuencias para todos los targets
+    # Generar secuencias contiguas limpias para todos los targets
     X_all, y_dict = create_lstm_dataset(
         df,
         feature_cols,
@@ -508,21 +508,22 @@ def train_walk_forward_3level(
 
         counts_l1 = np.bincount(y_l1_train.astype(int), minlength=2)
         w_l1 = 1.0 / (counts_l1 / len(y_l1_train) + 1e-6)
-        w_l1[1] *= 2.0   # penalizar fallar en ACCIÓN
+        w_l1[1] *= 2.0   # Penalizar fallar en ACCIÓN
         w_l1 = w_l1 / w_l1.sum()
         w_l1_t = torch.tensor(w_l1, dtype=torch.float32).to(device)
 
         model_l1 = model_class_l1(input_dim=len(feature_cols), output_dim=2).to(device)
         opt_l1 = torch.optim.Adam(model_l1.parameters(), lr=lr)
         crit_l1 = nn.CrossEntropyLoss(weight=w_l1_t)
+        
+        # Corrección: Crear DataLoader antes del Scheduler para usar len() dinámico
+        loader_l1 = DataLoader(TensorDataset(X_train_t, y_l1_train_t), batch_size=batch_size, shuffle=True)
         sched_l1 = torch.optim.lr_scheduler.OneCycleLR(
             opt_l1, max_lr=lr,
-            steps_per_epoch=max(1, (len(X_train) + batch_size - 1) // batch_size),
+            steps_per_epoch=len(loader_l1),
             epochs=epochs, pct_start=0.3
         )
         scaler_amp = torch.amp.GradScaler(enabled=(device.type == "cuda"))
-        loader_l1 = DataLoader(TensorDataset(X_train_t, y_l1_train_t),
-                               batch_size=batch_size, shuffle=True)
 
         model_l1.train()
         for epoch in range(epochs):
@@ -558,13 +559,13 @@ def train_walk_forward_3level(
         model_l2 = model_class_l2(input_dim=len(feature_cols), output_dim=2).to(device)
         opt_l2 = torch.optim.Adam(model_l2.parameters(), lr=lr)
         crit_l2 = nn.CrossEntropyLoss(weight=w_l2_t)
+        
+        loader_l2 = DataLoader(TensorDataset(X_l23_train_t, y_l2_train_t), batch_size=batch_size, shuffle=True)
         sched_l2 = torch.optim.lr_scheduler.OneCycleLR(
             opt_l2, max_lr=lr,
-            steps_per_epoch=max(1, (len(X_l23_train) + batch_size - 1) // batch_size),
+            steps_per_epoch=len(loader_l2),
             epochs=epochs, pct_start=0.3
         )
-        loader_l2 = DataLoader(TensorDataset(X_l23_train_t, y_l2_train_t),
-                               batch_size=batch_size, shuffle=True)
 
         model_l2.train()
         for epoch in range(epochs):
@@ -582,14 +583,14 @@ def train_walk_forward_3level(
         # --------- NIVEL 3 (REGRESIÓN) ---------
         model_l3 = model_class_l3(input_dim=len(feature_cols), output_dim=1).to(device)
         opt_l3 = torch.optim.Adam(model_l3.parameters(), lr=lr)
-        crit_l3 = nn.HuberLoss(delta=1.0)  # Robusto a outliers
+        crit_l3 = nn.HuberLoss(delta=1.0)
+        
+        loader_l3 = DataLoader(TensorDataset(X_l23_train_t, y_l3_train_t), batch_size=batch_size, shuffle=True)
         sched_l3 = torch.optim.lr_scheduler.OneCycleLR(
             opt_l3, max_lr=lr,
-            steps_per_epoch=max(1, (len(X_l23_train) + batch_size - 1) // batch_size),
+            steps_per_epoch=len(loader_l3),
             epochs=epochs, pct_start=0.3
         )
-        loader_l3 = DataLoader(TensorDataset(X_l23_train_t, y_l3_train_t),
-                               batch_size=batch_size, shuffle=True)
 
         model_l3.train()
         for epoch in range(epochs):
@@ -606,7 +607,7 @@ def train_walk_forward_3level(
                 sched_l3.step()
 
         # =====================================================
-        # INFERENCIA
+        # INFERENCIA COMPLETA (Para el 100% de las filas de test)
         # =====================================================
         model_l1.eval()
         model_l2.eval()
@@ -616,33 +617,23 @@ def train_walk_forward_3level(
             probs_l1 = torch.softmax(model_l1(X_test_t), dim=1).cpu().numpy()
             probs_l2 = torch.softmax(model_l2(X_test_t), dim=1).cpu().numpy()
             logrets_l3_scaled = model_l3(X_test_t).squeeze().cpu().numpy()
-            # Inverse transform log_returns
+            
             if logrets_l3_scaled.ndim == 0:
                 logrets_l3_scaled = logrets_l3_scaled.reshape(-1)
             logrets_l3 = sc_l3.inverse_transform(logrets_l3_scaled.reshape(-1, 1)).ravel()
 
-        preds = np.ones(len(probs_l1), dtype=int)
-
-        for i in range(len(probs_l1)):
-            if probs_l1[i, 1] > threshold_move:
-                if threshold_dir is None:
-                    preds[i] = 2 if probs_l2[i, 1] > probs_l2[i, 0] else 0
-                else:
-                    if probs_l2[i, 1] > threshold_dir:
-                        preds[i] = 2
-                    elif probs_l2[i, 0] > threshold_dir:
-                        preds[i] = 0
-
         original_test = df[target_col].values[lookback:][test_start:test_end]
+        original_test_reg = df[logreturn_col].values[lookback:][test_start:test_end]
 
         step_res = pd.DataFrame({
             'datetime': dt_test,
             'actual': original_test,
-            'pred': preds,
-            'prob_move': probs_l1[:, 1],
-            'prob_sell': probs_l2[:, 0],
-            'prob_buy': probs_l2[:, 1],
-            'pred_logret': logrets_l3,
+            'prob_hold': probs_l1[:, 0],    # L1: Probabilidad de HOLD
+            'prob_move': probs_l1[:, 1],    # L1: Probabilidad de MOVIMIENTO
+            'prob_sell': probs_l2[:, 0],    # L2: Probabilidad de SHORT (SELL)
+            'prob_buy': probs_l2[:, 1],     # L2: Probabilidad de LONG (BUY)
+            'pred_logret': logrets_l3,      # L3: Regresión desescalada continua
+            'real_logret': original_test_reg,
         })
 
         all_results.append(step_res)

@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.preprocessing import RobustScaler
 from sklearn.feature_selection import SelectFromModel
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.utils import resample
 
 
@@ -43,11 +43,16 @@ def calculate_optimal_params(df, sampling_minutes=240, horizon_min=2880):
 
 def filter_features(df_final_triple_real, feature_cols_triple, TARGET_COLUMN_TRIPLE,
                     sampling_minutes=240, horizon_min=2880):
+    target_leakage_cols = [f"return_horizon_{horizon_min}m", f"log_return_horizon_{horizon_min}m", f"target_tb_{int(horizon_min/60/24)}d", "target_class", "target_regression",
+                           f"logreturn_tb_{int(horizon_min/60/24)}d"]
+    features_limpias = [
+        f for f in feature_cols_triple if f not in target_leakage_cols
+    ]
     # 1. Correlación
-    features_to_remove = filter_high_correlation(df_final_triple_real[feature_cols_triple])
+    features_to_remove = filter_high_correlation(df_final_triple_real[features_limpias])
     print(f"Eliminando {len(features_to_remove)} features redundantes por correlación")
 
-    features_to_use = [f for f in feature_cols_triple if f not in features_to_remove]
+    features_to_use = [f for f in features_limpias if f not in features_to_remove]
 
     # 2. Params (ahora usa los valores reales, no hardcodeados)
     params = calculate_optimal_params(
@@ -59,7 +64,8 @@ def filter_features(df_final_triple_real, feature_cols_triple, TARGET_COLUMN_TRI
 
     # 3. Preparar datos
     X = df_final_triple_real[features_to_use]
-    y = df_final_triple_real[TARGET_COLUMN_TRIPLE]
+    y_class = df_final_triple_real["target_class"]
+    y_reg = df_final_triple_real["target_regression"]
 
     # 4. Escalar
     sc = RobustScaler()
@@ -69,9 +75,9 @@ def filter_features(df_final_triple_real, feature_cols_triple, TARGET_COLUMN_TRI
     # — se deja disponible pero el selector entrena sobre todos los datos
     n_samples = min(20_000, len(X_scaled))
     X_sample, y_sample = resample(
-        X_scaled, y,
+        X_scaled, y_class,
         n_samples=n_samples,
-        stratify=y,
+        stratify=y_class,
         random_state=42
     )
 
@@ -80,10 +86,22 @@ def filter_features(df_final_triple_real, feature_cols_triple, TARGET_COLUMN_TRI
         RandomForestClassifier(n_estimators=200, n_jobs=-1, random_state=42),
         threshold="median"
     )
-    sel.fit(X_scaled, y)  # todos los datos
+    sel.fit(X_scaled, y_class)  # todos los datos
 
     features_finales = np.array(features_to_use)[sel.get_support()]
     print(f"Features seleccionadas ({len(features_finales)}):")
     print(features_finales)
+    
+    sel_reg = SelectFromModel(
+        RandomForestRegressor(n_estimators=200, n_jobs=-1, random_state=42),
+        threshold="median"
+    )
+    sel_reg.fit(X_scaled, y_reg)  # todos los datos
+    
+    features_finales_reg = np.array(features_to_use)[sel_reg.get_support()]
+    print(f"Features seleccionadas para regresión ({len(features_finales_reg)}):")
+    print(features_finales_reg)
+    
+    features_finales = list(set(features_finales).union(set(features_finales_reg)))
 
     return features_finales, params

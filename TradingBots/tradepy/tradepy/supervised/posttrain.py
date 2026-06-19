@@ -14,7 +14,7 @@ def evaluate_model_classification(full_results):
     
     # Aseguramos que los tipos sean correctos
     y_true = df['actual'].astype(int)
-    y_pred = df['pred'].astype(int)
+    y_pred = df['final_pred'].astype(int)
     
     # 1. Reporte detallado
     # Target names alineados con tu mapeo: 0: SELL, 1: HOLD, 2: BUY
@@ -445,8 +445,8 @@ def load_trading_model_2level(model_class_l1, model_class_l2, path="trading_mode
     return model_l1, model_l2, scaler, features_list, best_thresholds
 
 
-def save_trading_model_3level(model_l1, model_l2, model_l3, scaler_x, scaler_l3, features_list, model_params, best_thresholds=None, path="trading_model_3level"):
-    """Guarda los tres modelos del pipeline 3-level."""
+def save_trading_model_3level(model_l1, model_l2, model_l3, scaler, scaler_l3, features_list, model_params, res, best_thresholds=None, path="trading_model_3level"):
+    """Guarda los tres modelos del pipeline de tres niveles."""
     if not os.path.exists(path):
         os.makedirs(path)
     
@@ -455,28 +455,20 @@ def save_trading_model_3level(model_l1, model_l2, model_l3, scaler_x, scaler_l3,
     torch.save(model_l2.state_dict(), os.path.join(path, "model_l2_weights.pth"))
     torch.save(model_l3.state_dict(), os.path.join(path, "model_l3_weights.pth"))
     
-    # Scalers
-    joblib.dump(scaler_x,  os.path.join(path, "scaler_features.pkl"))
-    joblib.dump(scaler_l3, os.path.join(path, "scaler_logret.pkl"))
-    
-    # Metadatos
+    # Scaler, features y params
+    joblib.dump(scaler,        os.path.join(path, "scaler.pkl"))
+    joblib.dump(scaler_l3,     os.path.join(path, "scaler_l3.pkl"))
     joblib.dump(features_list, os.path.join(path, "features.pkl"))
     joblib.dump(model_params,  os.path.join(path, "model_params.pkl"))
     
-    # Thresholds óptimos
+    # Umbral óptimo
     if best_thresholds is not None:
         joblib.dump(best_thresholds, os.path.join(path, "best_thresholds.pkl"))
     
-    print(f"✅ Modelos 3-Level guardados en: {path}")
-    print(f"   ├─ model_l1_weights.pth")
-    print(f"   ├─ model_l2_weights.pth")
-    print(f"   ├─ model_l3_weights.pth")
-    print(f"   ├─ scaler_features.pkl")
-    print(f"   ├─ scaler_logret.pkl")
-    print(f"   ├─ features.pkl")
-    print(f"   ├─ model_params.pkl")
-    if best_thresholds is not None:
-        print(f"   └─ best_thresholds.pkl")
+    parquet_path = os.path.join(path, "res.parquet")
+    res.to_parquet(parquet_path, index=False)
+    
+    print(f"✅ Modelos L1 y L2 guardados en: {path}")
 
 
 def load_trading_model_3level(model_class_l1, model_class_l2, model_class_l3, path="trading_model_3level", device="cpu"):
@@ -512,3 +504,51 @@ def load_trading_model_3level(model_class_l1, model_class_l2, model_class_l3, pa
     print(f"   L3: Log Return (output_dim=1)")
     
     return model_l1, model_l2, model_l3, scaler_x, scaler_l3, features_list, best_thresholds
+
+def get_predict(result, params):
+    df = result.copy()
+    tm = params['threshold_move']
+    td = params['threshold_dir']
+    
+    prob_move = df['prob_move'].values
+    prob_buy  = df['prob_buy'].values
+    prob_sell = df['prob_sell'].values
+    
+    # -----------------------------
+    # 1) Movimiento (L1)
+    # -----------------------------
+    pred_move = (prob_move > tm).astype(int)
+    df['pred_move'] = pred_move
+    
+    # -----------------------------
+    # 2) Dirección (L2)
+    # -----------------------------
+    pred_dir = np.ones(len(df), dtype=int)  # por defecto HOLD (1)
+
+    if td is None:
+        # Caso sin threshold_dir: solo comparar BUY vs SELL
+        raw_dir = np.where(prob_buy > prob_sell, 2, 0)
+        pred_dir[pred_move == 1] = raw_dir[pred_move == 1]
+    else:
+        # Caso con threshold_dir explícito
+        buy_conf  = prob_buy  > td
+        sell_conf = prob_sell > td
+        conflict  = buy_conf & sell_conf
+
+        raw_dir = np.full(len(df), -1)
+        raw_dir[buy_conf  & ~conflict] = 2
+        raw_dir[sell_conf & ~conflict] = 0
+
+        mask_apply = (pred_move == 1) & (raw_dir != -1)
+        pred_dir[mask_apply] = raw_dir[mask_apply]
+
+    df['pred_dir'] = pred_dir
+    
+    
+    # -----------------------------
+    # 3) FINAL PRED (0/1/2)
+    # -----------------------------
+    final_pred = np.where(pred_move == 0, 1, pred_dir)
+    df['final_pred'] = final_pred
+
+    return df
