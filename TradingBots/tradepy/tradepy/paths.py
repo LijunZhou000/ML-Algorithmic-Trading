@@ -35,6 +35,7 @@ EXCLUDE_CONFIG   = CONFIG_DIR / 'exclude.json'
 # ── Data ────────────────────────────────────────────────────────────────────
 TXT_DIR     = DATA_DIR / 'txt'
 PARQUET_DIR = DATA_DIR / 'parquet'
+BT_DIR      = DATA_DIR / 'bt'
 
 # ── Logs / estado dinámico ────────────────────────────────────────────────────
 POSITIONS_OPEN    = LOGS_DIR / 'positions_open.json'

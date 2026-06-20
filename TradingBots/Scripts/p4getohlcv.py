@@ -1,27 +1,74 @@
-from ib_insync import *
+from ib_insync import IB, Future
 import pandas as pd
 from tradepy.data.loader import load_specs
-from tradepy.config.config import load_config, load_symbols, load_feature_config, load_exclude_config
+import time
+
+# ============================================================
+# 1) Resolver automáticamente el contrato activo del IBEX
+# ============================================================
+
+def resolve_ibex_contract(spec):
+    ib = IB()
+    ib.connect("127.0.0.1", 7497, clientId=2)
+
+    # Pedimos todos los futuros del IBEX
+    chain = ib.reqContractDetails(
+        Future(symbol=spec["ib_symbol"], exchange=spec["exchange"], currency=spec["currency"])
+    )
+
+    # Filtramos solo los que tienen expiry
+    valid = [c.contract for c in chain if c.contract.lastTradeDateOrContractMonth]
+
+    # Ordenamos por expiración
+    valid = sorted(valid, key=lambda c: c.lastTradeDateOrContractMonth)
+
+    ib.disconnect()
+    return valid[0]  # contrato activo más cercano
 
 
-def get_data(specs, symbol):
-    info = specs[symbol]
+# ============================================================
+# 2) Descargar 1Y OHLCV del IBEX usando el contrato resuelto
+# ============================================================
+
+def get_ibex_1y_ohlcv(spec):
     ib = IB()
     ib.connect("127.0.0.1", 7497, clientId=3)
-    future = Future(
-    symbol=symbol,
-    lastTradeDateOrContractMonth="202606",
-    exchange=info['exchange'],
-    currency=info['currency'],
-    includeExpired=True
-)
 
-    data = ib.reqHistoricalData(future, "", "6 M", "1 min", "TRADES", 1, 1, False, [])
+    # Obtenemos el contrato correcto (con expiry real)
+    contract = resolve_ibex_contract(spec)
+
+    bars = ib.reqHistoricalData(
+        contract,
+        endDateTime="",
+        durationStr="6 M",
+        barSizeSetting="5 mins",
+        whatToShow="TRADES",
+        useRTH=True,
+        formatDate=1,
+        keepUpToDate=False
+    )
+
+    df = pd.DataFrame([{
+        "time": b.date,
+        "open": b.open,
+        "high": b.high,
+        "low": b.low,
+        "close": b.close,
+        "volume": b.volume
+    } for b in bars])
+
     ib.disconnect()
-    return data
+    return df
+
+
+# ============================================================
+# 3) Ejemplo de uso
+# ============================================================
 
 if __name__ == "__main__":
+    print("Descargando 1Y OHLCV del futuro del IBEX (contrato activo real)...")
     specs = load_specs()
-    symbols = load_symbols()
-    ASSET = symbols[5]
-    get_data(specs, ASSET)
+    for ticker, spec in specs.items():
+        df = get_ibex_1y_ohlcv(spec)
+        df.to_parquet(f"../Data/bt/{ticker}1min.parquet", index=False)
+        time.sleep(2)  # Evitar sobrecargar la API de IB
