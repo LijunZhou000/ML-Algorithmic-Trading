@@ -1,6 +1,6 @@
 from ib_insync import IB
 
-from tradepy.config import IBConfig, RetryConfig
+from tradepy.config_old import IBConfig, RetryConfig
 from tradepy.get_info.get_info import fetch_futures_dynamic
 from tradepy.paths import FUTURES_STATIC, FUTURES_DYNAMIC
 

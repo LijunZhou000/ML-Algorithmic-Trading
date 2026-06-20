@@ -6,7 +6,7 @@ from pathlib import Path
 from ib_insync import IB, Future, MarketOrder
 
 from tradepy.paths import ensure_dirs
-from tradepy.config import RetryConfig
+from tradepy.config_old import RetryConfig
 
 log = logging.getLogger(__name__)
 

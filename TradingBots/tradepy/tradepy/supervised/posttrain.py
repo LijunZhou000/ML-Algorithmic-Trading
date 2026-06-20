@@ -471,39 +471,77 @@ def save_trading_model_3level(model_l1, model_l2, model_l3, scaler, scaler_l3, f
     print(f"✅ Modelos L1 y L2 guardados en: {path}")
 
 
-def load_trading_model_3level(model_class_l1, model_class_l2, model_class_l3, path="trading_model_3level", device="cpu"):
-    """Carga los tres modelos del pipeline 3-level."""
-    # Metadatos
-    model_params  = joblib.load(os.path.join(path, "model_params.pkl"))
-    features_list = joblib.load(os.path.join(path, "features.pkl"))
-    scaler_x      = joblib.load(os.path.join(path, "scaler_features.pkl"))
-    scaler_l3     = joblib.load(os.path.join(path, "scaler_logret.pkl"))
-    best_thresholds = joblib.load(os.path.join(path, "best_thresholds.pkl")) if os.path.exists(os.path.join(path, "best_thresholds.pkl")) else None
+def load_trading_model_3level(
+    model_class_l1,
+    model_class_l2,
+    model_class_l3,
+    path="trading_model_3level",
+    device="cpu"
+):
+    """
+    Carga un pipeline completo de 3 niveles:
+        - L1: Movimiento
+        - L2: Dirección
+        - L3: Regresión
+    Devuelve:
+        model_l1, model_l2, model_l3,
+        scaler_features, scaler_l3,
+        features_list, model_params,
+        best_thresholds, full_results
+    """
 
-    # L1
+    # -----------------------------
+    # 1. Cargar metadatos
+    # -----------------------------
+    model_params     = joblib.load(os.path.join(path, "model_params.pkl"))
+    features_list    = joblib.load(os.path.join(path, "features.pkl"))
+    scaler_features  = joblib.load(os.path.join(path, "scaler.pkl"))
+    scaler_l3        = joblib.load(os.path.join(path, "scaler_l3.pkl"))
+
+    thresholds_path = os.path.join(path, "best_thresholds.pkl")
+    best_thresholds = joblib.load(thresholds_path) if os.path.exists(thresholds_path) else None
+
+    # -----------------------------
+    # 2. Cargar modelos
+    # -----------------------------
     model_l1 = model_class_l1(**model_params)
     model_l1.load_state_dict(torch.load(os.path.join(path, "model_l1_weights.pth"), map_location=device))
     model_l1.to(device)
     model_l1.eval()
-    
-    # L2
+
     model_l2 = model_class_l2(**model_params)
     model_l2.load_state_dict(torch.load(os.path.join(path, "model_l2_weights.pth"), map_location=device))
     model_l2.to(device)
     model_l2.eval()
-    
-    # L3
-    model_l3 = model_class_l3(**model_params)
+
+    model_l3 = model_class_l3(input_dim=model_params["input_dim"], output_dim=1)
     model_l3.load_state_dict(torch.load(os.path.join(path, "model_l3_weights.pth"), map_location=device))
     model_l3.to(device)
     model_l3.eval()
-    
-    print(f"🚀 Pipeline 3-Level listo. Inputs: {model_params['input_dim']} features.")
-    print(f"   L1: Movimiento (output_dim=2)")
-    print(f"   L2: Dirección (output_dim=2)")
-    print(f"   L3: Log Return (output_dim=1)")
-    
-    return model_l1, model_l2, model_l3, scaler_x, scaler_l3, features_list, best_thresholds
+
+    # -----------------------------
+    # 3. Cargar resultados parquet
+    # -----------------------------
+    parquet_path = os.path.join(path, "res.parquet")
+    full_results = pd.read_parquet(parquet_path) if os.path.exists(parquet_path) else None
+
+    print(f"🚀 Pipeline 3-Level cargado correctamente desde: {path}")
+    print(f"📌 Features: {len(features_list)}")
+    print(f"📌 Thresholds cargados: {best_thresholds is not None}")
+    print(f"📁 Resultados cargados: {full_results is not None}")
+
+    return (
+        model_l1,
+        model_l2,
+        model_l3,
+        scaler_features,
+        scaler_l3,
+        features_list,
+        model_params,
+        best_thresholds,
+        full_results
+    )
+
 
 def get_predict(result, params):
     df = result.copy()
