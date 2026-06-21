@@ -44,3 +44,89 @@ Además de mostrar los datos teóricos que se hubiesen conseguido también he qu
 \notes{Añadir grafica de la evolución del equity, comparativa contra Robotrader} 
 
 \notes{Añadir Monte Carlo}
+
+\begin{table}[H]
+\centering
+\makebox[0pt]{%
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Futuro}} &
+\multirow{2}{*}{\textbf{Capital inicial}} &
+\multicolumn{4}{c|}{\textbf{Capital final}} &
+\multirow{2}{*}{\textbf{Ganancias mejor caso}} \\ \cline{3-6}
+ & & \textbf{Normal} & \textbf{Scale-in} & \textbf{Sizing} & \textbf{Scale-in + Sizing} & \\ \hline
+
+AD   & 30k  & \multicolumn{4}{c|}{No hay operaciones}                                                        & 0 \\ \hline
+BP   & 30k  & \multicolumn{4}{c|}{Por alguna razón faltan dos features}                                      & 0 \\ \hline
+CL   & 300k & \multicolumn{1}{c|}{305k}  & \multicolumn{1}{c|}{317k}   & \multicolumn{1}{c|}{306k}  & 400k   & \poscolor{100k} \\ \hline
+EC   & 40k  & \multicolumn{4}{c|}{No hay operaciones}                                                        & 0 \\ \hline
+ES   & 350k & \multicolumn{1}{c|}{320k}  & \multicolumn{1}{c|}{280k}   & \multicolumn{1}{c|}{349k}  & 250k   & \negcolor{-1k} \\ \hline
+GC   & 450k & \multicolumn{1}{c|}{450k}  & \multicolumn{1}{c|}{465k}   & \multicolumn{1}{c|}{450k}  & 465k   & \poscolor{15k} \\ \hline
+MFXI & 5k   & \multicolumn{1}{c|}{4.8k}  & \multicolumn{1}{c|}{4.75k}  & \multicolumn{1}{c|}{4.5k}  & 3.75k  & \negcolor{-0.2k} \\ \hline
+NG   & 70k  & \multicolumn{1}{c|}{70k}   & \multicolumn{1}{c|}{69k}    & \multicolumn{1}{c|}{71k}   & 67k    & \poscolor{1k} \\ \hline
+NQ   & 650k & \multicolumn{1}{c|}{630k}  & \multicolumn{1}{c|}{570k}   & \multicolumn{1}{c|}{650k}  & 550k   & 0 \\ \hline
+YM   & 200k & \multicolumn{1}{c|}{198k}  & \multicolumn{1}{c|}{198k}   & \multicolumn{1}{c|}{200k}  & 196k   & 0 \\ \hline
+ZB   & 50k  & \multicolumn{1}{c|}{50k}   & \multicolumn{1}{c|}{49k}    & \multicolumn{1}{c|}{50k}   & 48k    & 0 \\ \hline
+ZN   & 30k  & \multicolumn{1}{c|}{25k}   & \multicolumn{1}{c|}{24k}    & \multicolumn{1}{c|}{22k}   & 0k     & \negcolor{-5k} \\ \hline
+ZS   & 50k  & \multicolumn{1}{c|}{300k}  & \multicolumn{1}{c|}{300k}   & \multicolumn{1}{c|}{80k}   & 300k   & \poscolor{250k} \\ \hline
+
+\end{tabular}
+
+}
+\caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-01-20 hasta 2026-06-01}
+\end{table}
+
+Como capital inicial he usado 10 veces el margin inicial mínimo para abrir una posición
+
+% \begin{table}[H]
+% \centering
+% \makebox[0pt]{%
+% \begin{tabular}{|c|c|c|c|c|c|c|}
+% \hline
+% \multirow{2}{*}{\textbf{Futuro}} &
+% \multirow{2}{*}{\textbf{Capital inicial}} &
+% \multicolumn{4}{c|}{\textbf{Capital final}} &
+% \multirow{2}{*}{\textbf{Ganancias mejor caso}} \\ \cline{3-6}
+%  & & \textbf{Normal} & \textbf{Scale-in} & \textbf{Sizing} & \textbf{Scale-in + Sizing} & \\ \hline
+
+% CL   & 300k & \multicolumn{1}{c|}{300k}  & \multicolumn{1}{c|}{300k}   & \multicolumn{1}{c|}{300k}  & 300k   & 0 \\ \hline
+% ES   & 350k & \multicolumn{1}{c|}{342k}  & \multicolumn{1}{c|}{345k}   & \multicolumn{1}{c|}{349k}  & 350k   & \negcolor{-1k} \\ \hline
+% GC   & 450k & \multicolumn{1}{c|}{458k}  & \multicolumn{1}{c|}{452k}   & \multicolumn{1}{c|}{450k}  & 452k   & \poscolor{8k} \\ \hline
+% MFXI & 5k   & \multicolumn{1}{c|}{4.8k}  & \multicolumn{1}{c|}{4.75k}  & \multicolumn{1}{c|}{4.5k}  & 3.75k  & \negcolor{-0.2k} \\ \hline
+% NG   & 70k  & \multicolumn{1}{c|}{70k}   & \multicolumn{1}{c|}{69k}    & \multicolumn{1}{c|}{71k}   & 67k    & \poscolor{1k} \\ \hline
+% NQ   & 650k & \multicolumn{1}{c|}{667.5k}& \multicolumn{1}{c|}{655k}   & \multicolumn{1}{c|}{650k}  & 655k   & \poscolor{17.5k} \\ \hline
+% YM   & 200k & \multicolumn{1}{c|}{205k}  & \multicolumn{1}{c|}{205k}   & \multicolumn{1}{c|}{200k}  & 205k   & \poscolor{5k} \\ \hline
+% ZB   & 50k  & \multicolumn{1}{c|}{50k}   & \multicolumn{1}{c|}{49k}    & \multicolumn{1}{c|}{49k}   & 49k    & 0 \\ \hline
+% ZN   & 30k  & \multicolumn{1}{c|}{27.5k} & \multicolumn{1}{c|}{25k}    & \multicolumn{1}{c|}{24k}   & 0k     & \negcolor{-2.5k} \\ \hline
+% ZS   & 50k  & \multicolumn{1}{c|}{-20k}  & \multicolumn{1}{c|}{-80k}   & \multicolumn{1}{c|}{48k}   & -80k   & \negcolor{-2k} \\ \hline
+
+% \end{tabular}
+
+% }
+% \caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-03-27 hasta 2026-06-01, aunque Robotrader empezó el 6 para tener datos para las primeras predicciones}
+% \end{table}
+
+\begin{table}[H]
+\centering
+\makebox[0pt]{%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{Futuro} & \textbf{Capital inicial} & \textbf{Ganancias mejor caso} & \textbf{Max DD} & \textbf{Ratio} \\ \hline
+CL   & 300k & 0                        &  &  \\ \hline
+ES   & 350k & \negcolor{-1k}           &  &  \\ \hline
+GC   & 450k & \poscolor{8510}            & 6730 & 1.26 \\ \hline
+MFXI & 5k   & \negcolor{-0.2k}         &  &  \\ \hline
+NG   & 70k  & \poscolor{904}            & 2116.23 & 0.43 \\ \hline
+NQ   & 650k & \poscolor{17385}         & 0 & No aplica \\ \hline
+YM   & 200k & \poscolor{6825}            & 2375.0 & 2.87 \\ \hline
+ZB   & 50k  & 0                        &  &  \\ \hline
+ZN   & 30k  & \negcolor{-2.5k}         &  &  \\ \hline
+ZS   & 50k  & \negcolor{-2k}           &  &  \\ \hline
+\end{tabular}
+
+
+}
+\caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-03-27 hasta 2026-06-01, aunque Robotrader empezó el 6 para tener datos para las primeras predicciones}
+\end{table}
+
+En ganancias absolutas séptimo/noveno en la competición de 58 personas.

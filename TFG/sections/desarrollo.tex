@@ -540,6 +540,66 @@ deselvuenve el modelo. En este caso las métricas a usar son Max Drawdown, Sharp
 
 El backtest se hace con datos con intervalo de 30 mins porque la API tiene limitaciones de timeout
 
+Se han probado cuatro estratégias de operación
+
+\begin{itemize}
+    \item Una única posición abierta como máximo y de tamaño 1
+    \item Se pueden varias posiciones seguidas hasta 5 pero sigue siendo de tamaño 1
+    \item Una única posición abierta como máximo y de tamaño variable hasta 5
+    \item Se pueden varias posiciones seguidas hasta 25 y de tamaño variable hasta 5
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Modalidad} & \textbf{Nº máximo de posiciones} & \textbf{Tamaño por posición} \\ \hline
+1 & 1 & Fijo (1 unidad) \\ \hline
+2 & 5 & Fijo (1 unidad) \\ \hline
+3 & 1 & Variable (hasta 5 unidades) \\ \hline
+4 & 25 & Variable (hasta 5 unidades) \\ \hline
+\end{tabular}
+\caption{Resumen de las cuatro modalidades operativas evaluadas.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Sizing dinámico} & \textbf{Scale-in: No} & \textbf{Scale-in: Sí} \\ \hline
+
+\textbf{No}  & 
+\begin{tabular}{c}
+Modalidad 1 \\ 
+1 posición \\ 
+tamaño fijo (1)
+\end{tabular}
+&
+\begin{tabular}{c}
+Modalidad 2 \\ 
+hasta 5 posiciones \\ 
+tamaño fijo (1)
+\end{tabular}
+\\ \hline
+
+\textbf{Sí} &
+\begin{tabular}{c}
+Modalidad 3 \\ 
+1 posición \\ 
+tamaño variable (<=5)
+\end{tabular}
+&
+\begin{tabular}{c}
+Modalidad 4 \\ 
+hasta 25 posiciones \\ 
+tamaño variable (<=5)
+\end{tabular}
+\\ \hline
+
+\end{tabular}
+\caption{Cuadrícula de modalidades operativas según uso de scale-in y sizing dinámico.}
+\end{table}
+
 \subsection{Simulación de Monte Carlo}
 
 Como paso siguiente al backtest pasamos a una simulación de Monte Carlo sencilla. Existen dos posibilidades, reordenar las predicciones ya hechas o
