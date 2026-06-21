@@ -41,9 +41,9 @@ def get_ibex_1y_ohlcv(spec):
         contract,
         endDateTime="",
         durationStr="6 M",
-        barSizeSetting="5 mins",
+        barSizeSetting="30 mins",
         whatToShow="TRADES",
-        useRTH=True,
+        useRTH=0,
         formatDate=1,
         keepUpToDate=False
     )
@@ -71,4 +71,4 @@ if __name__ == "__main__":
     for ticker, spec in specs.items():
         df = get_ibex_1y_ohlcv(spec)
         df.to_parquet(f"../Data/bt/{ticker}1min.parquet", index=False)
-        time.sleep(2)  # Evitar sobrecargar la API de IB
+        time.sleep(4)  # Evitar sobrecargar la API de IB
