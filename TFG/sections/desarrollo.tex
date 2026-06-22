@@ -553,22 +553,19 @@ Se han probado cuatro estratégias de operación
 \centering
 \begin{tabular}{|c|c|c|}
 \hline
-\textbf{Modalidad} & \textbf{Nº máximo de posiciones} & \textbf{Tamaño por posición} \\ \hline
-1 & 1 & Fijo (1 unidad) \\ \hline
-2 & 5 & Fijo (1 unidad) \\ \hline
-3 & 1 & Variable (hasta 5 unidades) \\ \hline
-4 & 25 & Variable (hasta 5 unidades) \\ \hline
+& \begin{tabular}{c}
+\textbf{Scale-in:} \\
+\textbf{No}
+\end{tabular} & \begin{tabular}{c}
+\textbf{Scale-in:} \\
+\textbf{Sí}
+\end{tabular} \\ \hline
+
+\begin{tabular}{c}
+\textbf{Sizing dinámico:} \\
+\textbf{No}
 \end{tabular}
-\caption{Resumen de las cuatro modalidades operativas evaluadas.}
-\end{table}
-
-\begin{table}[H]
-\centering
-\begin{tabular}{|c|c|c|}
-\hline
-\textbf{Sizing dinámico} & \textbf{Scale-in: No} & \textbf{Scale-in: Sí} \\ \hline
-
-\textbf{No}  & 
+& 
 \begin{tabular}{c}
 Modalidad 1 \\ 
 1 posición \\ 
@@ -582,7 +579,11 @@ tamaño fijo (1)
 \end{tabular}
 \\ \hline
 
-\textbf{Sí} &
+\begin{tabular}{c}
+\textbf{Sizing dinámico:} \\
+\textbf{Sí}
+\end{tabular}
+&
 \begin{tabular}{c}
 Modalidad 3 \\ 
 1 posición \\ 
@@ -600,6 +601,60 @@ tamaño variable (<=5)
 \caption{Cuadrícula de modalidades operativas según uso de scale-in y sizing dinámico.}
 \end{table}
 
+Hay dos fasses en el Backtest, primero se decide qué considerar buena predicción, hay 4 casos
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+& \textbf{Long y Short} & \textbf{Solo Long} \\ \hline
+
+\textbf{Todas las predicciones}  & 
+\begin{tabular}{c}
+Modalidad 1 \\ 
+todas las predicciones que han \\ 
+superado los umbrales definidos en \\
+el entrenamiento
+\end{tabular}
+&
+\begin{tabular}{c}
+Modalidad 2 \\ 
+hasta 5 posiciones \\ 
+tamaño fijo (1)
+\end{tabular}
+\\ \hline
+\begin{tabular}{c}
+\textbf{Predicciones que superar} \\
+\textbf{un umbral más estricto}
+\end{tabular}
+&
+\begin{tabular}{c}
+Modalidad 3 \\ 
+1 posición \\ 
+tamaño variable (<=5)
+\end{tabular}
+&
+\begin{tabular}{c}
+Modalidad 4 \\ 
+hasta 25 posiciones \\ 
+tamaño variable (<=5)
+\end{tabular}
+\\ \hline
+
+\end{tabular}
+\caption{Cuadrícula de modalidades operativas según uso de scale-in y sizing dinámico.}
+\end{table}
+
+% \begin{table}[h]
+% \begin{tabularx}{\textwidth}{|c|X|X|}
+% \textbf{Todas las predicciones}          & Opret Server & Hola\\
+% \begin{tabular}{c}
+% \textbf{Predicciones que superar} \\
+% \textbf{un umbral más estricto}
+% \end{tabular}               & At oprette en server med bestemte regler som tillader folk at spille sammen. More Text more text More Text & Adiós\\
+% \end{tabularx}
+% \end{table}
+
 \subsection{Simulación de Monte Carlo}
 
 Como paso siguiente al backtest pasamos a una simulación de Monte Carlo sencilla. Existen dos posibilidades, reordenar las predicciones ya hechas o
@@ -613,10 +668,14 @@ valores sueltes para mantener parte de la relación temporal, y tiene solapamien
 original puedan aparecer en la simulación y no solo bloques fijos de x observaciones. En mi caso uso bloques de 24 velas, aproximadamente una semana
 de predicciones.
 
+Aunque la estratégia es interdía, al realizar un backtest de como mucho 5 meses se ha decidido agrupar los PnL por día ya que si se hacía por semanas
+para algunos activos solo habría de 2 a 4 PnL mientras que si se agrupa por días en el peor de los casos habrían mínimo más de una decena de días con
+actividad
+
 \begin{figure}[h]
     \centering
     \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con una simulación de Monte Carlo}
+    \caption{Añadir img con una simulación de Monte Carlo con los percentiles}
     \label{fig_mlp_19}
 \end{figure}
 
@@ -673,6 +732,10 @@ Para ello sigo los siguiente paso para una optimización de un objetivo, en este
 Pasamos a realizar otro backtest, además de comparar con la operaciónde un solo activo.
 
 Realizamos otra simulación de Monte Carlo
+
+Para realizar el backtest y la simulación de Monte Carlo se ha hecho lo siguiente, se cargan todos los trades de todos los futuros usando la
+estratégia óptima obtenida anteriormente, se crea un DataFrame y se agrupan por fechas, se simula usando una cuenta con 1M para poder simular también
+los límites de margen inicial y de mantenimiento. Se ordenan las predicciones por confianza total y se comprueba que no se exceden los márgenes.
 
 % Existen dos grandes grupos de simulaciones de Monte Carlo, basados en los resultados del backtest y los que alteran los valores de entrada de los
 % modelos.
