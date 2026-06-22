@@ -593,7 +593,8 @@ def run_backtest_sizing_only(df, specs, initial_capital=1_000_000,
                 entry = row["open"]
                 atr = row["atr"]
 
-                size = min(max_size_units, risk_per_trade / atr)
+                atr_usd = (atr / tick_size) * tick_value          # ATR en dólares
+                size = int(min(max_size_units, max(1, risk_per_trade / atr_usd)))
 
                 if signal == 2:  # LONG
                     sl = entry - sl_mult * atr
