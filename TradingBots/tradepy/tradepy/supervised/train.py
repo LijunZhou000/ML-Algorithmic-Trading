@@ -444,13 +444,14 @@ def train_walk_forward_3level(
     lr=5e-4
 ):
     """
-    Entrenamiento en 3 niveles libre de NaNs: L1 (movimiento), L2 (dirección), L3 (log_return)
-    Garantiza predicciones completas para todas las ventanas del Walk-Forward.
+    Entrenamiento en 3 niveles libre de NaNs que registra las pérdidas históricas por Época y Fold.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     all_results = []
+    losses_records = []  # Lista para acumular el historial de pérdidas
+    fold_count = 1       # Contador identificador de cada ventana walk-forward
 
-    # 1. LIMPIEZA PREVENTIVA CRÍTICA: Eliminar filas con NaNs en features o targets antes de procesar
+    # 1. LIMPIEZA PREVENTIVA CRÍTICA
     df = df.dropna(subset=feature_cols + [target_col, logreturn_col]).reset_index(drop=True)
 
     df = df.copy()
@@ -494,7 +495,7 @@ def train_walk_forward_3level(
         N_test = X_test.shape[0]
         X_test_scaled = sc.transform(X_test.reshape(-1, F)).reshape(N_test, L, F)
 
-        # --- ESCALADO L3 (log_returns) ---
+        # --- ESCALADO L3 ---
         sc_l3 = RobustScaler()
         y_l3_train_scaled = sc_l3.fit_transform(y_l3_train.reshape(-1, 1)).ravel()
 
@@ -508,7 +509,7 @@ def train_walk_forward_3level(
 
         counts_l1 = np.bincount(y_l1_train.astype(int), minlength=2)
         w_l1 = 1.0 / (counts_l1 / len(y_l1_train) + 1e-6)
-        w_l1[1] *= 2.0   # Penalizar fallar en ACCIÓN
+        w_l1[1] *= 2.0   
         w_l1 = w_l1 / w_l1.sum()
         w_l1_t = torch.tensor(w_l1, dtype=torch.float32).to(device)
 
@@ -516,7 +517,6 @@ def train_walk_forward_3level(
         opt_l1 = torch.optim.Adam(model_l1.parameters(), lr=lr)
         crit_l1 = nn.CrossEntropyLoss(weight=w_l1_t)
         
-        # Corrección: Crear DataLoader antes del Scheduler para usar len() dinámico
         loader_l1 = DataLoader(TensorDataset(X_train_t, y_l1_train_t), batch_size=batch_size, shuffle=True)
         sched_l1 = torch.optim.lr_scheduler.OneCycleLR(
             opt_l1, max_lr=lr,
@@ -525,8 +525,11 @@ def train_walk_forward_3level(
         )
         scaler_amp = torch.amp.GradScaler(enabled=(device.type == "cuda"))
 
+        # Estructuras locales para almacenar la pérdida promediada de la época
+        fold_l1_losses = []
         model_l1.train()
         for epoch in range(epochs):
+            running_loss = 0.0
             for bx, by in loader_l1:
                 opt_l1.zero_grad()
                 with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
@@ -537,9 +540,11 @@ def train_walk_forward_3level(
                 scaler_amp.step(opt_l1)
                 scaler_amp.update()
                 sched_l1.step()
+                running_loss += loss.item()
+            fold_l1_losses.append(running_loss / len(loader_l1))
 
         # =====================================================
-        # NIVEL 2 & 3 — Entrenados solo con movimiento (L1_train == 1)
+        # NIVEL 2 & 3 — Solo con movimiento (L1_train == 1)
         # =====================================================
         mask_move = (y_l1_train == 1)
         X_l23_train = X_train_scaled[mask_move]
@@ -567,8 +572,10 @@ def train_walk_forward_3level(
             epochs=epochs, pct_start=0.3
         )
 
+        fold_l2_losses = []
         model_l2.train()
         for epoch in range(epochs):
+            running_loss = 0.0
             for bx, by in loader_l2:
                 opt_l2.zero_grad()
                 with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
@@ -579,6 +586,8 @@ def train_walk_forward_3level(
                 scaler_amp.step(opt_l2)
                 scaler_amp.update()
                 sched_l2.step()
+                running_loss += loss.item()
+            fold_l2_losses.append(running_loss / len(loader_l2))
 
         # --------- NIVEL 3 (REGRESIÓN) ---------
         model_l3 = model_class_l3(input_dim=len(feature_cols), output_dim=1).to(device)
@@ -592,8 +601,10 @@ def train_walk_forward_3level(
             epochs=epochs, pct_start=0.3
         )
 
+        fold_l3_losses = []
         model_l3.train()
         for epoch in range(epochs):
+            running_loss = 0.0
             for bx, by in loader_l3:
                 opt_l3.zero_grad()
                 with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
@@ -605,9 +616,21 @@ def train_walk_forward_3level(
                 scaler_amp.step(opt_l3)
                 scaler_amp.update()
                 sched_l3.step()
+                running_loss += loss.item()
+            fold_l3_losses.append(running_loss / len(loader_l3))
+
+        # Registrar las pérdidas organizadas por época de este fold
+        for ep in range(epochs):
+            losses_records.append({
+                'fold': fold_count,
+                'epoch': ep + 1,
+                'loss_l1_move': fold_l1_losses[ep],
+                'loss_l2_dir': fold_l2_losses[ep],
+                'loss_l3_reg': fold_l3_losses[ep]
+            })
 
         # =====================================================
-        # INFERENCIA COMPLETA (Para el 100% de las filas de test)
+        # INFERENCIA COMPLETA (Test)
         # =====================================================
         model_l1.eval()
         model_l2.eval()
@@ -626,13 +649,14 @@ def train_walk_forward_3level(
         original_test_reg = df[logreturn_col].values[lookback:][test_start:test_end]
 
         step_res = pd.DataFrame({
+            'fold': fold_count,  # Guardamos también el fold en los resultados del test
             'datetime': dt_test,
             'actual': original_test,
-            'prob_hold': probs_l1[:, 0],    # L1: Probabilidad de HOLD
-            'prob_move': probs_l1[:, 1],    # L1: Probabilidad de MOVIMIENTO
-            'prob_sell': probs_l2[:, 0],    # L2: Probabilidad de SHORT (SELL)
-            'prob_buy': probs_l2[:, 1],     # L2: Probabilidad de LONG (BUY)
-            'pred_logret': logrets_l3,      # L3: Regresión desescalada continua
+            'prob_hold': probs_l1[:, 0],
+            'prob_move': probs_l1[:, 1],
+            'prob_sell': probs_l2[:, 0],
+            'prob_buy': probs_l2[:, 1],
+            'pred_logret': logrets_l3,
             'real_logret': original_test_reg,
         })
 
@@ -640,8 +664,11 @@ def train_walk_forward_3level(
 
         del y_l1_train_t, y_l2_train_t, y_l3_train_t, X_l23_train_t
         torch.cuda.empty_cache()
+        
+        fold_count += 1
 
-    return pd.concat(all_results, ignore_index=True), all_results, model_l1, model_l2, model_l3, sc, sc_l3
+    df_losses = pd.DataFrame(losses_records)
+    return pd.concat(all_results, ignore_index=True), all_results, df_losses, model_l1, model_l2, model_l3, sc, sc_l3
 
 
 def grid_search_thresholds(

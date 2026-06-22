@@ -7,7 +7,7 @@ import joblib
 import os
 import torch
 
-def evaluate_model_classification(full_results):
+def evaluate_model_classification(full_results, show=True, save=False, save_path="classification_report.png"):
 
 
     df = full_results.copy()
@@ -38,7 +38,15 @@ def evaluate_model_classification(full_results):
     ax[1].set_title("Confusion Matrix (Recall por Clase)")
     
     plt.tight_layout()
-    plt.show()
+    
+    if save:
+        fig.savefig(save_path, dpi=300)
+        print(f"💾 Figura guardada en: {save_path}")
+        
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
     # 3. F1-Score Macro (Métrica clave para clases desbalanceadas)
     f1 = f1_score(y_true, y_pred, average='macro')
