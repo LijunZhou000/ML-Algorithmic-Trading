@@ -21,6 +21,9 @@ import torch
 
 import matplotlib.pyplot as plt
 
+import os
+import json
+
 def load_bt_csv(ticker):
     data = pd.read_parquet(f"{BT_DIR}/{ticker}1min.parquet")
     data["openint"] = 0
@@ -886,10 +889,10 @@ def monte_carlo_blocks(blocks, target_length, n_sims=1000):
 
     return np.array(sims)
 
-def plot_equities(curvas, asset, start, show=True, save=False, save_path="classification_report.png"):
+def plot_equities(curvas, asset, start, strat_name, show=True, save=False, save_path="classification_report.png"):
     fig, ax = plt.subplots(figsize=(12, 5))
 
-    labels = ["Curva 1", "Curva 2", "Curva 3", "Curva 4"]
+    labels = ["Normal", "Scale in", "Sizing", "Scale in + Sizing"]
 
     # Estilos de línea tipo "dash pattern" como en el ejemplo
     estilos = [
@@ -921,7 +924,7 @@ def plot_equities(curvas, asset, start, show=True, save=False, save_path="classi
             color=color
         )
 
-    ax.set_title(f"Comparación de curvas {asset}, desde {start}")
+    ax.set_title(f"Comparación de curvas {asset}, desde {start}, estrategia {strat_name}")
     ax.set_xlabel("Índice")
     ax.set_ylabel("Equity")
     ax.grid(True, alpha=0.3)
@@ -948,7 +951,7 @@ def max_losing_streak(pnl_row):
         max_streak = max(max_streak, streak)
     return max_streak
 
-def plot_conjunto(weekly_pnl, mc, mdd_per_sim, asset, show=True, save=False, save_path="classification_report.png"):
+def plot_conjunto(weekly_pnl, mc, mdd_per_sim, asset, start, strat_name, show=True, save=False, save_path="classification_report.png"):
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     import numpy as np
@@ -1008,7 +1011,7 @@ def plot_conjunto(weekly_pnl, mc, mdd_per_sim, asset, show=True, save=False, sav
                    va='center', color='#e63946', fontsize=9, fontweight='bold')
 
     ax_mc.axhline(0, color='black', ls=':', lw=1, alpha=0.5)
-    ax_mc.set_title(f'Monte Carlo — Weekly Equity Curves ({asset}, n={len(mc_equity)})', fontsize=13)
+    ax_mc.set_title(f'Monte Carlo — Curva equity diaria ({asset}, n={len(mc_equity)}, desde {start}, estrategia {strat_name})', fontsize=13)
     ax_mc.set_xlabel('Semanas')
     ax_mc.set_ylabel('PnL acumulado (USD)')
     ax_mc.legend(fontsize=9)
@@ -1047,323 +1050,365 @@ def plot_conjunto(weekly_pnl, mc, mdd_per_sim, asset, show=True, save=False, sav
         plt.show()
     else:
         plt.close(fig)
-    
+
+# ── helper ────────────────────────────────────────────────────────────────────
+
+def _calmar_metrics(equity_series) -> dict:
+    equity = pd.Series(equity_series, dtype=float).dropna().reset_index(drop=True)
+
+    if len(equity) < 2:
+        return {
+            "calmar": -np.inf,
+            "sharpe": -np.inf,
+            "max_dd": np.inf,
+            "cagr": -np.inf,
+        }
+
+    start_eq = float(equity.iloc[0])
+    end_eq = float(equity.iloc[-1])
+
+    if start_eq <= 0:
+        return {
+            "calmar": -np.inf,
+            "sharpe": -np.inf,
+            "max_dd": np.inf,
+            "cagr": -np.inf,
+        }
+
+    # Estrategia quebrada
+    if end_eq <= 0:
+        return {
+            "calmar": -np.inf,
+            "sharpe": -np.inf,
+            "max_dd": 1.0,
+            "cagr": -1.0,
+        }
+
+    returns = equity.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+
+    months = max(len(equity) / 21.0, 1e-9)
+
+    ratio = end_eq / start_eq
+    cagr = ratio ** (12.0 / months) - 1.0
+
+    roll_max = equity.cummax()
+    drawdown = (roll_max - equity) / roll_max.replace(0, np.nan)
+    max_dd = float(drawdown.max())
+
+    vol_ann = float(returns.std() * np.sqrt(252))
+
+    if not np.isfinite(vol_ann) or vol_ann <= 0:
+        sharpe = 0.0 if cagr >= 0 else -np.inf
+    else:
+        returns = equity.pct_change().dropna()
+        sharpe = returns.mean() / (returns.std() + 1e-9) * np.sqrt(252)
+
+    calmar = cagr / (max_dd + 1e-9)
+
+    metrics = {
+        "calmar": float(calmar),
+        "sharpe": float(sharpe),
+        "max_dd": float(max_dd),
+        "cagr": float(cagr),
+    }
+
+    # Evitar NaN o inf inesperados
+    for k, v in metrics.items():
+        if not np.isfinite(v):
+            metrics[k] = -np.inf if k != "max_dd" else np.inf
+
+    return metrics
+
+# ── función principal ─────────────────────────────────────────────────────────
+
 def backtest_grid_search(models_dir, asset, minutes, return_horizon_min, start, end, show, save):
+
+    # ── carga de modelos ──────────────────────────────────────────────────────
     (
-        model_l1,
-        model_l2,
-        model_l3,
-        sc_features,
-        sc_l3,
-        features,
-        params,
-        thresholds,
-        df_results
+        model_l1, model_l2, model_l3,
+        sc_features, sc_l3,
+        features, params, thresholds, df_results
     ) = load_trading_model_3level(
-            BasicLSTM_L1_Move,
-            BasicLSTM_L2_Dir,
-            BasicLSTM_L3_Regression,
-            path=f"{models_dir}/{asset.lower()}/trading_model_lstm_3level",
-            device="cuda"
+        BasicLSTM_L1_Move, BasicLSTM_L2_Dir, BasicLSTM_L3_Regression,
+        path=f"{models_dir}/{asset.lower()}/trading_model_lstm_3level",
+        device="cuda"
     )
     (
-        model_l1_g,
-        model_l2_g,
-        model_l3_g,
-        sc_features_g,
-        sc_l3_g,
-        features_g,
-        params_g,
-        thresholds_g,
-        df_results_g
+        model_l1_g, model_l2_g, model_l3_g,
+        sc_features_g, sc_l3_g,
+        features_g, params_g, thresholds_g, df_results_g
     ) = load_trading_model_3level(
-            BasicGRU_L1_Move,
-            BasicGRU_L2_Dir,
-            BasicGRU_L3_Regression,
-            path=f"{models_dir}/{asset.lower()}/trading_model_gru_3level",
-            device="cuda"
+        BasicGRU_L1_Move, BasicGRU_L2_Dir, BasicGRU_L3_Regression,
+        path=f"{models_dir}/{asset.lower()}/trading_model_gru_3level",
+        device="cuda"
     )
-    df_bt, spec_bt = prepare_bt(asset, minutes, return_horizon_min, json_config_path="../Data/features_config.json")
+
+    # ── preparar datos ────────────────────────────────────────────────────────
+    df_bt, spec_bt = prepare_bt(asset, minutes, return_horizon_min,
+                                json_config_path="../Data/features_config.json")
     mask = (df_bt["datetime"] >= start) & (df_bt["datetime"] < end)
-    df_filtered = df_bt.loc[mask]
+    df_filtered = df_bt.loc[mask].copy()
     df_filtered["hour"] = df_filtered["datetime"].dt.hour
+
+    # ── inferencia LSTM ───────────────────────────────────────────────────────
     test, test_dt = create_test_dataset(df_filtered, features, lookback=30)
-    test_g, test_dt_g = create_test_dataset(df_filtered, features_g, lookback=30)
-    test_flat = test.reshape(-1, test.shape[-1])
+    test_flat   = test.reshape(-1, test.shape[-1])
     test_scaled = sc_features.transform(test_flat).reshape(test.shape)
-    logits_l1 = predict_in_batches(model_l1, test_scaled)
-    probs_l1 = torch.softmax(logits_l1, dim=1).numpy()
-    df_probs = pd.DataFrame(
-        probs_l1,
-        columns=["prob_hold", "prob_move"]
-    )
-    logits_l2 = predict_in_batches(model_l2, test_scaled)
-    probs_l2 = torch.softmax(logits_l2, dim=1).numpy()
-    df_probs_l2 = pd.DataFrame(
-        probs_l2,
-        columns=["prob_short", "prob_long"]
-    )
-    df_probs[["prob_short", "prob_long"]] = df_probs_l2
-    logits_l3 = predict_in_batches(model_l3, test_scaled)
-    preds_l3 = logits_l3.numpy().reshape(-1)
+
+    probs_l1 = torch.softmax(predict_in_batches(model_l1, test_scaled), dim=1).numpy()
+    df_probs  = pd.DataFrame(probs_l1, columns=["prob_hold", "prob_move"])
+
+    probs_l2 = torch.softmax(predict_in_batches(model_l2, test_scaled), dim=1).numpy()
+    df_probs[["prob_short", "prob_long"]] = pd.DataFrame(probs_l2, columns=["prob_short", "prob_long"])
+
+    preds_l3 = predict_in_batches(model_l3, test_scaled).numpy().reshape(-1)
     df_probs["pred_l3"] = preds_l3
-    df_probs["pred_l1"] = (df_probs['prob_move'] > thresholds["threshold_move"]).astype(int)
-    df_probs["pred_l2"] =  (df_probs['prob_long'] > thresholds["threshold_dir"]).astype(int)
-    df_probs["datetime"] = test_dt.values
+
+    df_probs["pred_l1"] = (df_probs["prob_move"] > thresholds["threshold_move"]).astype(int)
+    df_probs["pred_l2"] = (df_probs["prob_long"] > thresholds["threshold_dir"]).astype(int)
+    df_probs["datetime"] = pd.to_datetime(test_dt.values, utc=True)
     df_probs["pred"] = np.where(
-        df_probs["pred_l1"] == 0,
-        1,
+        df_probs["pred_l1"] == 0, 1,
         np.where(df_probs["pred_l2"] == 0, 0, 2)
     )
-    df_probs["datetime"] = pd.to_datetime(df_probs["datetime"], utc=True)
-    test_flat_g = test_g.reshape(-1, test_g.shape[-1])
-    test_scaled_g =sc_features_g.transform(test_flat_g).reshape(test_g.shape)
-    logits_l1_g = predict_in_batches(model_l1_g, test_scaled_g)
-    probs_l1_g = torch.softmax(logits_l1_g, dim=1).numpy()
-    df_probs_g = pd.DataFrame(
-        probs_l1_g,
-        columns=["prob_hold", "prob_move"]
-    )
-    logits_l2_g = predict_in_batches(model_l2_g, test_scaled_g)
-    probs_l2_g = torch.softmax(logits_l2_g, dim=1).numpy()
-    df_probs_l2_g = pd.DataFrame(
-        probs_l2_g,
-        columns=["prob_short", "prob_long"]
-    )
-    df_probs_g[["prob_short", "prob_long"]] = df_probs_l2_g
-    logits_l3_g = predict_in_batches(model_l3_g, test_scaled_g)
-    preds_l3_g = logits_l3_g.numpy().reshape(-1)
+
+    # ── inferencia GRU ────────────────────────────────────────────────────────
+    test_g, test_dt_g = create_test_dataset(df_filtered, features_g, lookback=30)
+    test_flat_g   = test_g.reshape(-1, test_g.shape[-1])
+    test_scaled_g = sc_features_g.transform(test_flat_g).reshape(test_g.shape)
+
+    probs_l1_g = torch.softmax(predict_in_batches(model_l1_g, test_scaled_g), dim=1).numpy()
+    df_probs_g  = pd.DataFrame(probs_l1_g, columns=["prob_hold", "prob_move"])
+
+    probs_l2_g = torch.softmax(predict_in_batches(model_l2_g, test_scaled_g), dim=1).numpy()
+    df_probs_g[["prob_short", "prob_long"]] = pd.DataFrame(probs_l2_g, columns=["prob_short", "prob_long"])
+
+    preds_l3_g = predict_in_batches(model_l3_g, test_scaled_g).numpy().reshape(-1)
     df_probs_g["pred_l3"] = preds_l3_g
-    df_probs_g["pred_l1"] = (df_probs_g['prob_move'] > thresholds_g["threshold_move"]).astype(int)
-    df_probs_g["pred_l2"] =  (df_probs_g['prob_long'] > thresholds_g["threshold_dir"]).astype(int)
-    df_probs_g["datetime"] = test_dt_g.values
+
+    df_probs_g["pred_l1"] = (df_probs_g["prob_move"] > thresholds_g["threshold_move"]).astype(int)
+    df_probs_g["pred_l2"] = (df_probs_g["prob_long"] > thresholds_g["threshold_dir"]).astype(int)
+    df_probs_g["datetime"] = pd.to_datetime(test_dt_g.values, utc=True)
     df_probs_g["pred"] = np.where(
-        df_probs_g["pred_l1"] == 0,
-        1,
+        df_probs_g["pred_l1"] == 0, 1,
         np.where(df_probs_g["pred_l2"] == 0, 0, 2)
     )
-    df_probs_g["datetime"] = pd.to_datetime(df_probs_g["datetime"], utc=True)
+
+    # ── soft-voting LSTM + GRU ────────────────────────────────────────────────
     df_merged_total = df_probs.merge(
-        df_probs_g,
-        on="datetime",
-        how="left",
-        suffixes=("_lstm", "_gru")
+        df_probs_g, on="datetime", how="left", suffixes=("_lstm", "_gru")
     )
-    threshold_total = {
-        k: min(thresholds[k], thresholds_g[k])
-        for k in thresholds
-    }
+
+    threshold_total = {k: min(thresholds[k], thresholds_g[k]) for k in thresholds}
     eps = 1e-9
-    df_merged_total["peso_total"] = df_merged_total["pred_l3_lstm"] + df_merged_total["pred_l3_gru"] + eps
+
     abs_l3_lstm = df_merged_total["pred_l3_lstm"].abs()
     abs_l3_gru  = df_merged_total["pred_l3_gru"].abs()
-    weight_lstm = abs_l3_lstm / (abs_l3_lstm + abs_l3_gru + eps)
-    weight_gru  = abs_l3_gru  / (abs_l3_lstm + abs_l3_gru + eps)
-    df_merged_total["soft_move_score"] = (
-        weight_lstm * df_merged_total["prob_move_lstm"] +
-        weight_gru  * df_merged_total["prob_move_gru"]
-    )
-    df_merged_total["pred_soft_l1"] = (df_merged_total["soft_move_score"] > threshold_total["threshold_move"]).astype(int)
-    df_merged_total["sign_l3_lstm"] = np.sign(df_merged_total[df_merged_total.pred_l1_lstm == 1]["pred_l3_lstm"])
-    df_merged_total["sign_l3_gru"]  = np.sign(df_merged_total[df_merged_total.pred_l1_lstm == 1]["pred_l3_gru"])
-    cond_lstm = (
-        (df_merged_total["pred_l2_lstm"] == 0) & (df_merged_total["sign_l3_lstm"] > 0) |   # SHORT pero retorno positivo
-        (df_merged_total["pred_l2_lstm"] == 1) & (df_merged_total["sign_l3_lstm"] < 0)     # LONG pero retorno negativo
-    )
-
-    df_lstm_contra = df_merged_total[cond_lstm]
-    num_lstm_contra = cond_lstm.sum()
-
-    cond_gru = (
-        (df_merged_total["pred_l2_gru"] == 0) & (df_merged_total["sign_l3_gru"] > 0) |   # SHORT pero retorno positivo
-        (df_merged_total["pred_l2_gru"] == 1) & (df_merged_total["sign_l3_gru"] < 0)     # LONG pero retorno negativo
-    )
-
-    df_gru_contra = df_merged_total[cond_gru]
-    num_gru_contra = cond_gru.sum()
-
-    df_moves = df_merged_total[df_merged_total.pred_soft_l1 == 1]
-    df_moves["sign_l3_lstm"] = np.sign(df_moves["pred_l3_lstm"])
-    df_moves["sign_l3_gru"]  = np.sign(df_moves["pred_l3_gru"])
-    cond_disagree = df_moves["sign_l3_lstm"] != df_moves["sign_l3_gru"]
-    df_l3_disagree = df_moves[cond_disagree]
-    num_disagree = cond_disagree.sum()
-    total_moves = len(df_moves)
-    ratio_disagree = num_disagree / total_moves
-
-    cond_l2_disagree = df_moves["pred_l2_lstm"] != df_moves["pred_l2_gru"]
-    df_l2_disagree = df_moves[cond_l2_disagree]
-
-    num_l2_disagree = cond_l2_disagree.sum()
-    ratio_l2_disagree = num_l2_disagree / total_moves
-    summary = pd.DataFrame({
-        "metric": ["L3_sign_disagree", "L2_direction_disagree"],
-        "count": [num_disagree, num_l2_disagree],
-        "total_moves_softvote": [total_moves, total_moves],
-        "ratio": [ratio_disagree, ratio_l2_disagree]
-    })
-    eps = 1e-9
-    abs_l3_lstm = df_merged_total["pred_l3_lstm"].abs()
-    abs_l3_gru  = df_merged_total["pred_l3_gru"].abs()
-    
     w_lstm = abs_l3_lstm / (abs_l3_lstm + abs_l3_gru + eps)
     w_gru  = abs_l3_gru  / (abs_l3_lstm + abs_l3_gru + eps)
-    
+
+    df_merged_total["soft_move_score"] = (
+        w_lstm * df_merged_total["prob_move_lstm"] +
+        w_gru  * df_merged_total["prob_move_gru"]
+    )
+    df_merged_total["pred_soft_l1"] = (
+        df_merged_total["soft_move_score"] > threshold_total["threshold_move"]
+    ).astype(int)
+
+    df_merged_total["sign_l3_lstm"] = np.sign(
+        df_merged_total[df_merged_total.pred_l1_lstm == 1]["pred_l3_lstm"]
+    )
+    df_merged_total["sign_l3_gru"] = np.sign(
+        df_merged_total[df_merged_total.pred_l1_lstm == 1]["pred_l3_gru"]
+    )
+
+    # diagnóstico de desacuerdo entre modelos
+    df_moves = df_merged_total[df_merged_total.pred_soft_l1 == 1].copy()
+    df_moves["sign_l3_lstm"] = np.sign(df_moves["pred_l3_lstm"])
+    df_moves["sign_l3_gru"]  = np.sign(df_moves["pred_l3_gru"])
+    total_moves       = len(df_moves)
+    num_l3_disagree   = (df_moves["sign_l3_lstm"] != df_moves["sign_l3_gru"]).sum()
+    num_l2_disagree   = (df_moves["pred_l2_lstm"] != df_moves["pred_l2_gru"]).sum()
+    summary = pd.DataFrame({
+        "metric":               ["L3_sign_disagree", "L2_direction_disagree"],
+        "count":                [num_l3_disagree, num_l2_disagree],
+        "total_moves_softvote": [total_moves, total_moves],
+        "ratio":                [num_l3_disagree / max(total_moves, 1),
+                                 num_l2_disagree / max(total_moves, 1)],
+    })
+
     df_merged_total["soft_long_score"] = (
         w_lstm * df_merged_total["prob_long_lstm"] +
         w_gru  * df_merged_total["prob_long_gru"]
     )
-    
     df_merged_total["soft_short_score"] = (
         w_lstm * df_merged_total["prob_short_lstm"] +
         w_gru  * df_merged_total["prob_short_gru"]
     )
-    
     df_merged_total["pred_soft_l2"] = (
         df_merged_total["soft_long_score"] > threshold_total["threshold_dir"]
     ).astype(int)
-    
+
     df_merged_total["l3_total"] = (
         w_lstm * df_merged_total["pred_l3_lstm"] +
         w_gru  * df_merged_total["pred_l3_gru"]
     )
-    
     df_merged_total["sign_l3_total"] = np.sign(df_merged_total["l3_total"])
-    
     df_merged_total["pred_soft_l2_clean"] = np.where(
-        df_merged_total["sign_l3_total"] == 0,  # retorno débil
-        np.nan,                                 # descartar
-        df_merged_total["pred_soft_l2"]         # mantener
+        df_merged_total["sign_l3_total"] == 0,
+        np.nan,
+        df_merged_total["pred_soft_l2"]
     )
-    
     df_merged_total["pred_soft_final"] = np.where(
-        df_merged_total["pred_soft_l1"] == 0, 
-        1,  # HOLD
+        df_merged_total["pred_soft_l1"] == 0, 1,
         np.where(
-            df_merged_total["pred_soft_l2_clean"].isna(),
-            1,  # HOLD si la dirección no es coherente
-            np.where(df_merged_total["pred_soft_l2_clean"] == 0, 0, 2)  # SHORT o LONG
+            df_merged_total["pred_soft_l2_clean"].isna(), 1,
+            np.where(df_merged_total["pred_soft_l2_clean"] == 0, 0, 2)
         )
     )
-    df_ops = df_merged_total[df_merged_total["pred_soft_final"] != 1]
-    df_long = df_merged_total[df_merged_total["pred_soft_final"] == 2]
-    threshold = df_merged_total["l3_total"].abs().quantile(0.7)
+
+    # ── definición de estrategias de señal ───────────────────────────────────
+    threshold_l3 = df_merged_total["l3_total"].abs().quantile(0.7)
+    df_ops         = df_merged_total[df_merged_total["pred_soft_final"] != 1]
+    df_long        = df_merged_total[df_merged_total["pred_soft_final"] == 2]
     df_long_strong = df_merged_total[
         (df_merged_total["pred_soft_final"] == 2) &
-        (df_merged_total["l3_total"].abs() > threshold)
+        (df_merged_total["l3_total"].abs() > threshold_l3)
     ]
-    threshold = df_merged_total["l3_total"].abs().quantile(0.7)
-    
-    df_ops_strong = df_merged_total[
-        (df_merged_total["pred_soft_final"] != 1) &  # LONG o SHORT
-        (df_merged_total["l3_total"].abs() > threshold)
+    df_ops_strong  = df_merged_total[
+        (df_merged_total["pred_soft_final"] != 1) &
+        (df_merged_total["l3_total"].abs() > threshold_l3)
     ]
-    strat_p1_to_try = {"df_ops":df_ops,
-                        "df_long":df_long,
-                        "df_long_strong":df_long_strong,
-                        "df_ops_strong":df_ops_strong}
-    for item, key in strat_p1_to_try.items():
-        df_for_bt = df_filtered[["open","close","high","low","atr","datetime"]].merge(key, how="outer", on="datetime")
-        specs = load_specs()
-        trades_c, equity_c = run_backtest_complete(df_for_bt, specs[asset], initial_capital=specs[asset]["initial_margin"]*10)
-        trades_c_s, equity_c_s = run_backtest_complete_scalein(df_for_bt, specs[asset], initial_capital=specs[asset]["initial_margin"]*10)
-        trades_c_si, equity_c_si = run_backtest_sizing_only(df_for_bt, specs[asset], initial_capital=specs[asset]["initial_margin"]*10)
-        trades_c_todo, equity_c_todo = run_backtest_scalein_sizing(df_for_bt, specs[asset], initial_capital=specs[asset]["initial_margin"]*10)
-        df = pd.DataFrame({
-            "equity_c": equity_c,
-            "equity_c_s": equity_c_s,
-            "equity_c_si": equity_c_si,
-            "equity_c_todo": equity_c_todo
-        }).astype(float)
-        
-        plot_equities(df.values.T, asset, start, show, save, f"{models_dir}/{asset.lower()}/equity_{item}.png")
-        # 2. Seleccionar la columna con mayor equity final
-        best_col = df.iloc[-1].idxmax()
-        
-        profit = df.iloc[-1].max() - specs[asset]["initial_margin"]*10
-        
-        print("Mejor ganancia:", profit)
-        
-        equity = df[best_col]
-        
-        print("Mejor equity:", best_col)
-        
-        # 3. Calcular MDD
-        rolling_max = equity.cummax()
-        drawdown = (rolling_max - equity) / rolling_max
-        max_dd = drawdown.max()
-        
-        dd_usd = (rolling_max - equity).max()
-        eps = 1e-9
-        ratio = profit / max(dd_usd, eps)
-        print("Max Drawdown:", dd_usd)
-        
-        print("Ratio:", ratio)
-        # equity = pd.Series(equity_c)
-        equity = equity.dropna()
-        returns = equity.pct_change().dropna()
-        vol_daily = returns.std()
-        vol_annual = vol_daily * np.sqrt(252)
-        total_return = equity.iloc[-1] / equity.iloc[0] - 1
-        months = len(equity) / 21  # aprox 21 días de trading por mes
-        cagr = (1 + total_return)**(12 / months) - 1
-        sharpe = cagr / vol_annual
 
-        rolling_max = equity.cummax()
-        drawdown = (rolling_max - equity) / rolling_max
-        max_dd = drawdown.max()
-        dict_trades ={
-            "equity_c": trades_c,
-            "equity_c_s": trades_c_s,
-            "equity_c_si": trades_c_si,
-            "equity_c_todo": trades_c_todo
+    strat_p1_to_try = {
+        "df_ops":         df_ops,
+        "df_long":        df_long,
+        "df_long_strong": df_long_strong,
+        "df_ops_strong":  df_ops_strong,
+    }
+
+    backtest_fns = {
+        "base":            run_backtest_complete,
+        "scalein":         run_backtest_complete_scalein,
+        "sizing":          run_backtest_sizing_only,
+        "scalein_sizing":  run_backtest_scalein_sizing,
+    }
+
+    # ── grid search con selección por Calmar ──────────────────────────────────
+    specs           = load_specs()
+    initial_capital = specs[asset]["initial_margin"] * 10
+    all_results     = []   # lista plana de todas las combinaciones
+
+    for strat_name, signal_df in strat_p1_to_try.items():
+        df_for_bt = (
+            df_filtered[["open", "close", "high", "low", "atr", "datetime"]]
+            .merge(signal_df, how="outer", on="datetime")
+        )
+
+        equities = {}   # para plot_equities de esta señal
+        trades_map = {}
+
+        for bt_name, bt_fn in backtest_fns.items():
+            trades, equity = bt_fn(df_for_bt, specs[asset],
+                                   initial_capital=initial_capital)
+            equities[bt_name]   = equity
+            trades_map[bt_name] = trades
+
+            metrics = _calmar_metrics(pd.Series(equity))
+            all_results.append({
+                "strat":    strat_name,
+                "backtest": bt_name,
+                "trades":   trades,
+                "equity":   equity,
+                **metrics,
+            })
+
+        # plot de las 4 variantes para esta señal (igual que antes)
+        df_eq = pd.DataFrame(equities).astype(float)
+        plot_equities(
+            df_eq.values.T, asset, start, strat_name, show, save,
+            f"{models_dir}/{asset.lower()}/equity_{strat_name}.png"
+        )
+
+    # ── elegir el mejor por Calmar (desempate: Sharpe) ────────────────────────
+    best = max(all_results, key=lambda r: (r["calmar"], r["sharpe"]))
+
+    best_equity = pd.Series(best["equity"]).dropna().reset_index(drop=True)
+    best_trades = pd.DataFrame(best["trades"])
+
+    print(
+        f"\n[{asset}] mejor: {best['strat']} + {best['backtest']}"
+        f"  |  Calmar={best['calmar']:.3f}"
+        f"  |  Sharpe={best['sharpe']:.3f}"
+        f"  |  MDD={best['max_dd']:.1%}"
+        f"  |  CAGR={best['cagr']:.1%}"
+        f"  |  PnL=${best_equity.iloc[-1] - initial_capital:,.0f}"
+    )
+
+    # ── Monte Carlo sobre el mejor ────────────────────────────────────────────
+    best_trades["datetime_exit"] = pd.to_datetime(best_trades["datetime_exit"])
+    best_trades = best_trades.sort_values("datetime_exit").reset_index(drop=True)
+    best_trades["date"] = best_trades["datetime_exit"].dt.date
+    daily      = best_trades.groupby("date")["pnl_usd"].sum().reset_index()
+    weekly_pnl = daily["pnl_usd"].values
+
+    blocks, block_size = build_overlapping_blocks(weekly_pnl, block_size=1)
+    print("block_size usado:", block_size, " | n_blocks:", len(blocks))
+
+    mc             = monte_carlo_blocks(blocks, len(weekly_pnl), n_sims=5000)
+    pnl_cumsum     = np.cumsum(mc, axis=1)
+    equity_curves  = 1_000_000 + pnl_cumsum
+    final_equity   = equity_curves[:, -1]
+    mdd_per_sim    = np.array([max_drawdown(eq) for eq in equity_curves])
+    streaks        = np.array([max_losing_streak(row) for row in mc])
+
+    print(f"Median MDD      : {np.median(mdd_per_sim):.1%}")
+    print(f"Worst MDD (p5)  : {np.percentile(mdd_per_sim, 5):.1%}")
+    print(f"Racha perd. med.: {np.median(streaks):.0f} trades")
+    print(f"Racha perd. p95 : {np.percentile(streaks, 95):.0f} trades")
+
+    plot_conjunto(
+        weekly_pnl, mc, mdd_per_sim, asset, start, best['strat'], show, save,
+        f"{models_dir}/{asset.lower()}/conjunto_best.png"
+    )
+
+    # ── persistencia ─────────────────────────────────────────────────────────
+    asset_dir = f"{models_dir}/{asset.lower()}"
+    os.makedirs(asset_dir, exist_ok=True)
+
+    best_equity.to_frame("equity").to_parquet(
+        f"{asset_dir}/equity_best.parquet", index=False
+    )
+    best_trades.to_parquet(
+        f"{asset_dir}/trades_best.parquet", index=False
+    )
+
+    result_entry = {
+        asset: {
+            "strat":        best["strat"],
+            "backtest":     best["backtest"],
+            "calmar":       round(float(best["calmar"]), 4),
+            "sharpe":       round(float(best["sharpe"]), 4),
+            "max_dd":       round(float(best["max_dd"]), 4),
+            "cagr":         round(float(best["cagr"]),   4),
+            "equity_final": round(float(best_equity.iloc[-1]),   4),
+            "pnl_final": round(float(best_equity.iloc[-1] - initial_capital),   4),
+            "equity_path":  f"{asset_dir}/equity_best.parquet",
+            "trades_path":  f"{asset_dir}/trades_best.parquet",
         }
-        
-        trades_df = pd.DataFrame(dict_trades[best_col])
-        trades_df["datetime_exit"] = pd.to_datetime(trades_df["datetime_exit"])
-        trades_df = trades_df.sort_values("datetime_exit").reset_index(drop=True)
-        trades_df["week"] = trades_df["datetime_exit"].dt.isocalendar().week
-        trades_df["year"] = trades_df["datetime_exit"].dt.isocalendar().year
-        weekly = trades_df.groupby(["year", "week"])["pnl_usd"].sum().reset_index()
-        trades_df["date"] = trades_df["datetime_exit"].dt.date
-        daily = trades_df.groupby("date")["pnl_usd"].sum().reset_index()
-        # weekly_pnl = weekly["pnl_usd"].values
-        weekly_pnl = daily["pnl_usd"].values
+    }
 
-        blocks, block_size = build_overlapping_blocks(weekly_pnl, block_size=1)
-        print("block_size usado:", block_size)
-        print("n_blocks:", len(blocks))
+    json_path = f"{models_dir}/best_per_asset.json"
+    # carga el JSON existente si ya hay resultados de otros assets
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    else:
+        existing = {}
+    existing.update(result_entry)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, indent=2, ensure_ascii=False)
 
-        mc = monte_carlo_blocks(blocks, len(weekly_pnl), n_sims=5000)
-        # equity real
-        real_equity = weekly_pnl.cumsum()
+    print(f"JSON actualizado: {json_path}")
 
-        # equity simulada
-        mc_equity = mc.cumsum(axis=1)
-        initial_capital = 1_000_000
-        pnl_cumsum = np.cumsum(mc, axis=1)  # shape (5000, 16)
-        equity_curves = initial_capital + pnl_cumsum
-        
-        # Percentiles en cada punto temporal
-        p5  = np.percentile(equity_curves, 5,  axis=0)
-        p25 = np.percentile(equity_curves, 25, axis=0)
-        p50 = np.percentile(equity_curves, 50, axis=0)
-        p75 = np.percentile(equity_curves, 75, axis=0)
-        p95 = np.percentile(equity_curves, 95, axis=0)
-        
-        final_equity = equity_curves[:, -1]  # shape (5000,)
-        
-        pct_positive = (final_equity > initial_capital).mean() * 100
-        expected_final = final_equity.mean()
-        worst_case  = np.percentile(final_equity, 5)   # VaR al 95%
-        best_case   = np.percentile(final_equity, 95)
-        median_final = np.median(final_equity)
-        mdd_per_sim = np.array([max_drawdown(eq) for eq in equity_curves])
-
-        print(f"Median MDD : {np.median(mdd_per_sim):.1%}")
-        print(f"Worst MDD (p5): {np.percentile(mdd_per_sim, 5):.1%}")
-        streaks = np.array([max_losing_streak(row) for row in mc])
-        print(f"Racha perdedora mediana: {np.median(streaks):.0f} trades")
-        print(f"Racha perdedora p95:     {np.percentile(streaks, 95):.0f} trades")
-        
-        plot_conjunto(weekly_pnl, mc, mdd_per_sim, asset, show, save, f"{models_dir}/{asset.lower()}/conjunto_{item}.png")
+    return result_entry
