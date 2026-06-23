@@ -6,57 +6,99 @@ import pandas as pd
 import joblib
 import os
 import torch
+from sklearn.metrics import roc_curve, auc, classification_report, confusion_matrix, f1_score, accuracy_score, mean_absolute_error, mean_squared_error, r2_score, median_absolute_error, mean_absolute_percentage_error, log_loss
+import torch.nn as nn
 
 def evaluate_model_classification(full_results, show=True, save=False, save_path="classification_report.png"):
-
 
     df = full_results.copy()
     
     # Aseguramos que los tipos sean correctos
     y_true = df['actual'].astype(int)
     y_pred = df['final_pred'].astype(int)
-    
+
     # 1. Reporte detallado
-    # Target names alineados con tu mapeo: 0: SELL, 1: HOLD, 2: BUY
     print("📊 --- CLASIFICACIÓN POR CLASE ---")
-    print(classification_report(y_true, y_pred, target_names=['SELL (0)', 'HOLD (1)', 'BUY (2)'], zero_division=0))
+    print(classification_report(
+        y_true, y_pred,
+        target_names=['SELL (0)', 'HOLD (1)', 'BUY (2)'],
+        zero_division=0
+    ))
 
-    # 2. Matriz de Confusión Normalizada (Para ver porcentajes de acierto por clase)
+    # 2. Matrices de confusión
     cm = confusion_matrix(y_true, y_pred)
-    cm_norm = confusion_matrix(y_true, y_pred, normalize='true') # % sobre el total de cada clase real
+    cm_norm = confusion_matrix(y_true, y_pred, normalize='true')
 
-    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    
-    # Matriz de valores absolutos
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax[0], 
-                xticklabels=['SELL', 'HOLD', 'BUY'], yticklabels=['SELL', 'HOLD', 'BUY'])
-    ax[0].set_title("Confusion Matrix (Conteos)")
-    
-    # Matriz normalizada (Importante para ver el sesgo)
-    sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='Greens', ax=ax[1],
-                xticklabels=['SELL', 'HOLD', 'BUY'], yticklabels=['SELL', 'HOLD', 'BUY'])
-    ax[1].set_title("Confusion Matrix (Recall por Clase)")
-    
+    # 3. F1 por clase
+    f1_classes = f1_score(y_true, y_pred, average=None)
+    f1_matrix = f1_classes.reshape(1, -1)
+
+    # 4. Métricas por clase (para barplot)
+    report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+    metrics_df = pd.DataFrame(report).T.loc[['0','1','2'], ['precision','recall','f1-score']]
+    metrics_df.index = ['SELL','HOLD','BUY']
+
+    # --- FIGURA 2x2 ---
+    fig, ax = plt.subplots(2, 2, figsize=(12, 10))
+
+    # --- Plot 1: Confusion Matrix (conteos)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax[0,0],
+                xticklabels=['SELL','HOLD','BUY'], yticklabels=['SELL','HOLD','BUY'])
+    ax[0,0].set_title("Confusion Matrix (Conteos)")
+
+    # --- Plot 2: Confusion Matrix Normalizada
+    sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='Greens', ax=ax[0,1],
+                xticklabels=['SELL','HOLD','BUY'], yticklabels=['SELL','HOLD','BUY'])
+    ax[0,1].set_title("Confusion Matrix (Recall por Clase)")
+
+    # --- Plot 3: F1 por clase
+    sns.heatmap(f1_matrix, annot=True, fmt='.3f', cmap='Purples', ax=ax[1,0],
+                xticklabels=['SELL','HOLD','BUY'], yticklabels=['F1-score'])
+    ax[1,0].set_title("F1-score por Clase")
+
+    # --- Plot 4: Precision / Recall / F1 por clase
+    metrics_df.plot(kind='bar', ax=ax[1,1], colormap='viridis')
+    ax[1,1].set_ylim(0, 1)
+    ax[1,1].set_title("Métricas por Clase")
+    ax[1,1].legend(loc='lower right')
+
     plt.tight_layout()
-    
+
+    # Guardar si save=True
     if save:
         fig.savefig(save_path, dpi=300)
         print(f"💾 Figura guardada en: {save_path}")
-        
+
+    # Mostrar si show=True
     if show:
         plt.show()
     else:
         plt.close(fig)
 
-    # 3. F1-Score Macro (Métrica clave para clases desbalanceadas)
-    f1 = f1_score(y_true, y_pred, average='macro')
+    # 5. Métricas globales
+    f1_macro = f1_score(y_true, y_pred, average='macro')
     acc = accuracy_score(y_true, y_pred)
-    
+
     print(f"\n⭐ Métricas Globales:")
     print(f"Accuracy: {acc:.4f}")
-    print(f"F1-Score (Macro): {f1:.4f}  <-- Si es < 0.33, el modelo es puro azar")
+    print(f"F1-Score (Macro): {f1_macro:.4f}  <-- Si es < 0.33, el modelo es puro azar")
 
-    return {"accuracy": acc, "f1_macro": f1}
+    # return {"accuracy": acc, "f1_macro": f1_macro}
+    return {
+        "classification": {
+            "accuracy": float(acc),
+            "f1_macro": float(f1_macro),
+            "f1_per_class": {
+                "SELL": float(f1_classes[0]),
+                "HOLD": float(f1_classes[1]),
+                "BUY": float(f1_classes[2])
+            },
+            "confusion_matrix": cm.tolist(),
+            "confusion_matrix_normalized": cm_norm.tolist(),
+            "per_class_metrics": metrics_df.to_dict()
+        }
+    }
+
 
 
 def evaluate_model_classification_3level(full_results):
@@ -598,3 +640,401 @@ def get_predict(result, params):
     df['final_pred'] = final_pred
 
     return df
+
+def plot_roc_and_reliability_2x2(
+    fpr_L1, tpr_L1, auc_L1,
+    fpr_L2, tpr_L2, auc_L2,
+    prob_pred_L1, prob_true_L1,
+    prob_pred_L2, prob_true_L2,
+    show=True, save=False, save_path="roc_reliability_2x2.png"
+):
+
+    fig, ax = plt.subplots(2, 2, figsize=(12, 10))
+
+    # --- ROC L1 ---
+    ax[0,0].plot(fpr_L1, tpr_L1, label=f"AUC L1 = {auc_L1:.3f}")
+    ax[0,0].plot([0,1],[0,1],'--',color='gray')
+    ax[0,0].set_title("ROC L1: MOVE vs HOLD")
+    ax[0,0].set_xlabel("False Positive Rate")
+    ax[0,0].set_ylabel("True Positive Rate")
+    ax[0,0].legend()
+
+    # --- ROC L2 ---
+    ax[0,1].plot(fpr_L2, tpr_L2, label=f"AUC L2 = {auc_L2:.3f}")
+    ax[0,1].plot([0,1],[0,1],'--',color='gray')
+    ax[0,1].set_title("ROC L2: BUY vs SELL")
+    ax[0,1].set_xlabel("False Positive Rate")
+    ax[0,1].set_ylabel("True Positive Rate")
+    ax[0,1].legend()
+
+    # --- Reliability L1 ---
+    ax[1,0].plot(prob_pred_L1, prob_true_L1, marker='o', label='L1 calibration')
+    ax[1,0].plot([0,1],[0,1],'--',color='gray')
+    ax[1,0].set_title("Reliability Curve — L1 MOVE vs HOLD")
+    ax[1,0].set_xlabel("Predicted probability (MOVE)")
+    ax[1,0].set_ylabel("Observed frequency")
+    ax[1,0].grid(True)
+    ax[1,0].legend()
+
+    # --- Reliability L2 ---
+    ax[1,1].plot(prob_pred_L2, prob_true_L2, marker='o', label='L2 calibration')
+    ax[1,1].plot([0,1],[0,1],'--',color='gray')
+    ax[1,1].set_title("Reliability Curve — L2 BUY vs SELL")
+    ax[1,1].set_xlabel("Predicted probability (BUY)")
+    ax[1,1].set_ylabel("Observed frequency")
+    ax[1,1].grid(True)
+    ax[1,1].legend()
+
+    plt.tight_layout()
+
+    # Guardar si save=True
+    if save:
+        fig.savefig(save_path, dpi=300)
+        print(f"💾 Figura guardada en: {save_path}")
+
+    # Mostrar si show=True
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+        
+    return {
+    "roc_reliability": {
+        "L1": {
+            "auc": float(auc_L1),
+            "fpr": list(map(float, fpr_L1)),
+            "tpr": list(map(float, tpr_L1)),
+            "prob_pred": list(map(float, prob_pred_L1)),
+            "prob_true": list(map(float, prob_true_L1))
+        },
+        "L2": {
+            "auc": float(auc_L2),
+            "fpr": list(map(float, fpr_L2)),
+            "tpr": list(map(float, tpr_L2)),
+            "prob_pred": list(map(float, prob_pred_L2)),
+            "prob_true": list(map(float, prob_true_L2))
+        }
+    }
+}
+
+def plot_regression_2x2(
+    results,
+    show=True, save=False, save_path="regression_L3_2x2.png"
+):
+    df = results.copy()
+    df = df.dropna(subset=["pred_logret", "real_logret"])
+
+    y_true = df["real_logret"].astype(float).values
+    y_pred = df["pred_logret"].astype(float).values
+
+    # -----------------------------
+    # 1. Métricas numéricas
+    # -----------------------------
+    mae = mean_absolute_error(y_true, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    r2 = r2_score(y_true, y_pred)
+    corr = np.corrcoef(y_true, y_pred)[0, 1]
+    medae = median_absolute_error(y_true, y_pred)
+    mape = mean_absolute_percentage_error(y_true, y_pred) * 100
+    
+    errors = y_pred - y_true
+    fitted = y_pred
+
+    # Texto común para la leyenda
+    legend_text = (
+        f"MAE={mae:.4f}\n"
+        f"RMSE={rmse:.4f}\n"
+        f"R²={r2:.3f}\n"
+        f"Corr={corr:.3f}\n"
+        f"MedAE={medae:.4f}\n"
+        f"MAPE={mape:.2f}%"
+    )
+
+    fig, ax = plt.subplots(2, 2, figsize=(12, 10))
+
+    # -----------------------------
+    # 1. Scatter Pred vs Real
+    # -----------------------------
+    sns.scatterplot(x=y_true, y=y_pred, s=10, alpha=0.4, ax=ax[0,0])
+    ax[0,0].set_title("Scatter Pred vs Real")
+    ax[0,0].set_xlabel("Real log-return")
+    ax[0,0].set_ylabel("Predicted log-return")
+    ax[0,0].axhline(0, color='gray', linestyle='--')
+    ax[0,0].axvline(0, color='gray', linestyle='--')
+    ax[0,0].grid(alpha=0.3)
+
+    # -----------------------------
+    # 2. Histograma del error
+    # -----------------------------
+    sns.histplot(errors, bins=50, kde=True, ax=ax[0,1])
+    ax[0,1].set_title("Distribución del Error (pred - real)")
+    ax[0,1].set_xlabel("Error")
+    ax[0,1].grid(alpha=0.3)
+
+    # -----------------------------
+    # 3. KDE conjunta
+    # -----------------------------
+    sns.kdeplot(x=y_true, y=y_pred, fill=True, cmap="viridis", thresh=0.05, ax=ax[1,0])
+    ax[1,0].set_title("Densidad conjunta Pred vs Real")
+    ax[1,0].set_xlabel("Real log-return")
+    ax[1,0].set_ylabel("Predicted log-return")
+    ax[1,0].grid(alpha=0.3)
+
+    # -----------------------------
+    # 4. Residuals vs Fitted
+    # -----------------------------
+    sns.scatterplot(x=fitted, y=errors, s=10, alpha=0.4, ax=ax[1,1])
+    ax[1,1].axhline(0, color='gray', linestyle='--')
+    ax[1,1].set_title("Residuals vs Fitted")
+    ax[1,1].set_xlabel("Predicted log-return")
+    ax[1,1].set_ylabel("Residuals")
+    ax[1,1].grid(alpha=0.3)
+
+    # -----------------------------
+    # Leyenda común
+    # -----------------------------
+    # fig.text(0.92, 0.5, legend_text, fontsize=12, va='center')
+
+    plt.tight_layout(rect=[0, 0, 0.9, 1])
+
+    # Guardar
+    if save:
+        fig.savefig(save_path, dpi=300)
+        print(f"💾 Figura guardada en: {save_path}")
+
+    # Mostrar
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+        
+    return {
+        "regression": {
+            "mae": float(mae),
+            "rmse": float(rmse),
+            "r2": float(r2),
+            "corr": float(corr),
+            "medae": float(medae),
+            "mape": float(mape),
+            "errors": errors.tolist(),
+            "fitted": fitted.tolist()
+        }
+    }
+
+def compute_test_losses(res, df_losses, sc_l3, test_size=180):
+    """
+    Calcula test losses fold-by-fold para L1, L2 y L3 (HuberLoss),
+    usando el MISMO scaler que en entrenamiento.
+    """
+
+    df = res.copy()
+    df = df.dropna(subset=["prob_move", "prob_hold"], how="any")
+
+    lista_no_na = df.fold.unique()
+    n_folds = len(df) // test_size
+
+    losses_L1 = []
+    losses_L2 = []
+    losses_L3 = []
+
+    huber = nn.HuberLoss(delta=1.0)
+
+    for i in range(n_folds):
+        start = i * test_size
+        end = start + test_size
+        fold_df = df.iloc[start:end]
+
+        # -------------------------
+        # L1: MOVE vs HOLD
+        # -------------------------
+        y_true_L1 = (fold_df["actual"] != 0).astype(int)
+        y_prob_L1 = fold_df["prob_move"]
+        loss_L1 = log_loss(y_true_L1, y_prob_L1)
+        losses_L1.append(loss_L1)
+
+        # -------------------------
+        # L2: BUY vs SELL
+        # -------------------------
+        if "prob_buy" in fold_df.columns:
+            df_L2 = fold_df[fold_df["actual"] != 0]
+            if len(df_L2) > 0:
+                y_true_L2 = (df_L2["actual"] == 2).astype(int)
+                y_prob_L2 = df_L2["prob_buy"]
+                loss_L2 = log_loss(y_true_L2, y_prob_L2)
+            else:
+                loss_L2 = np.nan
+            losses_L2.append(loss_L2)
+
+        # -------------------------
+        # L3: REGRESIÓN (HuberLoss con scaler)
+        # -------------------------
+        if "pred_logret" in fold_df.columns:
+
+            df_L3 = fold_df.dropna(subset=["pred_logret", "real_logret"])
+
+            if len(df_L3) > 0:
+                real_scaled = sc_l3.transform(df_L3["real_logret"].values.reshape(-1,1)).flatten()
+                pred_scaled = sc_l3.transform(df_L3["pred_logret"].values.reshape(-1,1)).flatten()
+
+                real_t = torch.tensor(real_scaled, dtype=torch.float32)
+                pred_t = torch.tensor(pred_scaled, dtype=torch.float32)
+
+                loss_L3 = huber(pred_t, real_t).item()
+            else:
+                loss_L3 = np.nan
+
+            losses_L3.append(loss_L3)
+
+    # -------------------------
+    # Construir df final
+    # -------------------------
+    df_test = df_losses.groupby("fold").last().reset_index()
+    df_test = df_test[df_test.fold.isin(lista_no_na)]
+
+    df_test["loss_l1_move_test"] = losses_L1
+
+    if len(losses_L2) > 0:
+        df_test["loss_l2_dir_test"] = losses_L2
+
+    if len(losses_L3) > 0:
+        df_test["loss_l3_reg_test"] = losses_L3
+
+    return df_test
+
+def plot_losses_by_fold(
+    df_losses,
+    df_test_losses=None,
+    show=True,
+    save=False,
+    save_path="losses_by_fold.png"
+):
+    """
+    Dibuja automáticamente los losses disponibles:
+    - L1 clasificación (move)
+    - L2 clasificación (dir)
+    - L3 regresión (reg)
+    Y añade un cuarto panel con la diferencia test - train por fold.
+    """
+
+    # Detectar qué losses existen
+    available_losses = []
+    if "loss_l1_move" in df_losses.columns:
+        available_losses.append(("L1 Movement", "loss_l1_move", "loss_l1_move_test"))
+    if "loss_l2_dir" in df_losses.columns:
+        available_losses.append(("L2 Direction", "loss_l2_dir", "loss_l2_dir_test"))
+    if "loss_l3_reg" in df_losses.columns:
+        available_losses.append(("L3 Regression", "loss_l3_reg", "loss_l3_reg_test"))
+
+    n = len(available_losses)
+
+    # Layout: siempre 2x2 si hay más de 2 losses
+    if n <= 2:
+        fig, ax = plt.subplots(1, n, figsize=(14, 5))
+        if n == 1:
+            ax = [ax]
+    else:
+        fig, ax = plt.subplots(2, 2, figsize=(14, 10))
+        ax = ax.flatten()
+
+    # Dibujar cada loss
+    for i, (title, train_col, test_col) in enumerate(available_losses):
+
+        df_train = df_losses.groupby("fold")[train_col].last().reset_index()
+
+        if df_test_losses is not None and test_col in df_test_losses.columns:
+            df_test = df_test_losses[["fold", test_col]]
+        else:
+            df_test = None
+
+        ax[i].plot(df_train["fold"], df_train[train_col],
+                   label=f"Train {title}", marker="o", alpha=0.8)
+
+        if df_test is not None:
+            ax[i].plot(df_test["fold"], df_test[test_col],
+                       label=f"Test {title}", marker="o", alpha=0.8)
+
+        ax[i].set_title(f"{title} Loss por Fold")
+        ax[i].set_xlabel("Fold")
+        ax[i].set_ylabel("Loss")
+        ax[i].grid(True)
+        ax[i].legend()
+
+    # -----------------------------------------
+    # PANEL EXTRA: diferencias test - train
+    # -----------------------------------------
+    if n >= 2:  # solo si hay más de un loss
+        idx = 3 if n == 3 else n  # último panel disponible
+
+        ax_extra = ax[idx] if n > 2 else None
+        if ax_extra is None:
+            fig_extra, ax_extra = plt.subplots(1, 1, figsize=(7, 5))
+
+        for title, train_col, test_col in available_losses:
+            if df_test_losses is not None and test_col in df_test_losses.columns:
+                df_train = df_losses.groupby("fold")[train_col].last().reset_index()
+                df_test = df_test_losses[["fold", test_col]]
+
+                merged = df_train.merge(df_test, on="fold", how="inner")
+                merged["diff"] = merged[test_col] - merged[train_col]
+
+                ax_extra.plot(
+                    merged["fold"], merged["diff"],
+                    marker="o", alpha=0.8, label=f"{title} (Test - Train)"
+                )
+
+        ax_extra.axhline(0, color="gray", linestyle="--", alpha=0.6)
+        ax_extra.set_title("Diferencia Test - Train por Fold")
+        ax_extra.set_xlabel("Fold")
+        ax_extra.set_ylabel("Test - Train")
+        ax_extra.grid(True)
+        ax_extra.legend()
+
+    plt.tight_layout()
+
+    if save:
+        fig.savefig(save_path, dpi=300)
+        print(f"💾 Figura guardada en: {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+def build_loss_report(df_losses, df_test):
+    report = {}
+
+    for name, train_col, test_col in [
+        ("L1", "loss_l1_move", "loss_l1_move_test"),
+        ("L2", "loss_l2_dir", "loss_l2_dir_test"),
+        ("L3", "loss_l3_reg", "loss_l3_reg_test")
+    ]:
+        if train_col not in df_losses.columns:
+            continue
+
+        # Train por fold
+        train = df_losses.groupby("fold")[train_col].last().reset_index()
+
+        # Test por fold
+        if test_col in df_test.columns:
+            test = df_test[["fold", test_col]]
+            merged = train.merge(test, on="fold", how="inner")
+            gap = merged[test_col] - merged[train_col]
+        else:
+            merged = train.copy()
+            merged[test_col] = None
+            gap = None
+
+        report[name] = {
+            "train": merged[train_col].tolist(),
+            "test": merged[test_col].tolist(),
+            "gap": gap.tolist() if gap is not None else None,
+            "summary": {
+                "train_mean": float(merged[train_col].mean()),
+                "train_std": float(merged[train_col].std()),
+                "test_mean": float(merged[test_col].mean()) if test_col in df_test.columns else None,
+                "test_std": float(merged[test_col].std()) if test_col in df_test.columns else None,
+                "gap_mean": float(gap.mean()) if gap is not None else None
+            }
+        }
+
+    return {"losses": report}
