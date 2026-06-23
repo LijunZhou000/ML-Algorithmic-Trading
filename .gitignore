@@ -462,3 +462,5 @@ docker-compose.local.yml
 !DespliegueDocker/grafana/provisioning/
 !DespliegueDocker/alertmanager/
 !DespliegueDocker/tradingbot/Dockerfile
+
+TradingBots/Scripts/prueba

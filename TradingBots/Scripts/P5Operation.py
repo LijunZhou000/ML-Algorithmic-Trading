@@ -12,15 +12,16 @@ import torch
 import torch.nn as nn
 import joblib
 from ib_async import *
-from load import import_dataset, clean, load_trading_model, wavelet_denoising, resample_ohlcv, daily_ohlcv_cummulative, load_trading_model_2level
-from features import generate_features
+from tradepy.supervised.posttrain import load_trading_model_3level
+from tradepy.data.resampler import resample_ohlcv, daily_ohlcv_cummulative
+from tradepy.features.generate import generate_features
 import os
 from ib_async import BracketOrder, MarketOrder
 import numpy as np
-from models_def import GoldLSTM_L1_Move, GoldLSTM_L2_Dir, GoldGRU_L1_Move, GoldGRU_L2_Dir
+from tradepy.supervised.models import BasicLSTM_L1_Move, BasicLSTM_L2_Dir, BasicGRU_L1_Move, BasicGRU_L2_Dir, BasicLSTM_L3_Regression, BasicGRU_L3_Regression
 from dataclasses import dataclass
 from tradepy.logging.logger import log_movement, log_balance
-
+from tradepy.paths import MODELS_DIR
 
 # ==================== LOGGING (preparado para Grafana + Alertmanager) ====================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -1052,21 +1053,29 @@ async def main():
         symbol = "ibex"
     else:
         symbol = SYMBOL.lower()
-    model_l1_lstm, model_l2_lstm, sc_lstm, features_lstm = load_trading_model_2level(
-        GoldLSTM_L1_Move, GoldLSTM_L2_Dir,
-        path=f"../Models/{symbol}1/trading_model_lstm_2level",
-        device='cuda' if torch.cuda.is_available() else 'cpu'
+    (
+        model_l1, model_l2, model_l3,
+        sc_features, sc_l3,
+        features, params, thresholds, df_results
+    ) = load_trading_model_3level(
+        BasicLSTM_L1_Move, BasicLSTM_L2_Dir, BasicLSTM_L3_Regression,
+        path=f"{MODELS_DIR}/{symbol}/trading_model_lstm_3level",
+        device="cuda"
     )
-    model_l1_gru, model_l2_gru, sc_gru, features_gru = load_trading_model_2level(
-        GoldGRU_L1_Move, GoldGRU_L2_Dir,
-        path=f"../Models/{symbol}1/trading_model_gru_2level",
-        device='cuda' if torch.cuda.is_available() else 'cpu'
+    (
+        model_l1_g, model_l2_g, model_l3_g,
+        sc_features_g, sc_l3_g,
+        features_g, params_g, thresholds_g, df_results_g
+    ) = load_trading_model_3level(
+        BasicGRU_L1_Move, BasicGRU_L2_Dir, BasicGRU_L3_Regression,
+        path=f"{MODELS_DIR}/{symbol}/trading_model_gru_3level",
+        device="cuda"
     )
     models_bundle = {
-        "lstm": {"model_l1": model_l1_lstm, "model_l2": model_l2_lstm,
-                 "scaler": sc_lstm, "features": features_lstm},
-        "gru":  {"model_l1": model_l1_gru,  "model_l2": model_l2_gru,
-                 "scaler": sc_gru,  "features": features_gru},
+        "lstm": {"model_l1": model_l1, "model_l2": model_l2, "model_l3": model_l3,
+                 "scaler": sc_features, "features": features, "scaler_l3": sc_l3, "thresholds": thresholds},
+        "gru":  {"model_l1": model_l1_g,  "model_l2": model_l2_g, "model_l3": model_l3_g,
+                 "scaler": sc_features_g,  "features": features_g, "scaler_l3": sc_l3_g, "thresholds": thresholds_g},
     }
     logger.info(f"✅ Modelo PyTorch + Scaler cargados → {MODEL_PATH}")
  
@@ -1216,9 +1225,9 @@ async def main():
                     df_features, models_bundle,
                     minutes=60,
                     json_config_path=CONFIG_PATH,
-                    return_horizon_min=120,
+                    return_horizon_min=240,
                     spec={'tick_size': TICK_SIZE_GC},
-                    lookback=48,
+                    lookback=30,
                     threshold_move=0.70 if SYMBOL in ('IBEX', 'IBEX35', 'IB') else 0.80,
                     device='cuda' if torch.cuda.is_available() else 'cpu'
                 )
