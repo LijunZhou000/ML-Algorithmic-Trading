@@ -87,7 +87,6 @@ modelos o pipelines de datos sin alterar la arquitectura existente.
         .3 posttrain.py.
         .3 evaluate.py.
         .3 backtest.py.
-    .2 unsupervised.
     .2 portfolio.
         .3 optimizer.py.
         .3 backtest.py.
@@ -102,54 +101,111 @@ modelos o pipelines de datos sin alterar la arquitectura existente.
         .3 killswitch.py.
     .2 logging.
         .3 logeer.py.
-    .2 retrain.
 }
 
-\review{Revisar}
+El orden mostrado en la estructura anterior refleja la secuencia lógica en la que se invocan los distintos módulos del sistema. Cada directorio agrupa
+funcionalidades relacionadas y el flujo de ejecución avanza de forma coherente desde la carga y preparación de los datos, pasando por la generación de
+características y el entrenamiento de los modelos supervisados, hasta la optimización de cartera, la gestión del riesgo y la ejecución en tiempo real.
+Esta organización modular permite mantener un código limpio, fácilmente extensible y con responsabilidades claramente separadas.
 
-El orden mostrado en la imagen superior representa el orden lógico en el que se va llamando a los diferentes trozos de código.
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[scale=0.45]{./img/ml_process.pdf}
+%     \caption{Añadir img con el diagrama de cómo funciona todo}
+%     \label{fig_mlp_7}
+% \end{figure}
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con el diagrama de cómo funciona todo}
-    \label{fig_mlp_7}
-\end{figure}
+Algunas funciones presentes en los distintos directorios del paquete son reutilizables en varias etapas del proceso, especialmente aquellas
+relacionadas con la obtención y carga de datos desde los archivos originales.
 
-Hay funciones que están en algunos de los directorios que pueden servir para varias entapas del proceso, principalmente aquellas encargadas de
-obtener los datos desde los archivos.
+El código completo puede consultarse en el repositorio referenciado en el Anexo~\ref{anexoC}.
 
-El código se puede resivar en el enlace referenciado en el Anexo~\ref{anexoC}
-
-A continuación paso a explicar cada una de las fases del flujo de los datos y las funciones utilizadas en ellas.
+A continuación se describen las distintas fases del flujo de datos y las funciones principales utilizadas en cada una de ellas.
 
 \subsection{Obtención de datos de los futuros}
 
-Se me han facilitado los datos históricos OHLCV de distintos futuros con los que voy a operar. Pero existen diferentes datos que no se me han
-proporcionado, por ejemplo el mercado donde se operar cada futuro o la moneda con la que operan, estos dos datos son necesarios para posteriormente
-poder obtener el resto de información. Una vez obtenido estos dos datos nos podemos conectar mediante a API de Interactive Brokers al sistema y
-mediante una petición obtener el resto de información. La información se divide entre la información estática y la variable.
+Se proporcionan los datos históricos OHLCV de distintos futuros con los que va a trabajar. Sin embargo, existen diferentes datos que no se han
+proporcionado, destacando el mercado donde cotiza cada futuro y la divisa con la que se negocia, estos dos datos son necesarios para posteriormente
+poder obtener el resto de información necesaria. Una vez identificados el mercado y la moneda de cada futuro, es posible conectarse a la API de
+Interactive Brokers y realizar peticiones para obtener información adicional. Esta información puede clasificarse en dos grandes grupos:
+\textbf{información estática} e \textbf{información dinámica}.
 
-Dentro de la información estática o casi estática ya que no suele cambiar está, además de lo mencionado anteriormente se encuentra el identificador de
-cada futuro, el apalancamiento implícito, el tamaño mínimo de movimiento y el valor de este movimiento.
+Dentro de la información estática o casi estática ya que no rara vez cambia, además de lo mencionado anteriormente se encuentra el identificador único
+de cada futuro, el multiplicador del futuro (apalancamiento implícito), el tamaño mínimo de movimiento (\textit{tick size}) y el valor monetario
+asociado a este movimiento (\textit{tick value}).
 
-La información dinámica, cambia cada día o semana, estos datos son las horas de apertura aunque siguen una regla general pero cada bolsa tiene sus
-festivos dependiendo del país donde estén, esta información nos puede servir para saber si podemos operar o no con cierto futuro. También hay
-información de las horas más líquidas aunque en nuestro caso usaremos estadísticas derivadas de los datos para decir qué horas son más líquidas para
-disminuir el slippage, es la diferencia de precio entre el precio esperado al enviar una orden y el precio real al que se ejecuta la orden. Y por
-último también tenemos dos datos muy importantes, que son los márgenes, el inicial y el de mantenimiento. El margen inicial es la cantidad mínima de
-dinero necesaria para abrir una posición y el de mantenimiento es el que pide el broker para que pueda mantener la posición abierta, este márgen es
-mayor en el trading interdía para poder resistir los posibles saltos de precio al abrir el mercado, llamado Price Gap u Opening Gap.
+Por otro lado, la información dinámica cambia cada día o semana. Entre estos datos se encuentran los horarios de negociación, que dependen tanto de la
+bolsa como de los festivos del país correspondiente. Esta información permite determinar si un contrato puede operarse en un momento dado.
+
+También se dispone de información sobre las horas de mayor liquidez, aunque en este proyecto se emplearán estadísticas derivadas de los propios datos para identificar los
+periodos más líquidos y así reducir el \textit{slippage}, entendido como la diferencia entre el precio esperado al enviar una orden y el precio real
+al que se ejecuta.
+
+Finalmente, dentro de la información dinámica destacan dos parámetros fundamentales: el \textit{margen inicial} y el
+\textit{margen de mantenimiento}. El margen inicial es la cantidad mínima necesaria para abrir una posición, mientras que el margen de mantenimiento
+es el capital requerido para mantenerla abierta. En operativa interdía, este margen suele ser mayor para proteger al broker frente a posibles saltos
+bruscos de precio al inicio de la sesión, conocidos como \textit{Price Gap} u \textit{Opening Gap}.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+\vspace{0pt}
+\begin{minted}[fontsize=\small]{json}
+{
+  "AD": {
+    "name": "Australian Dollar",
+    "symbol": "AD",
+    "ib_symbol": "AUD",
+    "exchange": "CME",
+    "currency": "USD",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "fallback_margin": 3000
+  }
+}
+\end{minted}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\vspace{0pt}
+\begin{minted}[fontsize=\small]{json}
+{
+  "AD": {
+    "name": "Australian dollar",
+    "ib_symbol": "AUD",
+    "conId": 854527687,
+    "exchange": "CME",
+    "multiplier": 100000.0,
+    "tick_size": 5e-05,
+    "tick_value": 5.0,
+    "currency": "USD",
+    "trading_hours": "20260620:CLOSED; ...",
+    "liquid_hours": "20260620:CLOSED; ...",
+    "approx_total_fee_per_side": 2.5,
+    "min_slippage_ticks": 1,
+    "max_spread_ticks": 3,
+    "min_profit_ticks": 3.0,
+    "initial_margin": 3000,
+    "maint_margin": 2700.0,
+    "fetched_at": "2026-06-20T14:42:04.151746+00:00"
+  }
+}
+\end{minted}
+\end{minipage}
+\caption{Información estática y dinámica del contrato de futuros AD obtenida mediante la API de Interactive Brokers.}
+\end{figure}
 
 \subsection{Carga y limpieza}
 
-Se me han facilitado los datos históricos OHLCV de distintos futuros con los que voy a operar.
+Se han facilitado los datos históricos OHLCV de distintos futuros con los que van a trabajar.
 
 {
 \setlength{\LTleft}{-20cm plus 1fill}
 \setlength{\LTright}{-20cm plus 1fill}
 \begin{longtable}{l l l l r r r r r r}
 \caption{Ejemplo de registro histórico OHLCV de un contrato de futuros} \\
+\label{tab:ohlcv_ejemplo} \\
 \toprule
 \textbf{Ticker} & \textbf{Per} & \textbf{Fecha} & \textbf{Hora} &
 \textbf{Open} & \textbf{High} & \textbf{Low} & \textbf{Close} &
@@ -176,30 +232,35 @@ AD & I & 20010502 & 060100 & 0.52000 & 0.52000 & 0.52000 & 0.52000 & 2 & 0 \\
 \end{longtable}
 }
 
-Como se puede ver en la tabla de ejemplo la información facilitada incluye datos sobre el activo representado, la fecha y la hora de registro, los
-datos OHLCV y el interés inicial de cada día, este último dato no será utilizado para simplificar la complejidad y porque al ser un valor no relativo
-o porcentual no es tán recomendado para los modelos de aprendizaje profundo, además de que el interés puede cambiar a lo largo del día.
+Como se puede observar en la Tabla~\ref{tab:ohlcv_ejemplo} la información facilitada incluye datos sobre el activo representado, la fecha y la hora de
+registro, los datos OHLCV y el interés inicial de cada día, este último dato no será utilizado para simplificar la complejidad y porque al ser un
+valor no relativo o porcentual no es tán recomendado para los modelos de aprendizaje profundo, además de que el interés puede cambiar a lo largo del
+día.
 
-En un primer análisis me doy cuenta de que los datos temporales no están regularizados al formato UTC, por lo que es el primer cambio que realizo.
-Usando de referencia las horas de apertura y cierre de cada futuro, agrupando el volumen por horas para cada activo puedo detectar las horas con poca
-o nula actividad, con ello puedo inferir la zona horaría usada.
+En un primer análisis se observa que las marcas temporales de los datos no están estandarizadas al formato UTC, por lo que este es el primer aspecto
+que debe corregirse. Para identificar la zona horaria original de cada conjunto de datos, se utilizan como referencia los horarios de apertura y
+cierre de cada futuro. Agrupando el volumen por horas y analizando los periodos con actividad reducida o nula, es posible detectar de forma fiable las
+horas en las que el mercado permanece cerrado y, a partir de ello, inferir la zona horaria utilizada en los datos históricos.
 
-La siguiente imágen es un ejemplo de cómo lo he hecho, como se puede observar en el volumen del oro, hay una hora de descanso cada día esa es de
-16:00h a 17:00h hora de Chicago, con esto sabemos cómo ajustar a UTC. Este es uno de los pocos procesos que no he conseguido automatizar y he tenido
-que hacer a mano, aún así creo que podría generalizar para cada mercado, CME, etc.
+La Figura~\ref{fig:utc} muestra un ejemplo del procedimiento utilizado para identificar la zona horaria original de los datos. En el caso del
+futuro del oro (GC), puede observarse que existe una pausa diaria en el volumen entre las 23:00 h y las 24:00 h, correspondiente al cierre habitual
+del mercado CME Globex. Esta ventana de inactividad permite inferir que las marcas temporales del dataset están expresadas en horario de Chicago, lo
+que facilita su conversión posterior a UTC.
 
-\notes{Sí se generaliza por mercados -6 y +1}
+Este proceso fue uno de los pocos que no pudo automatizarse completamente, ya que requiere interpretar patrones específicos de cada mercado. No
+obstante, el comportamiento es suficientemente consistente como para generalizarlo: los futuros negociados en el CME utilizan habitualmente la zona
+horaria de Chicago (UTC-6), mientras que los futuros europeos suelen emplear la zona horaria de Europa Central (UTC+1). A partir de esta información
+es posible estandarizar todos los datos al formato UTC de manera fiable.
+% \notes{Sí se generaliza por mercados -6 y +1}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{./img/utc_compare.png}
+    \includegraphics[width=0.75\textwidth]{./img/utc_compare.png}
     \caption{Comparación antes y después de ajustar}
-    \label{fig_mlp_15}
+    \label{fig:utc}
 \end{figure}
 
-\todo{Explicar mejor cómo funciona la función de inferencia, decidir si pasar a UTC o no}
-
-Después de un análisis inicial, decido filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana.
+Después de un análisis inicial, se opta por filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana.
 % Los pedidos realizados en las horas de descanso las mantengo por que pueden haber sido retrasos en la ejecución por lo que son operaciones reales
 % no realizadas en el momento debido.
 Los datos en horas de descanso si representan actividad real aunque sea mínima, pueden ser órdenes que llegan tarde, que se cruzan en el libro de
@@ -754,6 +815,11 @@ actividad
     \label{fig_mlp_19}
 \end{figure}
 
+Valor nocional por futuro y de la cartera al completi, porcentaje máximo de riesgo por operación, hay un cambio muy grande que se explica al final
+
+Gestión de cartera más estricto porque es la intención desde el inicio, por futuros individuales menos restricciones para ver en general qué tal va la
+cosa
+
 \subsection{Gestión de cartera}
 
 Una vez entrenados los modelos para cada futuro es necesario coordinarlos todos para que no hayan problemas de liquidez. Para ello en un primer
@@ -900,7 +966,7 @@ configura en un json.
 
 En otro json se guardan todas las operaciones que se realizan
 
-\begin{minted}{json}
+\begin{minted}[fontsize=\small]{json}
     {
         "id": 1248,
         "symbol": "GC",

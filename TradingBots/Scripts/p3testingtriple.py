@@ -24,7 +24,7 @@ cfg = load_config()
 MINUTES             = cfg['sampling_minutes']        # 240
 RETURN_HORIZON_MIN  = cfg['return_horizon_min']      # 2880
 
-for ASSET in symbols[:2]:
+for ASSET in symbols:
     print(f"Procesando {ASSET}...")
     df_final, spec = prepare_all(ASSET, MINUTES, RETURN_HORIZON_MIN, json_config_path="../Data/features_config.json")
     exclude = load_exclude_config(MINUTES)
