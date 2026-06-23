@@ -6,75 +6,67 @@
 
 \section{Pipeline}
 
-El desarrollo del sistema se divide en diferentes fases dentro de la ETL (Extract Transform Load), destacando la carga de datos históricos, su limpieza y filtrado,
-su transformación en las diferentes características para alimentar a los modelos de aprendizaje automático, el análisis para comprobar que el
-entrenamiento ha sido exitoso, usando diferentes métricas y datos históricos no vistos por el modelo, y la operación, donde se obtienen datos en vivo.
+El desarrollo del sistema se estructura en varias fases dentro del proceso ETL (Extract, Transform, Load). En primer lugar, se realiza la carga de los
+datos históricos de los distintos contratos de futuros que se van a operar. A continuación, estos datos se someten a un proceso de limpieza y filtrado
+para eliminar valores erróneos, inconsistencias y posibles fuentes de ruido. Posteriormente, se lleva a cabo la transformación de los datos en un
+conjunto de características que servirán como entrada para los modelos de aprendizaje automático. Una vez entrenados los modelos, se evalúa su
+rendimiento mediante diferentes métricas y utilizando datos históricos no vistos para comprobar su capacidad de generalización. Finalmente, el sistema
+entra en fase operativa, donde procesa datos en tiempo real y genera señales de trading de manera autónoma.
 
-Este flujo de trabajo se organiza siguiendo la arquitectura medallón, donde los datos pasan por tres capas:
+El flujo de trabajo se organiza siguiendo la arquitectura medallón, donde los datos atraviesan por tres capas diferenciadas:
 
 \begin{description}
     \item[\textbf{Bronce}]:  \hfill \\
-    Contiene los datos históricos y en vivo en su forma cruda.
+    Contiene los datos históricos y en vivo en su forma cruda, tal y como se obtienen de las fuentes originales.
     \item[\textbf{Plata}]:  \hfill \\
-    Se limpian los datos, se validan y se normalizan.
+    En esta capa los datos se limpian, se validan, se filtran y se normalizan, garantizando su coherencia y calidad antes de ser utilizados.
     \item[\textbf{Oro}]:  \hfill \\
-    Se transforman en features y targets listos para el entrenamiento y la inferencia.
+    Los datos se transforman en \textit{features} y \textit{targets} listos para el entrenamiento de los modelos supervisados y para la inferencia en
+    tiempo real.
 \end{description}
 
 A continuación muestro un mapa conceptual de las diferentes etapas y los hitos más importantes que se van a desarrollar en este trabajo.
 
 \begin{enumerate}
-    \item Cargar los datos minuto a minuto de uno de los futuros
-    \item Estandarizar el tiempo que aparece en las muestras a UTC
-    % \item[$\blacksquare$] Se estandariza el tiempo que aparece en las muestras a UTC
-    \item Eliminar los datos que son claramente erróneos (fines de semana)
-    % \item[$\blacksquare$] Se recortan los dataset para tener los mismos periodos para todos los futuros
-    \item Añadir el día de negociación al que pertenece cada dato
-    \item Visualizar los datos originales limpios 
-    % \item[$\blacksquare$] Visualizar los datos originales limpios 
-    \item Obtener la información actualizada de los diferentes futuros
-    \item Muestreo de los datos en periodos de 4 horas
-    % \item Muestreo de los datos en diferentes periodos
-    \item Cálculo de los datos acumulados a partir de los datos originales
-    \item Cálculo de las características que se usarán para entrenar los modelos de aprendizaje automático
-    \item Analizar las nuevas características para revisar si la información tiene sentido y si se han filtrado datos futuros por usar mal las
-    fórmulas
-    \item Decidir algunas de las características que no se usarán manualmente por criterios como la no estacionalidad
-    \item Calcular las variables objetivo que los modelos supervisados tratarán de predecir
-    \item Filtrar más características usando modelos supervisados tradicionales que permitan mayor explicabilidad
-    \item Calcular los parámetros que se utilizaran para definir el entrenamiento de los modelos
-    \item Entrenar los modelos por separado
-    % \item[$\blacksquare$] Durante cada época del entrenamiento se usan los modelos no supervisado para detectar el régimen de mercado actual y usar esta información
-    % como características adicionales para el modelo
-    \item Búsqueda de los umbrales de confianza más adecuados para cada modelo y etapa y evaluación de los resultados de la predicción usando métricas
-    estandar de clasificación y regresión y métricas dedicadas de finanzas
-    \item Guardar los mejores modelos y todo lo necesario para su uso, scaler, lista de features definitiva, configuración
-    \item Optimizar la operación de la cartera de futuros
-    % \item Usar optimización para poder operar todos los futuros a la vez con una cartera, evitando gastar más de lo que tenemos
-    \item Comprobar que este modo es mejor que dejar todo en un solo futuro 
-    \item Definir los límites extremos de seguridad para la operación
-    \item Ejecutar el sistema
-    \item Monitorizar y guardar la información
-    \item Analizar el rendimiento del sistema para poder añadir mejoras
-    \item Dockerizar todo el sistema
-    \item Añadir sistema de visualización de la información
-    \item Añadir sistema de alertas
+    \item \textbf{Carga y estandarización de datos}: descarga de datos minuto a minuto y unificación temporal a UTC.
+    \item \textbf{Limpieza y validación}: eliminación de datos erróneos, filtrado de fines de semana y verificación de coherencia.
+    \item \textbf{Enriquecimiento temporal}: asignación del día de negociación y resampleo a intervalos de 4 horas.
+    \item \textbf{Cálculo de variables derivadas}: generación de datos acumulados y transformaciones básicas.
+    \item \textbf{Ingeniería de características}: construcción de \textit{features} avanzadas y análisis para evitar \textit{data leakage}.
+    \item \textbf{Selección de características}: filtrado manual y mediante modelos tradicionales con mayor explicabilidad.
+    \item \textbf{Definición y cálculo de los \textit{targets}}: construcción de las variables objetivo para los modelos supervisados.
+    \item \textbf{Entrenamiento y evaluación}: ajuste de hiperparámetros, búsqueda de umbrales óptimos y evaluación con métricas de clasificación, regresión y métricas financieras.
+    \item \textbf{Preparación para despliegue}: guardado de modelos, \textit{scalers}, configuración y lista final de \textit{features}.
+    \item \textbf{Obtención de información actualizada de los futuros}: recopilación de márgenes iniciales y de mantenimiento, multiplicadores, 
+    \textit{tick size}, \textit{tick value}, horarios de negociación, spread estimado y slippage medio.
+    \item \textbf{Backtesting y simulación}: ejecución de backtests sobre datos históricos y simulaciones Monte Carlo para evaluar robustez y 
+    sensibilidad a escenarios adversos.
+    \item \textbf{Operativa y monitorización}: ejecución del sistema, optimización de la cartera, control de riesgos, monitorización continua y análisis de rendimiento.
+    \item \textbf{KPI}: dockerización del sistema, integración con Prometheus, Loki y SQL para métricas y logs, visualización mediante grafana
+    \item \textbf{Alertas}: Vigilancia de las métricas y logs que al superar umbrales definidos envian alertas a Slack a través de Alertmanager
 \end{enumerate}
 
-El sistema operará en interdía porque ofrece diferentes ventajas para sistemas de aprendizaje automático, hay menos ruido, lo que facilita el
-aprendizaje y disminuye el overfitting, los modelos no sufren por la alta no estacionalidad y los cambios de volatilidad que hay en los datos
-intradía. A nivel operativo, el trading interdía requiere menor monitorización de la situación ya que se realizan menos operaciones, se mantiene las
-posiciones durante varios días o incluso semanas, los costes son menores, los swings son estructuras claras y consistentes que se usan solo en
-interdía.
+El sistema operará en interdía ya que este marco temporal ofrece diferentes ventajas para sistemas de aprendizaje automático. En primer lugar, los
+datos presentan menor ruido microestructural, lo que facilita el aprendizaje de patrones relevantes y disminuye el riesgo de \textit{overfitting}.
+Además, los modelos no sufren por la alta no estacionalidad y los cambios de volatilidad que existen en los datos intradía. A nivel operativo, el
+trading interdía requiere menor monitorización continua de la situación, dado que se ejecutan menos operaciones y se mantiene las posiciones durante
+varios días o incluso semanas. Por otro lado, las estructuras de precio basadas en swings son más claras y consistentes en marcos interdía, lo que las
+hace especialmente adecuadas para la extracción de características y el análisis estructural del mercado.
 
 \section{Desarrollo del autómata}
 
 Unos de los objetivos principales del proyecto es garantizar que el sistema sea modular, reutilizable y fácilmente extensible, independientemente del
 activo financiero con el que se trabaje.
 
+Para ello, se ha diseñado una arquitectura que separa claramente las responsabilidades y permite incorporar nuevos componentes sin modificar el núcleo
+del sistema.
 
-Para lograr este objetivo he decidido implementar la lógica del código dentro de un paquete instalable de python usando
-\mintinline{bash}{pip install -e} y he decidido usar la siguiente estructura organizativa.
+Con este propósito, la lógica del código se ha implementado dentro de un paquete instalable de Python, utilizando la instalación en modo editable
+mediante \mintinline{bash}{pip install -e}. Esta decisión facilita el desarrollo iterativo, permite mantener una estructura coherente del proyecto y
+asegura que cualquier módulo pueda importarse desde otros scripts o notebooks sin necesidad de duplicar código.
+
+La organización del paquete sigue una estructura modular que agrupa las funcionalidades por dominios lógicos, permitiendo añadir nuevos activos,
+modelos o pipelines de datos sin alterar la arquitectura existente.
 
 \dirtree{%
     .1 /.
@@ -113,6 +105,8 @@ Para lograr este objetivo he decidido implementar la lógica del código dentro 
     .2 retrain.
 }
 
+\review{Revisar}
+
 El orden mostrado en la imagen superior representa el orden lógico en el que se va llamando a los diferentes trozos de código.
 
 \begin{figure}[h]
@@ -124,6 +118,8 @@ El orden mostrado en la imagen superior representa el orden lógico en el que se
 
 Hay funciones que están en algunos de los directorios que pueden servir para varias entapas del proceso, principalmente aquellas encargadas de
 obtener los datos desde los archivos.
+
+El código se puede resivar en el enlace referenciado en el Anexo~\ref{anexoC}
 
 A continuación paso a explicar cada una de las fases del flujo de los datos y las funciones utilizadas en ellas.
 
@@ -330,6 +326,11 @@ la capa de regresión, como se explicará más adelante en la próxima sección.
 retorno del 0.2\% que del 2\%. Se usa el retorno logarítmico porque ofrece aditividad temporal, simetría y normalidad aproximada y permite
 comparaciones entre activos con volatilidades distintas.
 
+\notes{definir el reto: lista de todos los targets posibles además de long short nada, otros de clasificación, regresión, etc y lo que conlleva cada
+uno}
+
+\notes{Definir los swings, y las estructuras que más se usan}
+
 \subsection{Aprendizaje supervisado}
 
 Llegados al núcleo del proyecto, el siguiente paso consiste en definir las arquitecturas de los modelos de aprendizaje supervisado que se van a
@@ -493,59 +494,79 @@ primero.
 \subsection{Análisis de resultados de entrenamiento}
 
 \begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
     \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/classification_report_LSTM.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_17}
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_LSTM.png}
+    
+    (a) Classification report
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_LSTM.png}
+    
+    (b) ROC y reliability curve
+\end{minipage}
+
+\vspace{0.3cm}
+
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_LSTM.png}
+    
+    (c) MAE y regresión
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_LSTM.png}
+    
+    (d) Loss
+\end{minipage}
+
+\caption{Resultados obtenidos por el modelo LSTM.}
+\label{fig:lstm_results}
+
 \end{figure}
 
 \begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/classification_report_GRU.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_23}
-\end{figure}
+\centering
 
-\begin{figure}[H]
+\begin{minipage}{0.48\textwidth}
     \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/auc_roc_reliability_LSTM.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_26}
-\end{figure}
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_GRU.png}
+    
+    (a) Classification report
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_GRU.png}
+    
+    (b) ROC y reliability curve
+\end{minipage}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/auc_roc_reliability_GRU.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_27}
-\end{figure}
+\vspace{0.3cm}
 
-\begin{figure}[H]
+\begin{minipage}{0.48\textwidth}
     \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/regression_LSTM.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_28}
-\end{figure}
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_GRU.png}
+    
+    (c) MAE y regresión
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_GRU.png}
+    
+    (d) Loss
+\end{minipage}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/regression_LSTM.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_29}
-\end{figure}
+\caption{Resultados obtenidos por el modelo GRU.}
+\label{fig:gru_results}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/loss_LSTM.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_30}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{../../TradingBots/Models/ad/loss_GRU.png}
-    \caption{Añadir img con classification report, curva AUC ROC, MAE, reliability curve, loss curve}
-    \label{fig_mlp_31}
 \end{figure}
 
 \todo{Añadir curva auc roc para las dos capas de clasificación}

@@ -6,64 +6,71 @@
 
 \section{Tendencias en el trading algorítmico}
 
-El trading algorítmico ha evolucionado en las últimas décadas, pasando de estratégias basadas exclusivamente en indicadores técnicos a sistemas que
-integran técnicas de aprendizaje automático y modelos de aprendizaje profundo. El estado del arte actual combina ingeniería de datos, ingeniería de
-características, modelado predictivo, análisis cuantitativo y técnicas de optimización, con el objetivo de capturar patrones complejos en series
-temporales financieras altamente ruidosas y no estacionarias.
+El trading algorítmico ha experimentado una evolución significativa en las últimas décadas, pasando de estratégias basadas exclusivamente en
+indicadores técnicos a sistemas que integran técnicas avanzadas de aprendizaje automático y modelos de aprendizaje profundo. El estado del arte actual
+combina ingeniería de datos, ingeniería de características, modelado predictivo, análisis cuantitativo y técnicas de optimización, con el objetivo de
+capturar patrones complejos en series temporales financieras altamente ruidosas y no estacionarias.
+
+\section{Modelos para series temporales: RNN, LSTM y GRU}
 
 Las Redes Neuronales Recurrentes (RNN) clasicas \cite{elman1990rnn} fueron diseñadas para modelar dependencias temporales, pero presentan el problema
-del desvanecimiento del gradiente. Para resolver este problema se propusieron dos arquitecturas mejoradas LSTM (Long Short-Term Memory)
-\cite{hochreiter1997lstm} y GRU (Gated Recurrent Unit) \cite{cho2014gru}. 
+del desvanecimiento del gradiente. Durante la retropropagación, los gradientes se atenúan al multiplicarse repetidamente por derivadas de funciones de
+activación como \textit{sigmoid} o \textit{tanh}, lo que provoca que las capas iniciales reciban gradientes casi nulos y solo se aprendan dependencias
+de corto plazo.
 
-El gradiente desvaneciente (vanishing gradient) es un problema que aparece al entrenar redes profundas o redes recurrentes.
-Durante la retropropagación, los gradientes se multiplican repetidamente por derivadas de funciones de activación como sigmoid o tanh, que son menores
-que 1. Provocando $\frac{\partial L}{\partial W}\approx0$ cuando la red tiene muchas capas o muchos pasos temporales, como resultado las capas
-iniciales reciben gradientes casi nulo por lo tanto no aprenden, la red solo aprende dependencias cortas.
+Para resolver esta limitación se propusieron dos arquitecturas mejoradas: LSTM (Long Short-Term Memory) \cite{hochreiter1997lstm} y GRU (Gated
+Recurrent Unit) \cite{cho2014gru}. Ambas introducen mecanismos de compuertas que regulan el flujo de información y permiten capturar dependencias de
+largo plazo de manera estable.
 
 \subsection{LSTM}
 
-Las LSTM introducen una memoria interna (cell state) y tres compuertas que regulan el flujo de información, permitiendo capturar dependencias de largo
-plazo.
+Las LSTM introducen una memoria interna (\textit{cell state}) y tres compuertas (entrada, olvido y salida) que controlan qué información se mantiene y
+cuál se descarta, permitiendo modelar dinámicas temporales complejas.
 
 \begin{figure}[H]
     \centering
     \input{figures/lstm.tex}
     \caption{Arquitectura LSTM, \cite{nntikz}}
-    \label{fig_mlp_9}
+    \label{fig_lstm}
 \end{figure}
 
 \subsection{GRU}
 
-Las GRU simplifican esta estructura mediante dos compuertas, reduciendo el número de parámetros y acelerando el entrenamiento, manteniendo un
-rendimiento comparable.
+Las GRU simplifican esta estructura mediante dos compuertas (actualización y reinicio), reduciendo el número de parámetros y acelerando el
+entrenamiento, manteniendo un rendimiento comparable al de las LSTM.
 
 \begin{figure}[H]
     \centering
     \input{figures/gru.tex}
-    \caption{Aarquitectura GRU, \cite{nntikz}}
-    \label{fig_mlp_10}
+    \caption{Arquitectura GRU, \cite{nntikz}}
+    \label{fig_gru}
 \end{figure}
 
-Ambas arquitecturas han demostrado ser especialmente útiles en series temporales financieras debido a su capacidad para
-modelar dinámicas no lineales y dependencias temporales complejas.
+Ambas arquitecturas han demostrado ser especialmente útiles en series temporales financieras debido a su capacidad para modelar dinámicas no lineales
+y dependencias temporales complejas y patrones ruidosos característicos de los mercados.
 
-Los modelos de aprendizaje profundo tienen como ventaja poder captar la no linealidad y dependencias temporales aunque por desgracia son cajas negras
-para la hora de interpretar la razón de la salida.
+A pesar de su capacidad para capturar relaciones no lineales y dependencias temporales complejas, los modelos de aprendizaje profundo presentan un
+problema fundamental: su falta de interpretabilidad. Estas arquitecturas actúan como cajas negras, ya que no ofrecen una explicación clara de los
+factores que conducen a una predicción concreta. Esta opacidad dificulta comprender qué patrones del mercado está utilizando el modelo.
 
-\section{Tendencias en el trading algorítmico v2}
+\section{Tendencias recientes en el trading cuantitativo}
 
-Las tendencias recientes en el trading cuantitativo incluyen el uso de modelos basados en Transformers para series temporales, técnicas de
-meta-learning, modelos híbridos que combinan indicadores tradicionales con aprendizaje profundo, y métodos de detección de regímenes de mercado
-mediante clustering no supervisado. Asimismo, los estudios de ablation se han convertido en una herramienta fundamental para evaluar la contribución
-real de cada componente del sistema y evitar sobreajuste.
+Las tendencias recientes en el trading cuantitativo incluyen
 
-\todo{Revisar}
+\begin{itemize}
+    \item \textbf{Modelos basados en Transformers} para series temporales, capaces de capturar dependencias largas mediante mecanismos de atención.
+    \item \textbf{Meta-learning} y técnicas de adaptación rápida a nuevos activos o regímenes de mercado.
+    \item \textbf{Modelos híbridos} que combinan indicadores tradicionales con aprendizaje profundo.
+    \item \textbf{Detección de regímenes de mercado} mediante clustering no supervisado para contextualizar las señales de trading.
+    \item \textbf{Estudios de ablation} para evaluar la contribución real de cada componente del sistema y evitar sobreajuste.
+\end{itemize}
 
-\notes{indicadores vs ml clasfico vs ml profundo vs ia}
+\section{Comparativa entre indicadores tradicionales, ML clásico, ML profundo y IA agéntica}
 
-\notes{definir el reto: lista de todos los targets posibles además de long short nada, otros de clasificación, regresión, etc y lo que conlleva cada
-uno}
+Los enfoques utilizados en trading cuantitativo han evolucionado de manera significativa en las últimas décadas. Tradicionalmente, las estrategias se basaban en indicadores técnicos, como medias móviles, RSI, MACD o ATR, que transforman el precio en señales determinísticas. Aunque estos indicadores son sencillos de interpretar y computacionalmente eficientes, presentan limitaciones importantes: dependen de parámetros fijos, no capturan relaciones no lineales y suelen fallar en entornos de mercado cambiantes o altamente volátiles.
 
-\notes{Definir los swings, y las estructuras que más se usan}
+El siguiente paso en esta evolución fue la incorporación de modelos de aprendizaje automático clásico, como árboles de decisión, Random Forest, SVM o regresiones penalizadas. Estos modelos permiten aprender relaciones más complejas entre múltiples variables y generalizan mejor que los indicadores tradicionales. Sin embargo, siguen teniendo dificultades para capturar dependencias temporales profundas y requieren un diseño manual de características (feature engineering) para representar adecuadamente la dinámica del mercado.
 
-\todo{Si da tiempo, busca sobre ablation study}
+Con el auge del cómputo acelerado y la disponibilidad de grandes volúmenes de datos, surgieron los modelos de aprendizaje profundo, especialmente arquitecturas como LSTM, GRU, CNN 1D y, más recientemente, Transformers. Estos modelos son capaces de aprender patrones no lineales, dependencias de largo plazo y estructuras temporales complejas directamente a partir de los datos, reduciendo la necesidad de ingeniería manual. Su principal desventaja es la falta de interpretabilidad, ya que funcionan como cajas negras, y su tendencia al sobreajuste si no se aplican técnicas adecuadas de regularización y validación temporal.
+
+Finalmente, en los últimos años ha emergido el concepto de IA agentica aplicada al trading, donde agentes autónomos combinan modelos predictivos, razonamiento secuencial y toma de decisiones basada en objetivos. Aunque este enfoque es prometedor, su uso en entornos financieros reales es todavía limitado debido a la complejidad de su validación, la dificultad para garantizar estabilidad y la necesidad de mecanismos robustos de control del riesgo.

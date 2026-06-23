@@ -6,53 +6,70 @@
 
 \section{Introducción}
 
-% Trabajo con 13 futuros [AD (Dólar Australiano), BP (Libra Esterlina), CL (Petróleo Crudo WTI), EC (Euro FX), ES (E-mini S&P 500), GC (Oro), MFXI (Micro Euro FX), NG (Gas Natural), NQ (E-mini Nasdaq 100), YM (E-mini Dow Jones), ZB (Bono del Tesoro 30Y), ZN (Nota del Tesoro 10Y), ZS (Soja)]
-El trading financiero tradicional presenta una limitación importante, la dependencia de los sentimientos y el estado emocional de cada persona. Además
-del criterio subjetivo de cada quien. Factores como el miedo o la euforia pueden conducir a decisiones inconsistentes y alejadas de una gestión óptima
-del riesgo. Para mitigar este problema surgió el trading algorítmico donde las decisiones se toman en base a reglas matemáticas predefinidas.
+El trading financiero tradicional presenta una limitación fundamental, una fuerte dependencia de los criterios subjetivos, los sesgos cognitivos y el
+estado emocional de cada inversor. Factores como el miedo o la euforia pueden conducir a decisiones inconsistentes y alejadas de una gestión óptima
+del riesgo. Para mitigar este problema surgió el \textit{trading algorítmico}, un enfoque donde las decisiones se toman en base a reglas matemáticas
+predefinidas, eliminando en gran medida la intervención humana durante la operativa.
 
-El siguiente paso dentro del trading algorítmico es el uso de modelos de aprendizaje automático (ML) que se entrenar usando diferentes características
-derivadas de la información obtenida de los diferentes activos financieros a operar. Los modelos permiten aprender patrones complejos a partir de
-datos históricos, capturar no linealidad y adaptarse a diferentes régimenes de mercado. El presente trabajo se centra en esta línea, el diseño y
-desarrollo de un sistema de trading basado en ML capaz de operar de forma autónoma sobre diferentes futuros financieros.
+La evolución natural del \textit{trading algorítmico} ha sido la incorporación de modelos de aprendizaje automático (ML) que se entrenar usando un
+conjunto de características generadas a partir de datos históricos de los diferentes activos financieros a operar. Estos modelos permiten aprender
+patrones complejos a partir de datos históricos, capturar relaciones no lineales y adaptarse a diferentes régimenes de mercado. El presente trabajo se
+centra en esta línea, el diseño y desarrollo de un sistema de trading basado en ML capaz de operar de forma autónoma sobre un conjunto diverso de
+futuros financieros.
 
-Para empezar este trabajo tomé como referencia el libro Trading Algorítmico con Python de Isaac Trullàs \cite{Trullas2024} y el libro Safety in the
-Market de David E. Bowden\cite{bowden1997safety}. Del primer libro obtuve los conocimiento básicos sobre los diferentes pasos a seguir, desde la carga
-y limpieza de los datos, pasando por el cálculo de las características para alimentar a los modelos hasta los test finales y el cálculo de métricas
-para comprobar que la estratégia desarrollada es consistente, robusta y capaz de generar beneficios de forma sostenida. El segundo libro me ha servido
-de base para aprender diferentes conceptos básicos sobre trading.
+Para la elaboración de este trabajo se toman como referencia dos obras. Por un lado, \textit{Trading Algorítmico con Python} de Isaac Trullàs
+\cite{Trullas2024}, que proporciona una guía sobre el flujo de trabajo completo para el desarrollo de una estratégia algorítmica, desde la carga y
+limpieza de los datos, pasando por el cálculo y validación de las características que alimentarán a los modelos hasta la evaluación final mediante el
+cálculo de métricas para comprobar que la estratégia desarrollada es consistente, robusta y capaz de generar beneficios de forma sostenida. Por otro
+lado, \textit{Safety in the Market} de David E. Bowden\cite{bowden1997safety}, que introduce conceptos fundamentales de análisis de mercado y del
+trading.
 
 En los mercados financieros existen diferentes tipos de activos, cada uno con sus características, con diferentes niveles de riesgo y con
-comportimientos distintos frente a las condiciones económicas. Entre los más comunes están las acciones, que representan participaciones dentro de una
-empresa; los bonos, son deuda emitida por gobiernos o corporaciones; materias primas, como el oro, petróleo o productos agrícolas; y las divisas, que
-se basa en el cambio entre modenas. Por otra parte existen derivados financieros, cuyo valor depende de un activo subyacente. Dentro de esta categoría
-se encuentran los futuros, son contratos estandarizados que permiten tomar posiciones largas o cortas sobre índices bursátiles, divisas, materias
-primas o renta fija. Ir a posiciones largas significa comprar barato y esperar a que el precio suba para vender, por su parte las posiciones cortas
-son lo opuesto, vender caro esperando comprar barato. La ventaja de ir a largo reside en que en caso de que el precio caiga solo puede caer hasta 0
-pero ir la corto puede significar que el precio puede aumentar sin un techo.
+comportimientos distintos frente a las condiciones económicas. Entre los más comunes se encuentran las acciones, que representan participaciones
+dentro de una empresa; los bonos, que constituyen instrumento de deuda emitidos por gobiernos o corporaciones; las materias primas, como el oro,
+petróleo o productos agrícolas; y las divisas, cuyo valor se basa en el tipo de cambio que existe entre modenas. Por otra parte existen derivados
+financieros, cuyo valor depende de un activo subyacente. Dentro de esta categoría se encuentran los futuros, contratos estandarizados que permiten
+tomar posiciones largas o cortas sobre índices bursátiles, divisas, materias primas o renta fija. Una posición larga significa comprar barato
+esperando que el precio aumente para vender, mientras que una posición corta consiste en vender anticipadamente esperando que el precio disminuya para
+recomprar más barato. Existe una asimetría en el riesgo asociado a cada tipo de posición, la ventaja de las posiciones a largo reside en que en caso
+de que el precio disminuya, solo puede caer hasta 0 mientras que en las posiciones cortas el precio puede aumentar sin un techo, haciendo
+especialmente relevante la gestión de riesgo.
 
-En estes trabajo se ha elegido la operación sobre futuros en vez de sobre otros activos por diversas razones.
+En estes trabajo se ha optado la operación sobre futuros en vez de sobre otros activos por diversas razones.
+
+% \begin{itemize}
+%     \item Las negociaciones se realizan en mercados regulados y centralizados (CME, MEFF, entre otros), garantizando transparencia y control,
+%     disminuyendo los riesgos de manipulación.
+%     \item Ofrecen alta liquidez, facilitando la ejecución eficiente de órdenes.
+%     \item Existe una estandarización de la información de los contratos, todos comparten especificaciones fijas, tamaño, tick, vencimiento, márgenes,
+%     simplificando la obtención, comparación y el tratamiento de los datos.
+%     \item El uso de márgenes permite operar usando apalancamiento permitiendo una ganancia potencial mayor, aunque tambien aumenta el riesgo, por ello
+%     es importante la gestión del mismo como se verá más adelante en el desarrollo. De este modo se pueden controlar posiciones más grandes con un
+%     capital limitado.
+%     \item Posibilidad de realizar rollover, evitando la entrega física del activo y permitiendo mantener la operativa de forma continua.
+% \end{itemize}
 
 \begin{itemize}
-    \item Las negociaciones se realizan en mercados regulados y centralizados (CME, MEFF, etc), garantizando transparencia y control disminuyendo los
-    riesgos.
-    \item Ofrecen gran liquidez.
-    \item Existe una estandarización de la información de los contratos, todos comparten especificaciones fijas, tamaño, tick, vencimiento, márgenes,
-simplificando la obtención, comparación y el tratamiento de los datos.
-    \item El uso de márgenes permite operar usando apalancamiento permitiendo una ganancia potencial mayor, aunque tambien aumenta el riesgo, por ello
-    es importante la gestión del mismo como se verá más adelante en el desarrollo. De este modo se pueden controlar posiciones más grandes con un
-    capital limitado.
-    \item No es necesario el cobro en la matería, si está apunto caducar un contrato es posible hacer rollover y pasar a un contrato posterior.
+    \item \textbf{Mercados regulados y centralizados}: Las negociaciones se realizan en mercados regulados y centralizados (CME, MEFF, entre otros),
+    garantizando transparencia y control, disminuyendo los riesgos de manipulación.    
+    \item \textbf{Alta liquidez}: Ofrecen una elevada liquidez, facilitando la ejecución eficiente de órdenes incluso en estrategias algorítmicas.
+    \item \textbf{Estandarización de los contratos}: Todos los contratos comparten especificaciones fijas —tamaño, tick, vencimiento, márgenes— lo que
+    simplifica la obtención, comparación y tratamiento de los datos.
+    \item \textbf{Uso de márgenes y apalancamiento}: El uso de márgenes permite operar con apalancamiento, aumentando el potencial de beneficio aunque
+    también el riesgo. Por ello, la gestión del riesgo es fundamental, como se detallará más adelante. Este mecanismo permite controlar posiciones
+    mayores con un capital limitado.
+    \item \textbf{Rollover}: Existe la posibilidad de realizar \textit{rollover}, evitando la entrega física del activo y permitiendo mantener la
+    operativa de forma continua.
 \end{itemize}
 
 \section{Objetivos}
 
-El objetivo de este presente trabajo es lograr desarrollar un sistema que opere de manera autónoma una cartera con un valor de un millón de dolares
-para obtener el mayor beneficio posible asumiendo el mínimo riesgo. Como se puede observar en la tabla situada en la siguiente página, el sistema
-operará sobre 13 futuros distintos que incluyen divisas, materias primas, índices bursátiles y bonos del Tesoro estadounidense, proporcionando así una
-exposición diversificada a diferentes clases de activos y comportamientos de mercado.
+El objetivo principal de este presente trabajo es desarrollar un sistema capaz de operar de manera autónoma una cartera con un valor de un millón de
+dolares, maximizando el beneficio mientras asume el menor riesgo posible. Como se puede observar en la Tabla~\ref{tab:futuros_caracteristicas}, el
+sistema operará sobre 13 futuros distintos que pertenecen a distintas categorías, divisas, materias primas, índices bursátiles y bonos del Tesoro
+estadounidense, proporcionando así una exposición diversificada a diferentes clases de activos y dinámicas de mercado.
 
-A continuación se describen los futuros sobre los que se va a operar.
+A continuación se describen los futuros sobre los que se llevará a cabo la operativa.
 
 \begin{description}
 
@@ -99,6 +116,7 @@ A continuación se describen los futuros sobre los que se va a operar.
 
 \begin{longtable}{l l c r r r r}
 \caption{Características principales de los contratos de futuros analizados} \\
+\label{tab:futuros_caracteristicas} \\
 \toprule
 \textbf{Símbolo} & \textbf{Nombre} &
 \textbf{Mult.} & \textbf{Tick Size} & \textbf{Tick Value} &
@@ -136,23 +154,19 @@ ZN   & 10Y US Treasury Note     & 1000   & 0.015625 & \$15.625  & \$2156.85  \\
 ZS   & Soybean Futures          & 5000   & 0.0025   & \$12.5    & \$4077.58  \\
 \end{longtable}
 
-Para lograr este objetivo he decidido desarrollar una arquitectura basada en modelos de aprendizaje automático que ayudan a decidir las acciones a
-realizar, la idea inicial es emplear tanto modelos de aprendizaje supervisado como no supervisado, el uso de cada uno de ellos se detallará en los
-siguientes capítulos correspondientes. Como resumen de la arquitectura se usarán modelos de aprendizaje profundo como modelos de aprendizaje
-supervisado y modelos tradicionales para aprendizaje no supervisado.
+Para alcanzar este objetivo se ha diseñado una arquitectura basada en modelos de aprendizaje automático que asisten en la toma de deciciones
+operativas. La propuesta inicial contempla el uso combinado de modelos de aprendizaje supervisado y no supervisado, cuyos papeles se detallará en los
+siguientes capítulos. En términos generales, los modelos de aprendizaje profundo se emplearán como modelos supervisados para la generación de señales
+de trading, mientras que los modelos no supervisados se utilizarán para identificar regímenes de mercado y agrupar comportamientos similares mediante
+técnicas de clustering.
 
-Como resumen del trabajo, la arquitectura propuesta se diseñó con el objetivo de usar los modelos supervisados para generar señales de trading
-mientras que los no supervisados aportan información adicional sobre régimenes de mercado y clusters de comportamiento.
+La arquitectura propuesta se concibe, por tanto, como un sistema híbrido: los modelos supervisados proporcionan señales direccionales, y los modelos
+no supervisados aportan información contextual que puede mejorar la robustez y la interpretación del entorno de mercado.
 
-Aunque esta sea la intención, la implementación final puede diferir debido a limitaciones encontradas durante el desarrolo, cuyas explicaciones serán
-dadas en los capítulos correspondientes. En cualquier caso la arquitectura mantiene la capacidad de integrar modelos no supervisados a futuro.
+No obstante, aunque esta sea la intención inicial, la implementación final puede diferir debido a limitaciones encontradas durante el desarrolo, cuyas
+motivaciones serán explicadas en los capítulos correspondientes. En cualquier caso, la arquitectura mantiene la capacidad de integrar modelos no
+supervisados en futuras ampliaciones.
 
-El objetivo último de este trabajo es poder poner el uso la mayor cantidad de conocimiento obtenido de estos años de estudio en un solo trabajo,
-incluyendo principalmente programación en Python, despliegue del trabajo en Docker, entrenamiento de modelos de Machine Learning, optimización, etc
-
-\notes{Añadir más cosas}
-
-\notes{Explicar CME y otros mercados, horarios}
-
-% Hay parte del conocimiento que no he podido incluir por falta de tiempo, todo lo relacionado a teoría de la información, entropía de Shannon,
-% información mutua, etc.
+Finalmente, el objetivo último de este trabajo es poder poner el uso la mayor cantidad de conocimiento obtenido de estos años de estudio en un solo
+trabajo, incluyendo principalmente programación en Python, despliegue del trabajo en Docker, entrenamiento de modelos de Machine Learning,
+optimización y diseño de pipelines de datos.
