@@ -4,8 +4,29 @@
 
 \section*{Summary}
 
-XXXXXXXX
+The work presents the design, implementation, and evaluation of an algorithmic trading system based on Machine Learning techniques for the
+identification and optimization of LONG/SHORT movements applied to financial futures. The main objective is to autonomously operate a diversified
+portfolio (target value of USD 1 million) across 13 futures contracts (currencies, indices, commodities, and bonds), maximizing profit while
+controlling risk. The proposed architecture is hybrid: it combines supervised models (LSTM and GRU) to generate directional signals and a regression
+layer to estimate returns.
+
+The data flow follows an ETL pipeline organized in Bronze-Silver-Gold layers: ingestion of OHLCV data at one-minute frequency, cleaning and temporal
+standardization to UTC, resampling to 4-hour candles, and computation of an extensive set of features (momentum, volatility, volume, structural
+indicators, and features derived from swing charts). Feature selection (correlation, LASSO) is applied to reduce dimensionality and prevent data
+leakage. The target label is constructed using the triple barrier method (Stop Loss, Take Profit, time expiry) and is complemented by regression of
+logarithmic returns.
+
+Models are trained with PyTorch using a walk-forward (moving window) strategy to respect temporal structure and avoid leakage. The solution comprises
+three levels: L1 (detection of significant movement), L2 (BUY/SELL direction), and L3 (return regression); the final decision is obtained by
+soft-voting weighted by the estimated return. RobustScaler and regularization techniques (dropout) are employed to ensure robustness against outliers
+and regime changes.
+
+Backtesting is performed on 4-hour data and includes prediction selection phases and operational simulation with different modalities (long/short,
+scale-in, dynamic sizing). Evaluated metrics include Sharpe, Max Drawdown, Calmar, and CAGR; Monte Carlo simulations are also used to analyze
+robustness and sensitivity. For deployment the system is containerized (Docker) and integrates monitoring with Prometheus/Loki, visualization in
+Grafana, and alerts via Slack. The work includes ethical and economic analysis, training and backtest results, and proposes future lines such as
+unsupervised learning, MLOps orchestration, and optimization with Pyomo.
 
 \section*{Keywords}
 
-XXXXXXXX
+Algorithmic trading, Swing Charts, Machine Learning, LSTM, GRU, Triple barrier, Walk-forward, Feature engineering, Backtesting, Monte Carlo, RobustScaler, Dockerization, Grafana, Risk management, Feature selection (LASSO)

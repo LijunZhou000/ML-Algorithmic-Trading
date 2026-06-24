@@ -6,25 +6,75 @@
 
 \section{Introducción}
 
-Desde el punto de vista económico el sistema tiene influencia en la reducción de costes necesarios para operar una cartera de activos, permitiendo a
-profesionales autónomos o quienes lo toman como un hobby. En el ámbito ético y social, . Y por último, con respecto al impacto ambiental, este sistema
-no tiene casi impacto al poder ejecutarse en local en hardware particular no profesional.
+Este capítulo presenta una reflexión integrada sobre los aspectos éticos, económicos, sociales y ambientales asociados al desarrollo de un sistema de
+\textit{trading} algorítmico basado en técnicas de \textit{Machine Learning}. El análisis considera tanto los beneficios potenciales como los riesgos
+derivados de su uso.
 
-\section{Descripción de impactos relevantes relacionados con el proyecto}
+Asimismo, se examinan las implicaciones económicas del proyecto, su accesibilidad, su posible contribución a la eficiencia operativa y los riesgos
+asociados a la automatización financiera. También se abordan cuestiones éticas y sociales relacionadas con la transparencia, la equidad y la
+responsabilidad, así como el impacto ambiental derivado del uso de recursos computacionales.
 
-\begin{description}
-    \item[Impacto económico]  \hfill \\
-        1
-    \item[Impacto ético y social]  \hfill \\
-        2
-    \item[Impacto ambiental]  \hfill \\
-        3
-\end{description}
+\section{Impactos relevantes relacionados con el proyecto}
 
-\section{Análisis detallado de alguno de los principales impactos}
+\subsection{Impacto económico}
 
-El impacto mayoritario de este proyecto se centra en el tema económico
+El sistema desarrollado tiene un impacto económico directo en la reducción de costes operativos asociados al análisis, ejecución y supervisión de
+estrategias de \textit{trading}. La automatización permite disminuir el tiempo dedicado a tareas repetitivas, reducir errores humanos, operar
+múltiples activos de forma simultánea y optimizar la asignación de capital mediante modelos cuantitativos.
+
+Además, al poder ejecutarse en hardware convencional y sin necesidad de infraestructuras de alto coste, el sistema resulta accesible para
+profesionales independientes o usuarios que operan por cuenta propia. No obstante, también existen riesgos económicos derivados de la automatización,
+como la posibilidad de pérdidas rápidas si el sistema se utiliza sin supervisión adecuada o sin mecanismos de control de riesgo.
+
+\subsection{Impacto ético y social}
+
+El uso de algoritmos en mercados financieros plantea cuestiones éticas relacionadas con la transparencia de los modelos, la equidad en el acceso a
+herramientas avanzadas, la responsabilidad ante fallos operativos y la posible contribución a dinámicas de mercado no deseadas.
+
+Desde una perspectiva social, el proyecto puede contribuir positivamente a la democratización del acceso a herramientas cuantitativas,
+tradicionalmente reservadas a instituciones financieras. Sin embargo, esta accesibilidad también implica riesgos: un sistema mal configurado o
+empleado sin conocimientos adecuados puede generar pérdidas significativas o inducir comportamientos de riesgo.
+
+\subsection{Impacto ambiental}
+
+El impacto ambiental del proyecto es reducido. El sistema se ejecuta en local, no requiere centros de datos de gran escala y utiliza modelos de tamaño
+moderado, lo que limita el consumo energético. El entrenamiento de modelos recurrentes tiene un coste computacional bajo en comparación con
+arquitecturas de gran tamaño. Aun así, es importante fomentar prácticas de eficiencia computacional, como la reducción de redundancias en el
+\textit{pipeline} y la actualización periódica de modelos sin necesidad de reentrenamientos completos.
+
+\section{Análisis detallado del impacto económico}
+
+El impacto económico es el más relevante en este proyecto debido a la naturaleza del sistema y su aplicación directa en la gestión de capital.
+
+\subsection{Eficiencia operativa y reducción de costes}
+
+El sistema automatiza tareas que tradicionalmente requieren tiempo y experiencia: análisis de datos históricos, cálculo de indicadores, generación de
+señales, ejecución de órdenes, monitorización del riesgo y evaluación continua del rendimiento. Esta automatización reduce costes operativos y
+permite que un único usuario gestione una cartera diversificada sin necesidad de supervisión constante.
+
+\subsection{Accesibilidad y barreras de entrada}
+
+El proyecto contribuye a reducir barreras de entrada al \textit{trading} cuantitativo, ya que no requiere servidores dedicados, utiliza librerías
+abiertas y puede ejecutarse en hardware doméstico. Esto favorece la inclusión de perfiles no institucionales en el ámbito del \textit{trading}
+algorítmico. Sin embargo, esta accesibilidad también implica riesgos: usuarios sin conocimientos suficientes podrían confiar en exceso en el sistema o
+utilizarlo sin comprender sus limitaciones.
+
+\subsection{Riesgos financieros y responsabilidad}
+
+El uso de modelos predictivos en mercados financieros conlleva riesgos inherentes: los modelos pueden fallar en regímenes de mercado no vistos, la
+volatilidad extrema puede invalidar patrones aprendidos y la automatización puede amplificar errores si no existen mecanismos de control.
+
+El proyecto incorpora medidas de mitigación como límites de exposición, control de \textit{drawdown}, gestión dinámica del tamaño de posición y un
+mecanismo de parada ante eventos anómalos. Aun así, la responsabilidad última recae en el usuario, que debe supervisar el sistema y comprender que
+ningún modelo garantiza beneficios futuros.
 
 \section{Conclusiones}
 
-Como conclusión final
+El desarrollo de un sistema de \textit{trading} algorítmico basado en \textit{Machine Learning} implica una serie de impactos que deben ser
+considerados desde una perspectiva integral. Económicamente, el sistema aporta eficiencia, reducción de costes y accesibilidad, aunque también
+introduce riesgos que requieren una gestión responsable. En el ámbito ético y social, la automatización financiera plantea desafíos relacionados con
+la transparencia, la equidad y la responsabilidad profesional. Finalmente, el impacto ambiental es reducido, especialmente gracias al uso de modelos
+moderados y ejecución local.
+
+En conjunto, el proyecto demuestra que es posible desarrollar herramientas avanzadas de análisis y operativa financiera manteniendo un enfoque
+responsable, consciente de sus implicaciones y alineado con los principios de la ingeniería profesional.

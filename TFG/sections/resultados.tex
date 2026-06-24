@@ -128,7 +128,7 @@ de operaciones.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{./img/Models/cl/conjunto_best.png}
-    \caption{Ejemplo de Monte Carlo para la mejor estratégia}
+    \caption{Ejemplo de Monte Carlo para la mejor estrategia}
     \label{fig:fig_equity_indiv_best}
 \end{figure}
 
@@ -198,9 +198,9 @@ límites realistas de riesgo y valor nocional. Esta diferencia es incluso más m
 en un entorno de elevada volatilidad y con un número reducido de operaciones, lo que amplifica el impacto del apalancamiento y de las restricciones de
 margen.
 
-Si se compara únicamente el PnL final, que es la métrica más directa y comparable, el sistema se situaría aproximadamente entre las primeras posicines
-de un total de 58 participantes. Además, a diferencia de una parte significativa de los competidores, el sistema no habría incurrido en pérdidas, lo
-que refuerza la solidez del enfoque incluso bajo condiciones exigentes.
+Si se compara únicamente el PnL final, que es la métrica más directa y comparable, el sistema se situaría aproximadamente entre las primeras
+posiciones de un total de 58 participantes. Además, a diferencia de una parte significativa de los competidores, el sistema no habría incurrido en
+pérdidas, lo que refuerza la solidez del enfoque incluso bajo condiciones exigentes.
 
 Aun así, es importante remarcar que esta comparación no es perfecta: el trading en vivo introduce factores adicionales como latencia, slippage
 variable, disponibilidad de liquidez y ejecución parcial de órdenes, que no pueden reproducirse completamente en un backtest. No obstante, la
@@ -373,3 +373,11 @@ referencia útil del rendimiento relativo del sistema.
 % Además del backtest, se realiza una simulación de Monte Carlo adicional para evaluar la dispersión de las métricas de la cartera completa. Para ello se agrupan los PnL diarios de todos los activos y se aplica un \textit{overlapping block bootstrap}, remuestreando bloques solapados de la serie diaria de beneficios. Este enfoque permite preservar parte de la estructura temporal y generar múltiples trayectorias alternativas del rendimiento de la cartera.
 
 % El análisis conjunto del backtest y de la simulación de Monte Carlo permite comparar el rendimiento de la cartera diversificada frente a la operativa de un único activo, así como evaluar la estabilidad del sistema bajo diferentes escenarios de mercado.
+
+\section{Operativa en vivo}
+
+Debido al tiempo limitado disponible para la fase de operación real, el sistema únicamente ha podido ejecutarse durante un número reducido de
+sesiones. Aun así, los resultados preliminares han sido positivos: el conjunto de operaciones realizadas generó un beneficio neto aproximado de
+5\,000 USD, lo que confirma que el comportamiento observado en backtesting se traslada de forma coherente al entorno real.
+
+En el Anexo~\ref{anexoD} se puede encontrar una imagen con la lista de operaciones realizadas

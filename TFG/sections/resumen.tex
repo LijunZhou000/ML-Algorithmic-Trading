@@ -3,25 +3,28 @@
 
 \section*{Resumen}
 
-El presente proyecto tiene como objetivo el desarrollo e implementación de un sistema basado en 
-técnicas de Machine Learning orientado al análisis y detección de patrones en “Swing Charts”, una 
-herramienta ampliamente utilizada en el análisis técnico de los mercados financieros. A partir de datos 
-históricos y en tiempo real, el sistema generará representaciones de “Swing Charts” a partir de “Bar 
-Charts” y aplicará algoritmos de aprendizaje supervisado y no supervisado para identificar 
-configuraciones recurrentes, como dobles máximos, dobles mínimos o rupturas de tendencia. 
+El trabajo presenta el diseño, implementación y evaluación de un sistema de trading algorítmico basado en técnicas de Machine Learning para la
+identificación y optimización de movimientos LONG/SHORT aplicados a futuros financieros. El objetivo principal es operar de forma autónoma una
+cartera diversificada (valor objetivo de 1 millón USD) sobre 13 contratos de futuros (divisas, índices, materias primas y bonos), maximizando
+beneficio y controlando riesgo. La arquitectura propuesta es híbrida: combina modelos supervisados (LSTM y GRU) para generar señales direccionales y
+una capa de regresión para estimar retornos.
 
-El desarrollo se llevará a cabo principalmente en Python, utilizando librerías como pandas, scikit-learn y 
-matplotlib, además de entornos de conexión con plataformas de trading como Interactive Brokers API 
-(IBKR). El proyecto busca evaluar la capacidad predictiva de los modelos entrenados y su utilidad en la 
-generación de señales de compra o venta dentro de una estrategia de trading algorítmico. Con ello, se 
-pretende aportar un enfoque innovador que combine la solidez del análisis técnico clásico con la 
-adaptabilidad de las técnicas modernas de inteligencia artificial.
+El flujo de datos sigue un pipeline ETL organizado en capas Bronce-Plata-Oro: ingestión de datos OHLCV minuto a minuto, limpieza y estandarización
+temporal a UTC, resampleo a velas de 4 horas y cálculo de un amplio conjunto de features (momentum, volatilidad, volumen, estructurales y derivados de
+swing charts). Se aplica selección de características (correlación, LASSO) para reducir dimensionalidad y evitar data leakage. La etiqueta objetivo se
+construye con el método de triple barrera (Stop Loss, Take Profit, vencimiento temporal) y se complementa con la regresión del retorno logarítmico.
+
+Los modelos se entrenan con PyTorch usando una estrategia walk-forward (moving window) para respetar la estructura temporal y evitar fugas. La
+solución consta de tres niveles: L1 (detección de movimiento significativo), L2 (dirección BUY/SELL) y L3 (regresión de retorno); la decisión final se
+obtiene por soft-voting ponderado por el retorno estimado. Se emplea RobustScaler y técnicas de regularización (dropout) para garantizar la robustez
+frente a outliers y cambios de régimen.
+
+El backtest se realiza sobre datos de 4 horas y contempla fases de selección de predicciones y simulación operativa con distintas modalidades
+(long/short, scale-in, sizing dinámico). Las métricas evaluadas incluyen Sharpe, Max Drawdown, Calmar y CAGR; además se usan simulaciones Monte Carlo
+para analizar robustez y sensibilidad. Para despliegue se dockeriza el sistema e integra monitorización con Prometheus/Loki, visualización en Grafana
+y alertas vía Slack. El trabajo incluye análisis ético y económico, resultados de entrenamiento y backtests, y propone líneas futuras como aprendizaje
+no supervisado, orquestación MLOps y optimización con Pyomo.
 
 \section*{Palabras clave}
 
-Trading algorítmico, predicción de mercados financieros, automatización, análisis en tiempo 
-real, backtesting. 
-
-
-
-
+Trading algorítmico, Swing Charts, Machine Learning, LSTM, GRU, Triple barrera, Walk-forward, Feature engineering, Backtesting, Monte Carlo, RobustScaler, Dockerización, Grafana, Gestión de riesgo, Selección de características (LASSO)

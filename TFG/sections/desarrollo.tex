@@ -100,7 +100,7 @@ modelos o pipelines de datos sin alterar la arquitectura existente.
         .3 positions.py.
         .3 killswitch.py.
     .2 logging.
-        .3 logeer.py.
+        .3 logger.py.
 }
 
 El orden mostrado en la estructura anterior refleja la secuencia lógica en la que se invocan los distintos módulos del sistema. Cada directorio agrupa
@@ -234,7 +234,7 @@ AD & I & 20010502 & 060100 & 0.52000 & 0.52000 & 0.52000 & 0.52000 & 2 & 0 \\
 
 Como se puede observar en la Tabla~\ref{tab:ohlcv_ejemplo} la información facilitada incluye datos sobre el activo representado, la fecha y la hora de
 registro, los datos OHLCV y el interés inicial de cada día, este último dato no será utilizado para simplificar la complejidad y porque al ser un
-valor no relativo o porcentual no es tán recomendado para los modelos de aprendizaje profundo, además de que el interés puede cambiar a lo largo del
+valor no relativo o porcentual no es tan recomendado para los modelos de aprendizaje profundo, además de que el interés puede cambiar a lo largo del
 día.
 
 En un primer análisis se observa que las marcas temporales de los datos no están estandarizadas al formato UTC, por lo que este es el primer aspecto
@@ -274,7 +274,7 @@ características más avanzadas.
 
 Con el objetivo de mejorar el rendimiento y reducir el tamaño de los archivos, los datos originalmente almacenados en formato CSV se convierten a
 formato Parquet. Además de ofrecer una compresión más eficiente y una lectura significativamente más rápida, Parquet permite organizar los datos en
-particiones independientes. Esto facilita cargar únicamente los segmentos necesarios, por ejemplo, por año o por mees, optimizando tanto el tiempo de
+particiones independientes. Esto facilita cargar únicamente los segmentos necesarios, por ejemplo, por año o por mes, optimizando tanto el tiempo de
 acceso como el uso de memoria durante las fases de entrenamiento y análisis.
 
 % \begin{figure}[H]
@@ -413,7 +413,7 @@ esperado como ponderación. De este modo, si uno de los modelos estima un retorn
 decisión final. El retorno se calcula a un horizonte de 12 velas.
 
 Inicialmente se consideró complementar estos modelos con algoritmos clásicos como XGBoost o Random Forest, capaces de capturar relaciones no
-temporales. Sin embargo, se decidió centrar el estudio en arquitecturas profundas recurrentes, más adecuadas para 
+temporales. Sin embargo, se decidió centrar el estudio en arquitecturas profundas recurrentes, más adecuadas para las secuencias.
 
 \subsubsection{Arquitectura de los modelos}
 
@@ -731,8 +731,8 @@ La técnica utilizada es un \textit{overlapping block bootstrap}. A diferencia d
 block bootstrap remuestrea bloques completos de la serie para preservar parte de la estructura temporal, como autocorrelaciones de corto plazo o
 patrones locales. El uso de solapamiento garantiza que todos los segmentos posibles de la serie original puedan aparecer en las simulaciones, evitando
 limitarse únicamente a bloques fijos y disjuntos. En este caso la idea inicial era la de emplear bloques de 24 velas, lo que equivale aproximadamente
-a una semana de predicciones, pero al contar con solo 5 meses de datos para el backtest y teniendo filtros bastantes restrictivos se optó al final por
-agrupar por días y así pasar en muchso casos de solo tener dos semanas a tener varios días con movimientos, haciendo más efectivo la simulación.
+a una semana de predicciones, pero al contar con solo 5 meses de datos para el backtest y teniendo filtros bastante restrictivos se optó al final por
+agrupar por días y así pasar en muchso casos de solo tener dos semanas a tener varios días con movimientos, haciendo más efectiva la simulación.
 
 \subsection{Gestión de cartera}
 
@@ -945,7 +945,7 @@ diferencias entre entornos locales.
 
 El contenedor ejecuta directamente el módulo principal de operación, encargado de la conexión con la API de Interactive Brokers, la descarga de datos,
 la generación de predicciones y la ejecución de órdenes. Para ello únicamente es necesario incluir en la imagen el archivo \texttt{P5Operation.py} y
-el paquete desarrollado, ya que el entrenamiento de los modelos se realiza desde el entorno local y no forma parte del flujo operativo en tiempo 
+el paquete desarrollado, ya que el entrenamiento de los modelos se realiza desde el entorno local y no forma parte del flujo operativo en tiempo real.
 
 \subsection{Bases de datos}
 
