@@ -488,14 +488,14 @@ Este enfoque es imprescindible porque el \textit{cross-validation} clásico no e
 dividirlos en \textit{folds} sin respetar el orden temporal, permite que el modelo entrene con información futura, introduciendo un
 \textit{data leakage} masivo.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img de walk forward}
-    \label{fig_mlp_16}
-\end{figure}
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[scale=0.45]{./img/ml_process.pdf}
+%     \caption{Añadir img de walk forward}
+%     \label{fig_mlp_16}
+% \end{figure}
 
-\review{No olvidar}
+% \review{No olvidar}
 
 Una vez definidos los hiperparámetros, se generan los datasets correspondientes a cada iteración del walk forward, incorporando el \textit{lookback}
 calculado previamente. Para cada nivel del modelo se separan los datos en entrenamiento y prueba, y se aplica un \textit{scaler} ajustado

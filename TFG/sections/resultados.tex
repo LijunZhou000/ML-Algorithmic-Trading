@@ -4,93 +4,276 @@
 
 \vspace{-1.3cm}
 
-\section{Resultados}
+Antes de detallar los resultados obtenidos, es importante destacar que el rendimiento del sistema ha sido consistentemente positivo en todas las fases
+del estudio. Tanto las métricas de entrenamiento como las simulaciones de backtest y Monte Carlo, tanto a nivel individual como de cartera, muestran
+un comportamiento robusto y coherente, lo que permite analizar cada bloque de resultados con una base sólida.
 
-Como se han mencionado en cápitulos anteriores el resultado de las pruebas ha sido positivo
+\section{Resultados entrenamiento}
 
-En la gráfica siguiente se muestra cómo va evolucionando el capital de la cuenta simulada, se puede observar todas las predicciones que realizan los
-modelos y el sharpe ratio final.
+Los resultados obtenidos durante la fase de entrenamiento son, en términos generales, positivos y coherentes con el comportamiento esperado para
+modelos secuenciales aplicados a series temporales financieras. En primer lugar, en las métricas de clasificación se observa que la clase HOLD es
+sistemáticamente la que alcanza un mayor F1-score, reflejando que el modelo identifica con mayor fiabilidad los periodos sin movimiento significativo.
+No obstante, las clases LONG y SHORT también presentan valores de F1-score superiores a 0.33, lo que indica que, pese al desequilibrio inherente del
+problema, el modelo es capaz de capturar señales direccionales con un rendimiento razonable.
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con equity curve, max drawdown y sharpe ratio}
-    \label{fig_mlp_6}
-\end{figure}
+Además, al comparar ambos modelos, se aprecia que GRU obtiene en general mejores métricas de clasificación que LSTM, especialmente en las clases
+minoritarias, mostrando una mayor capacidad para discriminar entre LONG y SHORT.
 
-Para poner en perspectiva los resultados he decidido compararlos con los obtenidos por los participantes de la competición Robotrader, competición en
-la cuál iba a participar en un inicio pero que por imcopatibilidad con el desarrollo de este proyecto no acabé participando. Como se puede observar la
-curva mejora a muchos de los sistemas presentados.
+El análisis de las matrices de confusión confirma esta tendencia: cuando el modelo se equivoca, la mayoría de los errores corresponden a predicciones
+clasificadas como HOLD, en lugar de confundir LONG con SHORT o viceversa. Este patrón es deseable en un entorno de trading, ya que reduce el riesgo de
+tomar posiciones en la dirección opuesta al movimiento real del mercado.
 
-La competición se realizó durante los meses de marzo a mayo, estos datos nunca se han usado para entrenar los modelos para evitar leakage. No es una
-comparación perfecta ya que no se tienen en cuenta todos los problemas que pueden haber en vivo pero se han intentado simular lo mejor posible.
+En cuanto al rendimiento probabilístico, los valores de AUC-ROC se sitúan consistentemente por encima de 0.5, con la mayoría de los futuros en el
+rango 0.6-0.7. La capa L2 tiende a mostrar un comportamiento ligeramente superior, lo que sugiere que la predicción de dirección (LONG vs SHORT) es
+más estable que la detección de movimiento (MOVE vs HOLD). Las curvas de reliability muestran un patrón similar: la calibración de L2 es más cercana a
+la diagonal ideal, indicando una mejor correspondencia entre probabilidad estimada y frecuencia observada.
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img comparativa del Backtest vs Robotrader}
-    \label{fig_mlp_13}
-\end{figure}
+En la parte de regresión, los errores se concentran mayoritariamente en el intervalo [-0.02, 0.02], lo que implica que las predicciones de magnitud
+del movimiento presentan una desviación reducida respecto al valor real. En este caso, la comparación entre modelos muestra que LSTM y GRU presentan
+un rendimiento muy similar, sin diferencias significativas en la distribución del error ni en la estabilidad de las predicciones.
 
-Además de mostrar los datos teóricos que se hubiesen conseguido también he querido comparar con los datos de la simulación de Monte Carlo.
+Por último, las curvas de loss muestran una evolución estable y comparable entre folds. Aunque existen algunos casos aislados con pérdidas
+significativamente mayores, estos representan una fracción muy pequeña dentro de los más de cien folds totales. Además, en un entorno de trading real,
+estos episodios pueden mitigarse mediante mecanismos de gestión de riesgo, evitando que afecten de forma sustancial al rendimiento global del sistema.
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img comparativa del Monte Carlo vs Robotrader}
-    \label{fig_mlp_14}
-\end{figure}
+A continuación se facilita una comparación entre ambos modelos para un mismo futuro, en el Anexo~\ref{anexoA} se puede encontrar el resto de
+comparaciones para los demás futuros.
 
 \begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{./img/monte_carlo_mal.png}
-    \caption{Añadir img comparativa del Monte Carlo vs Robotrader}
-    \label{fig_mlp_24}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{./img/monte_carlo_bien.png}
-    \caption{Añadir img comparativa del Monte Carlo vs Robotrader}
-    \label{fig_mlp_25}
-\end{figure}
-
-\notes{Añadir grafica de la evolución del equity, comparativa contra Robotrader} 
-
-\notes{Añadir Monte Carlo}
-
-\begin{table}[H]
 \centering
-\makebox[0pt]{%
-\begin{tabular}{|c|c|c|c|c|c|c|}
-\hline
-\multirow{2}{*}{\textbf{Futuro}} &
-\multirow{2}{*}{\textbf{Capital inicial}} &
-\multicolumn{4}{c|}{\textbf{Capital final}} &
-\multirow{2}{*}{\textbf{Ganancias mejor caso}} \\ \cline{3-6}
- & & \textbf{Normal} & \textbf{Scale-in} & \textbf{Sizing} & \textbf{Scale-in + Sizing} & \\ \hline
 
-AD   & 30k  & \multicolumn{4}{c|}{No hay operaciones}                                                        & 0 \\ \hline
-BP   & 30k  & \multicolumn{4}{c|}{Por alguna razón faltan dos features}                                      & 0 \\ \hline
-CL   & 300k & \multicolumn{1}{c|}{305k}  & \multicolumn{1}{c|}{317k}   & \multicolumn{1}{c|}{306k}  & 400k   & \poscolor{100k} \\ \hline
-EC   & 40k  & \multicolumn{4}{c|}{No hay operaciones}                                                        & 0 \\ \hline
-ES   & 350k & \multicolumn{1}{c|}{320k}  & \multicolumn{1}{c|}{280k}   & \multicolumn{1}{c|}{349k}  & 250k   & \negcolor{-1k} \\ \hline
-GC   & 450k & \multicolumn{1}{c|}{450k}  & \multicolumn{1}{c|}{465k}   & \multicolumn{1}{c|}{450k}  & 465k   & \poscolor{15k} \\ \hline
-MFXI & 5k   & \multicolumn{1}{c|}{4.8k}  & \multicolumn{1}{c|}{4.75k}  & \multicolumn{1}{c|}{4.5k}  & 3.75k  & \negcolor{-0.2k} \\ \hline
-NG   & 70k  & \multicolumn{1}{c|}{70k}   & \multicolumn{1}{c|}{69k}    & \multicolumn{1}{c|}{71k}   & 67k    & \poscolor{1k} \\ \hline
-NQ   & 650k & \multicolumn{1}{c|}{630k}  & \multicolumn{1}{c|}{570k}   & \multicolumn{1}{c|}{650k}  & 550k   & 0 \\ \hline
-YM   & 200k & \multicolumn{1}{c|}{198k}  & \multicolumn{1}{c|}{198k}   & \multicolumn{1}{c|}{200k}  & 196k   & 0 \\ \hline
-ZB   & 50k  & \multicolumn{1}{c|}{50k}   & \multicolumn{1}{c|}{49k}    & \multicolumn{1}{c|}{50k}   & 48k    & 0 \\ \hline
-ZN   & 30k  & \multicolumn{1}{c|}{25k}   & \multicolumn{1}{c|}{24k}    & \multicolumn{1}{c|}{22k}   & 0k     & \negcolor{-5k} \\ \hline
-ZS   & 50k  & \multicolumn{1}{c|}{300k}  & \multicolumn{1}{c|}{300k}   & \multicolumn{1}{c|}{80k}   & 300k   & \poscolor{250k} \\ \hline
+% ---------------------- FILA 1: LSTM ----------------------
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_LSTM.png}
+    (a) LSTM - Classification report
+\end{minipage}
+\hfill
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_LSTM.png}
+    (b) LSTM - ROC y reliability
+\end{minipage}
+\hfill
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_LSTM.png}
+    (c) LSTM - MAE y regresión
+\end{minipage}
+\hfill
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_LSTM.png}
+    (d) LSTM - Loss
+\end{minipage}
 
-\end{tabular}
+\vspace{0.4cm}
 
-}
-\caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-01-20 hasta 2026-06-01}
-\end{table}
+% ---------------------- FILA 2: GRU ----------------------
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_GRU.png}
+    (e) GRU - Classification report
+\end{minipage}
+\hfill
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_GRU.png}
+    (f) GRU - ROC y reliability
+\end{minipage}
+\hfill
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_GRU.png}
+    (g) GRU - MAE y regresión
+\end{minipage}
+\hfill
+\begin{minipage}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_GRU.png}
+    (h) GRU - Loss
+\end{minipage}
 
-Como capital inicial he usado 10 veces el margin inicial mínimo para abrir una posición
+\caption{Comparativa de resultados obtenidos por los modelos LSTM (fila superior) y GRU (fila inferior).}
+\label{fig:lstm_gru_results}
+\end{figure}
+
+
+\section{Resultados backtest y Monte Carlo individual}
+
+Para el periodo comprendido entre finales de enero de 2026 y principios de junio de 2026, se evaluaron los trece futuros seleccionados mediante
+backtesting individual y simulaciones Monte Carlo. Durante este proceso, uno de los activos presentó problemas en la generación de features, por lo
+que no pudo ser incluido en el análisis, y otros dos no generaron señales operativas en este intervalo temporal. En consecuencia, los resultados se centran en los diez futuros que sí realizaron operaciones durante el periodo de prueba.
+
+La primera Figura~\ref{fig:fig_equity_indiv} muestra, para un tipo concreto de predicción (por ejemplo, long strong), el comportamiento de las cuatro
+variantes operativas.
+
+Estas curvas permiten comparar cómo cada estrategia de ejecución afecta a la evolución del equity, al max drawdown y al Sharpe ratio. En el ejemplo
+mostrado, correspondiente al futuro CL, la combinación scale-in + sizing es la que obtiene el mejor rendimiento relativo frente a las otras tres
+variantes, mostrando una curva de capital más estable y un perfil riesgo-beneficio más favorable.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{./img/Models/cl/equity_df_long_strong.png}
+    \caption{Ejemplo de curva de capital operando únicamente posiciones LONG con un umbral de entrada exigente}
+    \label{fig:fig_equity_indiv}
+\end{figure}
+
+La segunda Figura~\ref{fig:fig_equity_indiv_best} recoge los resultados del Monte Carlo individual, donde se representa la curva de capital real junto
+con los intervalos P25-P75 y P5-P95, así como la distribución del PnL acumulado final y del porcentaje de max drawdown. Esta simulación permite
+evaluar la robustez del sistema frente a permutaciones aleatorias de las operaciones. En el caso mostrado, la curva real se sitúa en la parte superior
+de las distribuciones, lo que indica que el rendimiento observado no es un resultado extremo ni dependiente de una secuencia particularmente favorable
+de operaciones.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{./img/Models/cl/conjunto_best.png}
+    \caption{Ejemplo de Monte Carlo para la mejor estratégia}
+    \label{fig:fig_equity_indiv_best}
+\end{figure}
+
+El resto de resultados se encuentra en el Anexo\ref{anexoB}
+
+\section{Resultados backtest y Monte Carlo de cartera en su conjunto}
+
+Los resultados muestran una diferencia muy significativa entre operar la cartera sin restricciones y aplicar límites realistas de riesgo y valor
+nocional. En el escenario sin restricciones, la curva de capital alcanza aproximadamente 660\,000 USD de beneficio acumulado durante el periodo
+analizado. Sin embargo, al introducir límites de exposición, márgenes y valor nocional máximo por activo, el beneficio final se reduce a alrededor de
+460\,000 USD.
+
+Esta diferencia se explica principalmente porque, al limitar el valor nocional y la exposición máxima, varios futuros dejan de poder operarse en
+determinados momentos, ya sea por superar los márgenes requeridos o por exceder el porcentaje máximo de capital permitido. En consecuencia, la cartera
+ejecuta menos operaciones y reduce su apalancamiento efectivo, lo que disminuye el beneficio potencial pero también controla mejor el riesgo.
+
+En cuanto al perfil de riesgo, la versión con restricciones presenta un máximo drawdown cercano al 12\%, un valor razonable para una cartera
+diversificada de futuros. El Sharpe ratio, aunque positivo, se sitúa por debajo de 2, reflejando un equilibrio más conservador entre rentabilidad y
+volatilidad una vez aplicados los límites operativos.
+
+En conjunto, estos resultados muestran que la cartera completa mantiene un comportamiento robusto incluso bajo condiciones realistas de operativa
+profesional. Aunque la rentabilidad disminuye al aplicar límites de riesgo, la estabilidad del sistema mejora y el perfil riesgo-beneficio se vuelve
+más adecuado para una implementación real.
+
+\begin{figure}[H]
+\centering
+
+% ---------------------- FILA 1: SIN RESTRICCIONES ----------------------
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{./img/monte_carlo_mal_completo.png}
+    (a) Monte Carlo sin límites de riesgo ni valor nocional
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{./img/equity_final_w_dd_mal_completo.png}
+    (b) Equity curve sin límites de riesgo ni valor nocional
+\end{minipage}
+
+\vspace{0.4cm}
+
+% ---------------------- FILA 2: CON RESTRICCIONES ----------------------
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{./img/monte_carlo_bien_completo.png}
+    (c) Monte Carlo con límites de riesgo y valor nocional
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{./img/equity_final_w_dd_completo.png}
+    (d) Equity curve con límites de riesgo y valor nocional
+\end{minipage}
+
+\caption{Comparativa entre simulaciones Monte Carlo y curvas de capital con y sin límites de riesgo y valor nocional.}
+\label{fig:cartera_comparativa_completo}
+\end{figure}
+
+\subsection{Comparativa del sistema contra Robotrader}
+
+Para contextualizar el rendimiento del sistema, se ha realizado una comparación directa con los resultados obtenidos por los participantes de la
+competición Robotrader, cuyo periodo operativo abarcó los meses de abril y mayo. Es importante destacar que estos datos no se utilizaron en ningún momento para entrenar los modelos, evitando así cualquier tipo de leakage.
+
+En este intervalo concreto, el sistema obtiene aproximadamente 185\,000 USD de beneficio sin restricciones y alrededor de 75\,000 USD al aplicar
+límites realistas de riesgo y valor nocional. Esta diferencia es incluso más marcada que en el periodo completo, ya que la competición se desarrolla
+en un entorno de elevada volatilidad y con un número reducido de operaciones, lo que amplifica el impacto del apalancamiento y de las restricciones de
+margen.
+
+Si se compara únicamente el PnL final, que es la métrica más directa y comparable, el sistema se situaría aproximadamente entre las primeras posicines
+de un total de 58 participantes. Además, a diferencia de una parte significativa de los competidores, el sistema no habría incurrido en pérdidas, lo
+que refuerza la solidez del enfoque incluso bajo condiciones exigentes.
+
+Aun así, es importante remarcar que esta comparación no es perfecta: el trading en vivo introduce factores adicionales como latencia, slippage
+variable, disponibilidad de liquidez y ejecución parcial de órdenes, que no pueden reproducirse completamente en un backtest. No obstante, la
+simulación incorpora márgenes, valor nocional y límites de exposición, lo que permite aproximarse razonablemente al comportamiento real y obtener una
+referencia útil del rendimiento relativo del sistema.
+
+\begin{figure}[H]
+\centering
+
+% ---------------------- FILA 1: SIN RESTRICCIONES ----------------------
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.75\linewidth]{./img/monte_carlo_mal.png}\\
+    (a) Monte Carlo sin límites de riesgo ni valor nocional
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.75\linewidth]{./img/equity_final_w_dd_mal.png}\\
+    (b) Equity curve sin límites de riesgo ni valor nocional
+\end{minipage}
+
+\vspace{0.4cm}
+
+% ---------------------- FILA 2: CON RESTRICCIONES ----------------------
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.75\linewidth]{./img/monte_carlo_bien.png}\\
+    (c) Monte Carlo con límites de riesgo y valor nocional
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.75\linewidth]{./img/equity_final_w_dd.png}\\
+    (d) Equity curve con límites de riesgo y valor nocional
+\end{minipage}
+
+\caption{Comparativa entre simulaciones Monte Carlo y curvas de capital con y sin límites de riesgo y valor nocional.}
+\label{fig:cartera_comparativa}
+\end{figure}
+
+% \begin{table}[H]
+% \centering
+% \makebox[0pt]{%
+% \begin{tabular}{|c|c|c|c|c|c|c|}
+% \hline
+% \multirow{2}{*}{\textbf{Futuro}} &
+% \multirow{2}{*}{\textbf{Capital inicial}} &
+% \multicolumn{4}{c|}{\textbf{Capital final}} &
+% \multirow{2}{*}{\textbf{Ganancias mejor caso}} \\ \cline{3-6}
+%  & & \textbf{Normal} & \textbf{Scale-in} & \textbf{Sizing} & \textbf{Scale-in + Sizing} & \\ \hline
+
+% AD   & 30k  & \multicolumn{4}{c|}{No hay operaciones}                                                        & 0 \\ \hline
+% BP   & 30k  & \multicolumn{4}{c|}{Por alguna razón faltan dos features}                                      & 0 \\ \hline
+% CL   & 300k & \multicolumn{1}{c|}{305k}  & \multicolumn{1}{c|}{317k}   & \multicolumn{1}{c|}{306k}  & 400k   & \poscolor{100k} \\ \hline
+% EC   & 40k  & \multicolumn{4}{c|}{No hay operaciones}                                                        & 0 \\ \hline
+% ES   & 350k & \multicolumn{1}{c|}{320k}  & \multicolumn{1}{c|}{280k}   & \multicolumn{1}{c|}{349k}  & 250k   & \negcolor{-1k} \\ \hline
+% GC   & 450k & \multicolumn{1}{c|}{450k}  & \multicolumn{1}{c|}{465k}   & \multicolumn{1}{c|}{450k}  & 465k   & \poscolor{15k} \\ \hline
+% MFXI & 5k   & \multicolumn{1}{c|}{4.8k}  & \multicolumn{1}{c|}{4.75k}  & \multicolumn{1}{c|}{4.5k}  & 3.75k  & \negcolor{-0.2k} \\ \hline
+% NG   & 70k  & \multicolumn{1}{c|}{70k}   & \multicolumn{1}{c|}{69k}    & \multicolumn{1}{c|}{71k}   & 67k    & \poscolor{1k} \\ \hline
+% NQ   & 650k & \multicolumn{1}{c|}{630k}  & \multicolumn{1}{c|}{570k}   & \multicolumn{1}{c|}{650k}  & 550k   & 0 \\ \hline
+% YM   & 200k & \multicolumn{1}{c|}{198k}  & \multicolumn{1}{c|}{198k}   & \multicolumn{1}{c|}{200k}  & 196k   & 0 \\ \hline
+% ZB   & 50k  & \multicolumn{1}{c|}{50k}   & \multicolumn{1}{c|}{49k}    & \multicolumn{1}{c|}{50k}   & 48k    & 0 \\ \hline
+% ZN   & 30k  & \multicolumn{1}{c|}{25k}   & \multicolumn{1}{c|}{24k}    & \multicolumn{1}{c|}{22k}   & 0k     & \negcolor{-5k} \\ \hline
+% ZS   & 50k  & \multicolumn{1}{c|}{300k}  & \multicolumn{1}{c|}{300k}   & \multicolumn{1}{c|}{80k}   & 300k   & \poscolor{250k} \\ \hline
+
+% \end{tabular}
+
+% }
+% \caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-01-20 hasta 2026-06-01}
+% \end{table}
+
+% Como capital inicial he usado 10 veces el margin inicial mínimo para abrir una posición
 
 % \begin{table}[H]
 % \centering
@@ -120,119 +303,41 @@ Como capital inicial he usado 10 veces el margin inicial mínimo para abrir una 
 % \caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-03-27 hasta 2026-06-01, aunque Robotrader empezó el 6 para tener datos para las primeras predicciones}
 % \end{table}
 
-\begin{table}[H]
-\centering
-\makebox[0pt]{%
-\begin{tabular}{|c|c|c|c|c|}
-\hline
-\textbf{Futuro} & \textbf{Capital inicial} & \textbf{Ganancias mejor caso} & \textbf{Max DD} & \textbf{Ratio} \\ \hline
-CL   & 300k & 0                        &  &  \\ \hline
-ES   & 350k & \negcolor{-1k}           &  &  \\ \hline
-GC   & 450k & \poscolor{8510}            & 6730 & 1.26 \\ \hline
-MFXI & 5k   & \negcolor{-0.2k}         &  &  \\ \hline
-NG   & 70k  & \poscolor{904}            & 2116.23 & 0.43 \\ \hline
-NQ   & 650k & \poscolor{17385}         & 0 & No aplica \\ \hline
-YM   & 200k & \poscolor{6825}            & 2375.0 & 2.87 \\ \hline
-ZB   & 50k  & 0                        &  &  \\ \hline
-ZN   & 30k  & \negcolor{-2.5k}         &  &  \\ \hline
-ZS   & 50k  & \negcolor{-2k}           &  &  \\ \hline
-\end{tabular}
+% \begin{table}[H]
+% \centering
+% \makebox[0pt]{%
+% \begin{tabular}{|c|c|c|c|c|}
+% \hline
+% \textbf{Futuro} & \textbf{Capital inicial} & \textbf{Ganancias mejor caso} & \textbf{Max DD} & \textbf{Ratio} \\ \hline
+% CL   & 300k & 0                        &  &  \\ \hline
+% ES   & 350k & \negcolor{-1k}           &  &  \\ \hline
+% GC   & 450k & \poscolor{8510}            & 6730 & 1.26 \\ \hline
+% MFXI & 5k   & \negcolor{-0.2k}         &  &  \\ \hline
+% NG   & 70k  & \poscolor{904}            & 2116.23 & 0.43 \\ \hline
+% NQ   & 650k & \poscolor{17385}         & 0 & No aplica \\ \hline
+% YM   & 200k & \poscolor{6825}            & 2375.0 & 2.87 \\ \hline
+% ZB   & 50k  & 0                        &  &  \\ \hline
+% ZN   & 30k  & \negcolor{-2.5k}         &  &  \\ \hline
+% ZS   & 50k  & \negcolor{-2k}           &  &  \\ \hline
+% \end{tabular}
 
 
-}
-\caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-03-27 hasta 2026-06-01, aunque Robotrader empezó el 6 para tener datos para las primeras predicciones}
-\end{table}
+% }
+% \caption{Tabla resumen de los 13 futuros evaluados en las cuatro modalidades operativas. Desde 2026-03-27 hasta 2026-06-01, aunque Robotrader empezó el 6 para tener datos para las primeras predicciones}
+% \end{table}
 
-En ganancias absolutas séptimo/noveno en la competición de 58 personas.
+% \subsection{Análisis de resultados de entrenamiento}
 
-\subsection{Análisis de resultados de entrenamiento}
+% \todo{Añadir curva auc roc para las dos capas de clasificación}
 
-\begin{figure}[H]
-\centering
+% \todo{Añadir curva loss por fold}
 
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_LSTM.png}
-    
-    (a) Classification report
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_LSTM.png}
-    
-    (b) ROC y reliability curve
-\end{minipage}
-
-\vspace{0.3cm}
-
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_LSTM.png}
-    
-    (c) MAE y regresión
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_LSTM.png}
-    
-    (d) Loss
-\end{minipage}
-
-\caption{Resultados obtenidos por el modelo LSTM.}
-\label{fig:lstm_results}
-
-\end{figure}
-
-\begin{figure}[H]
-\centering
-
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_GRU.png}
-    
-    (a) Classification report
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_GRU.png}
-    
-    (b) ROC y reliability curve
-\end{minipage}
-
-\vspace{0.3cm}
-
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_GRU.png}
-    
-    (c) MAE y regresión
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_GRU.png}
-    
-    (d) Loss
-\end{minipage}
-
-\caption{Resultados obtenidos por el modelo GRU.}
-\label{fig:gru_results}
-
-\end{figure}
-
-\todo{Añadir curva auc roc para las dos capas de clasificación}
-
-\todo{Añadir curva loss por fold}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con evolución de las métricas dependiendo de los umbrales}
-    \label{fig_mlp_18}
-\end{figure}
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[scale=0.45]{./img/ml_process.pdf}
+%     \caption{Añadir img con evolución de las métricas dependiendo de los umbrales}
+%     \label{fig_mlp_18}
+% \end{figure}
 
 % \begin{figure}[H]
 %     \centering
@@ -241,30 +346,30 @@ En ganancias absolutas séptimo/noveno en la competición de 58 personas.
 %     \label{fig_mlp_21}
 % \end{figure}
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con una simulación de Monte Carlo con los percentiles}
-    \label{fig_mlp_19}
-\end{figure}
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[scale=0.45]{./img/ml_process.pdf}
+%     \caption{Añadir img con una simulación de Monte Carlo con los percentiles}
+%     \label{fig_mlp_19}
+% \end{figure}
 
-\subsection{Análisis de resultados de optimización, Backtest de la cartera y Simulación de Monte Carlo}
+% \subsection{Análisis de resultados de optimización, Backtest de la cartera y Simulación de Monte Carlo}
 
-Una vez obtenidas las señales optimizadas para cada futuro, se realiza un análisis conjunto del comportamiento de la cartera completa. El objetivo es evaluar si la combinación de activos mejora el rendimiento respecto a operar únicamente un activo individual, así como estudiar la robustez del sistema bajo diferentes secuencias de resultados.
+% Una vez obtenidas las señales optimizadas para cada futuro, se realiza un análisis conjunto del comportamiento de la cartera completa. El objetivo es evaluar si la combinación de activos mejora el rendimiento respecto a operar únicamente un activo individual, así como estudiar la robustez del sistema bajo diferentes secuencias de resultados.
 
-Para ello se lleva a cabo un nuevo backtest a nivel de cartera. En este proceso se cargan todos los \textit{trades} generados por cada futuro utilizando la estrategia operativa óptima obtenida previamente. A continuación, se construye un único \textit{DataFrame} que agrupa todas las operaciones por fecha, lo que permite simular la evolución conjunta del capital.
+% Para ello se lleva a cabo un nuevo backtest a nivel de cartera. En este proceso se cargan todos los \textit{trades} generados por cada futuro utilizando la estrategia operativa óptima obtenida previamente. A continuación, se construye un único \textit{DataFrame} que agrupa todas las operaciones por fecha, lo que permite simular la evolución conjunta del capital.
 
-La simulación se realiza sobre una cuenta con un capital inicial de 1\,000\,000 USD, lo que permite incorporar restricciones realistas de riesgo y liquidez. En particular, se tienen en cuenta:
+% La simulación se realiza sobre una cuenta con un capital inicial de 1\,000\,000 USD, lo que permite incorporar restricciones realistas de riesgo y liquidez. En particular, se tienen en cuenta:
 
-\begin{itemize}
-    \item los márgenes iniciales y de mantenimiento de cada futuro,
-    \item el valor nocional de cada contrato,
-    \item el porcentaje máximo de capital que puede arriesgarse por operación,
-    \item la exposición total máxima permitida, fijada en un 25\% del capital inicial.
-\end{itemize}
+% \begin{itemize}
+%     \item los márgenes iniciales y de mantenimiento de cada futuro,
+%     \item el valor nocional de cada contrato,
+%     \item el porcentaje máximo de capital que puede arriesgarse por operación,
+%     \item la exposición total máxima permitida, fijada en un 25\% del capital inicial.
+% \end{itemize}
 
-Las predicciones se ordenan por nivel de confianza total y se procesan secuencialmente, verificando en cada caso que la operación no exceda los límites de margen ni las restricciones de exposición. Solo las operaciones que cumplen estas condiciones se ejecutan en la simulación.
+% Las predicciones se ordenan por nivel de confianza total y se procesan secuencialmente, verificando en cada caso que la operación no exceda los límites de margen ni las restricciones de exposición. Solo las operaciones que cumplen estas condiciones se ejecutan en la simulación.
 
-Además del backtest, se realiza una simulación de Monte Carlo adicional para evaluar la dispersión de las métricas de la cartera completa. Para ello se agrupan los PnL diarios de todos los activos y se aplica un \textit{overlapping block bootstrap}, remuestreando bloques solapados de la serie diaria de beneficios. Este enfoque permite preservar parte de la estructura temporal y generar múltiples trayectorias alternativas del rendimiento de la cartera.
+% Además del backtest, se realiza una simulación de Monte Carlo adicional para evaluar la dispersión de las métricas de la cartera completa. Para ello se agrupan los PnL diarios de todos los activos y se aplica un \textit{overlapping block bootstrap}, remuestreando bloques solapados de la serie diaria de beneficios. Este enfoque permite preservar parte de la estructura temporal y generar múltiples trayectorias alternativas del rendimiento de la cartera.
 
-El análisis conjunto del backtest y de la simulación de Monte Carlo permite comparar el rendimiento de la cartera diversificada frente a la operativa de un único activo, así como evaluar la estabilidad del sistema bajo diferentes escenarios de mercado.
+% El análisis conjunto del backtest y de la simulación de Monte Carlo permite comparar el rendimiento de la cartera diversificada frente a la operativa de un único activo, así como evaluar la estabilidad del sistema bajo diferentes escenarios de mercado.

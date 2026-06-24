@@ -6,75 +6,35 @@
 
 \section{Conclusiones}
 
-Como conclusiones finales de este proyecto, estoy muy satisfecho con lo que he desarrollado en el transcurso de estos meses. Además, viendo los
-resultados obtenidos se puede concluir que el sistema ha funcionado como se esperaba.
+A lo largo de este proyecto he desarrollado un sistema completo de trading algorítmico basado en modelos secuenciales aplicados a series temporales
+financieras. El trabajo ha abarcado todas las fases de un pipeline profesional: desde la construcción y auditoría de features, el diseño y
+entrenamiento de modelos LSTM y GRU, la optimización operativa por activo, y finalmente la evaluación mediante backtesting y simulaciones de Monte
+Carlo tanto individuales como a nivel de cartera.
 
-He podido aplicar los conocimientos que he adquirido durante estos 4 años de carrera aunque hayan habido teoría de asignaturas que me gustaría haber
-podido aplicar que se han quedado fuera por falta de tiempo. Aún así también he podido ampliar mis conocimientos sobre diseño de redes neuronales.
+Los resultados obtenidos permiten concluir que el sistema se comporta de forma robusta, estable y coherente con lo esperado para un enfoque de
+predicción direccional en mercados de futuros. En la fase de entrenamiento, los modelos muestran métricas positivas, con especial solidez en la clase
+HOLD y un rendimiento superior del modelo GRU en clasificación, mientras que en regresión ambos modelos presentan un comportamiento muy similar. Las
+simulaciones individuales confirman que, para la mayoría de los activos, las estrategias optimizadas generan beneficios consistentes y mantienen un
+perfil de riesgo razonable.
+
+A nivel de cartera, la diferencia entre operar con y sin restricciones de riesgo es notable: el beneficio acumulado pasa de aproximadamente 660\,000
+USD a 460\,000 USD en el periodo completo, y de 185\,000 USD a 75\,000 USD en el periodo equivalente a la competición Robotrader. Aun así, incluso
+bajo límites estrictos de exposición, margen y valor nocional, la cartera mantiene un máximo drawdown cercano al 12\% y un Sharpe ratio positivo, lo
+que demuestra que el sistema es capaz de generar rendimientos atractivos sin asumir un riesgo excesivo.
+
+Este proyecto me ha permitido aplicar de forma integrada los conocimientos adquiridos durante los cuatro años de carrera, especialmente en áreas como
+aprendizaje automático, análisis de datos y diseño de sistemas. El desarrollo del proyecto me ha permitido profundizar en el diseño de redes
+neuronales, en la gestión del riesgo y en la construcción de sistemas de trading reproducibles y evaluables.
+
+En conjunto, el trabajo demuestra que es posible construir un sistema de trading algorítmico basado en modelos de aprendizaje profundo que sea
+rentable y robusto frente a diferentes escenarios de mercado. Además, abre múltiples líneas de mejora futura, tanto en la incorporación de nuevas
+features como en el uso de arquitecturas más avanzadas, técnicas de ensemble o integración con datos en tiempo real.
 
 \section{Líneas futuras}
 
-\notes{Preguntar si demasiadas lineas futuras demuestra poco o mucho interes en el trabajo}
-
-Por limitaciones del tiempo dejo pendiente varias mejoras e implementaciones nuevas
-
-Lo primero y de lo que se ha hablado en el desarrollo, es la implementación de modelos no supervisados en diferentes puntos del pipeline, por una
-parte como feature extra, por otra parte como segmentador de régimenes de mercado y por último como agrupador de futuros.
-
-Además, también me gustaría añadir el despliegue de MLflow y Airflow ya que son partes esenciales del trabajo como ingeniero y científico de datos,
-aportarian mucho valor.
-
-A parte de estas implementaciones que se han comentado en los apartados de desarrollo también existen otras cosas que me gustaría añadir a futuro.
-
-Por una parte añadir una interfaz gráfica independiente de grafana para tener personalización total. Durante la carrera he tenido asignaturas de
-desarrollo Front-End que me gustaría aplicar, serviría para mostrar más información a parte de la que permite grafana además de incluir la posibilidad
-de interactuar con los sistemas, poder parar o arrancar el bot, decidir la lista de activos a operar, etc.
-
-En relación con lo anterior, me gustaría añadir en esa misma página un chatbot usando RASA o un LLM para responder preguntas a partir de toda la
-información disponible. RASA es mucho más sencillo pero un LLM permite mayor variedad de respuestas además de que que afuturo se podría implementar
-una API MCP (Model Context Protocol)
-
-Más relacionado con la carrera seríá aplicar conceptos como la entropía de Shannon, las cadenas de Markov junto con las FSM (Finite State Machine) y
-el análisis de sentimientos usando NLP con BERT y MarIA
-
-\begin{description}
-    \item[Entropía de Shannon y teoría de la información]  \hfill \\
-        La entropía mide la incertidumbre del mercado
-    \item[Cadenas de Markov y FSM]  \hfill \\
-        Modelan la probabilidad de transición entre estados de mercado, las FSM estructuran el comportamiento del bot
-    \item[Análisis de sentimientos]  \hfill \\
-        Permiten incluir información textual de noticias y redes sociales como adición a indicadores cuantitativos.
-\end{description}
-
-Además de todo lo ya mencionado a continuación quiero listar una seríe de mejoras que se me han ido ocurriendo al final del trabajo y durante mis
-jornadas estando de prácticas
-
-\begin{description}
-    \item[Great Expectations] \hfill \\
-        Como complemento a la validación manual de los datos
-    \item[Engine/pipeline] \hfill \\
-        Durante mis prácticas pude observar cómo trabajaban en un pipeline real de datos en un banco, se organizaban como un pipeline, cada paso es
-        una función única y todas comparten un contexto común
-    \item[Otros productos financieros] \hfill \\
-        Aunque ya se justificó por qué le decidió elegir los futuros aún así se puede experimentar con otros productos como las acciones, opciones,
-        etc. Además, se podría optar a usar los datos de los otros productos como features
-    \item[Mayor nivel de profundidad de datos] \hfill \\
-        Aunque los datos históricos son solo OHLCV, IB tiene más información, de la que descataca es la diferenciación de los precios de bid y ask
-\end{description}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{./img/airflow.jpeg}
-    \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
-    \label{fig_mlp_34}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{./img/mlflow.jpeg}
-    \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
-    \label{fig_mlp_35}
-\end{figure}
+A pesar del alcance conseguido en este proyecto, existen múltiples líneas de mejora y extensiones que permitirían aumentar la robustez, escalabilidad
+y capacidad analítica del sistema. A continuación se presentan las principales direcciones de trabajo futuro, organizadas según su relevancia técnica
+y su impacto potencial.
 
 \subsection{Aprendizaje no supervisado}
 
@@ -83,31 +43,40 @@ jornadas estando de prácticas
 % en formato csv a parquet. Una ventaja extra de parque es la habilidad de poder guardar los datos en diferentes particiones y poder leer las
 % particiones que uno necesite, en mi caso realizo las particiones por año y por mes.
 
-Además de usar modelos de aprendizaje supervisado tenía la idea de usar modelos no supervisados para varias tareas.
+Además del uso de modelos supervisados, una de las líneas de trabajo más relevantes consiste en incorporar técnicas de aprendizaje no supervisado en
+distintos puntos del pipeline. Este enfoque permitiría enriquecer la información disponible para los modelos, mejorar la robustez del sistema y
+capturar estructuras latentes del mercado que no están explícitamente codificadas en las features actuales.
 
-En primer lugar, para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias, por ejemplo, todas las monedas
-juntas, dejo que el sistema decida cuales son los activos más parecidos. De este modo podría generar más características derivadas de la comparación
-de los activos, basandome en el concepto de \textit{Pairs Trading} donde se comparan un par de activos que se saben que están correlados y
-cointegrados, y si uno de ellos sube más que el otro se abre una posición en corto y si uno de ellos baja más que el otro se abre una posición en
-largo.
+\subsubsection{Agrupación de activos (clustering)}
 
-El problema que le encuentro a este primer caso de uso es la disparidad de datos, por una parte, los datos históricos proporcionados no son de las
-mismas fechas, esto se soluciona fácilmente al recortar los datos más antiguos ya que además podrían causar problemas a los modelos. Pero donde
-existen más problemas es el tema de los horarios de las diferentes bolsas, la idea sería usar la función de rellenado hacia adelante para los
-momentos donde faltasen datos de alguno de los futuros. Otra opción sería comparar cada futuro con el centroide (el centro de cada cluster) del
-cluster al que pertenece cada futuro y el resto de centroides, de este modo se puede evitar problemas por la disparidad del número de futuros en cada
-cluster.
+El primer uso previsto es la agrupación automática de los futuros en función de su comportamiento. En lugar de realizar agrupaciones arbitrarias (por
+ejemplo, agrupar todas las divisas o todos los índices), la idea es que el sistema determine qué activos son realmente similares. Esto permitiría:
 
-Además de este problema está la necesidad de tomar la decisión de qué tipo de modelo no supervisado usar, si uno donde se predefine el número de
-clusters o uno donde el propio modelo decide el número (Decidir entre modelos paramétricos (k fijo) o modelos no paramétricos (k variable))
+\begin{itemize}
+    \item generar features basadas en relaciones entre activos,
+    \item aplicar ideas inspiradas en \textit{Pairs Trading},
+    \item comparar cada activo con el centroide de su cluster y el resto de clusters,
+    \item reducir el riesgo de concentrar demasiadas operaciones en activos altamente correlacionados.
+\end{itemize}
 
-Y el problema principal sería sobre qué agrupar qué características usar para la agrupación.
+Este enfoque presenta varios retos. Por un lado, los datos históricos no siempre cubren los mismos periodos, lo que obliga a recortar o alinear las
+series. Por otro lado, los horarios de negociación difieren entre mercados, lo que introduce huecos que deben rellenarse mediante técnicas como
+forward fill. También es necesario decidir qué tipo de modelo utilizar: uno paramétrico con número fijo de clusters (como K-means) o uno no
+paramétrico que determine automáticamente el número óptimo (como DBSCAN o HDBSCAN). Finalmente, es crucial seleccionar adecuadamente las features
+sobre las que se realizará la agrupación.
 
-El segundo uso es el de segmentar los régimenes de mercado. Con esta información hay dos opciones de acción, por una parte, usarlo como una
-característica más para complementar al resto, aunque puede no ser tan útil al usar modelos de aprendizaje supervisado profundo que al estar diseñados
-para manejar series temporales pueden inferir los régimenes de mercado por si solos. La segunda opción es usar la diferencia de régimenes para
-entrenar modelos dedicados para cada régimen consiguiendo modelos más especializados en cada régimen. Este uso tiene los mismos problemas que el
-primero.
+\subsubsection{Segmentación de régimenes de mercado}
+
+El segundo uso consiste en identificar regímenes de mercado mediante clustering o modelos de cambio de estado. Esta información podría utilizarse de
+dos maneras:
+
+\begin{itemize}
+    \item como feature adicional para los modelos supervisados,
+    \item o para entrenar modelos especializados en cada régimen, mejorando su precisión y estabilidad.
+\end{itemize}
+
+Aunque los modelos secuenciales ya capturan parte de esta estructura, una segmentación explícita permitiría interpretar mejor el comportamiento del
+sistema y adaptar la estrategia a condiciones de mercado cambiantes.
 
 % Otra utilidad relacionada con la agrupación es poder comparar modelos entrenados para otros activos pero aplicados a un activo del mismo grupo para
 % ver si es mejor. Aunque tiene como problemas que el clustering no garantiza similitud operativa.
@@ -115,55 +84,102 @@ primero.
 % \todo{Decidir el algoritmo a usar para UL}
 % \review{Prueba cuadro \textbackslash review}
 
-\subsection{Pyomo}
-
-Una vez que tuve el sistema funcionando paso a implementar un optimizador usando Pyomo, para solvertar algunas limitaciones que tiene el método
-manual, principalmente el hecho de que una predicicón con menor confianza pueda generar mayor beneficio.
-
-\notes{Explicar qué es Pyomo}
-
-Para ello sigo los siguiente paso para una optimización de un objetivo, en este caso máximizar el \textit{Sharpe Ratio}
-
-\begin{enumerate}
-    \item Definir variables, conjunto de activos, 
-    \item Definir parámetros, retorno esperado, volatilidad, matriz de covarianza, capital disponible, límite de exposición, restricciones de riesgo
-    \item Definir variable de decisión, abrir o no una posición
-    \item Definir restricciones, suma de pesos, límite de exposición, restricciones de riesgo, restricciones operativas
-    \item Definir función opjetivo, Sharpe Ratio
-    \item Seleccionar solver
-    \item Interpretar solución
-\end{enumerate}
-
-Como mecanismo adicional de control, los modelos se actualizan semanalmente. Cada semana se reentrenan o afinan los modelos existentes y se comparan con los anteriores para seleccionar aquellos que mejor predicen los datos recientes. Este proceso garantiza que el sistema se mantenga adaptado a posibles cambios de régimen o variaciones en la estructura del mercado. La orquestación completa de este procedimiento se detalla en una sección posterior.
-
-En caso de haber continuado con el enfoque de agrupación mediante aprendizaje no supervisado, también sería posible definir límites de exposición por grupo. Esto permitiría evitar situaciones en las que múltiples señales positivas pertenecen a un mismo cluster y, si dicho grupo estuviera mal modelado, se concentraría demasiado riesgo en un único patrón de comportamiento.
-
 \subsection{Orquestación y MLOps}
 
-\notes{Tanto Airflow como MLflow, ver si hay tiempo para implementarlos}
+Una vez desarrollado un sistema robusto con un autómata funcional y mecanismos de alerta tanto operativos como de seguridad, una de las líneas de
+mejora más relevantes consiste en incorporar herramientas de MLOps que permitan automatizar, monitorizar y versionar todo el ciclo de vida del modelo.
+En particular, las dos tecnologías clave para este propósito son MLflow y Apache Airflow.
 
-Una vez desplegado un sistema robusto que cuenta con un autómata funcional y con alertas tanto de seguridad como para mostrar información, decido
-implementar el uso de Airflow como orquestrador.
+\subsubsection{MLflow: registro y gestión del ciclo de vida de modelos}
 
-En general el uso de Airflow está muy ligado al uso de MLflow ya que será el uso prinicpal de esta herramienta por mi parte.
+MLflow es una plataforma diseñada para gestionar todas las fases del ciclo de vida de modelos de Machine Learning. Sus funcionalidades principales
+incluyen:
 
-En MLflow 
+\begin{itemize}
+    \item registro completo de experimentos (métricas, hiperparámetros, artefactos),
+    \item comparación sistemática entre modelos,
+    \item versionado de modelos y artefactos,
+    \item almacenamiento centralizado de resultados,
+    \item trazabilidad total del proceso de entrenamiento.
+\end{itemize}
 
-Apache Airflow es un orquestador de flujos de trabajo que permite programar, monitorizar y ejecutar tareas complejas de forma secuencial o paralela
-mediante DAGs (Directed Acyclic Graphs).
+Integrar MLflow permitiría sustituir el entrenamiento manual por un proceso estructurado y reproducible. Además, facilitaría decidir cuándo un modelo
+debe ser reemplazado por una versión actualizada, así como mantener un historial claro de los modelos utilizados, descartados o en fase de prueba.
 
-MLflow es una plataforma para gestionar el ciclo de vida de modelos de Machine Learning: tracking, versionado, artefactos, modelos, comparaciones y
-despliegue.
+\subsubsection{Airflow: orquestación del ciclo de vida del sistema}
 
-Los usos principales de MLflow para mí son el registro de experimentos, que en vez de realizar los entrenamiento manualmente se realicen aquí
-permitiendo guardar toda la información de cada entrenamiento, permite comprar diferentes modelos y de este modo decidir si es hora de cambiar un
-modelo por una versión actualizada o un nuevo modelo, permite llevar un registro de los modelos que se están utilizando, de los usados o los que están
-probandose. Facilita la búsqueda de parámetros de los modelos.
+Apache Airflow es un orquestador de flujos de trabajo que permite programar, monitorizar y ejecutar tareas complejas mediante DAGs (Directed Acyclic
+Graphs). Su integración con MLflow resulta especialmente útil para automatizar:
 
-Airflow por su parte sirve para orquestar muchas de las funcionalidades de MLflow, orquestración del ciclo de vida del modelo, entrenamientos
-semanales, fine tuning incremental con los datos, evaluación automática de nuevos modelos, comparación contra el modelo actual, promoción del mejor
-modelo a producción, también permite automatización del bot, que despliegue el bot los sábados por la tarde y lo pare el viernes por la tarde,
-reinicios controlados.
+\begin{itemize}
+    \item entrenamientos semanales,
+    \item fine-tuning incremental con datos recientes,
+    \item evaluación automática de nuevos modelos,
+    \item comparación contra el modelo actualmente en producción,
+    \item promoción del mejor modelo,
+    \item reinicios controlados del bot,
+    \item despliegue y parada automática del sistema (por ejemplo, arrancar el sábado por la tarde y detener el viernes).
+\end{itemize}
 
-El problema principal es que Airflow es muy pesado y consume mucha RAM por lo que algunas de las funcionalidades no se pueden realizar aún así se
-podría activar manualmente los fines de semana para poder realizar las tareas relacionadas con el ciclo de vida de los modelos.
+De este modo, Airflow actuaría coordinando todas las tareas necesarias para mantener el modelo actualizado y estable.
+
+\subsubsection{Limitaciones actuales}
+
+El principal inconveniente de Airflow es su elevado consumo de recursos, especialmente memoria RAM. Esto dificulta su uso continuo en entornos con
+recursos limitados. Aun así, una opción viable sería activarlo manualmente durante los fines de semana para ejecutar las tareas relacionadas con el
+ciclo de vida del modelo, dejando su uso permanente para una futura infraestructura más potente.
+
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=\textwidth]{./img/airflow.jpeg}
+%     \caption{Interfaz de Apache Airflow}
+%     \label{fig_mlp_34}
+% \end{figure}
+
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=\textwidth]{./img/mlflow.jpeg}
+%     \caption{Interfaz de MLflow}
+%     \label{fig_mlp_35}
+% \end{figure}
+
+\subsection{Pyomo}
+
+Una vez que el sistema estuvo completamente operativo, una de las mejoras naturales consistió en incorporar un módulo de optimización formal que
+permitiera superar algunas limitaciones del enfoque manual. En particular, el método basado únicamente en ordenar predicciones por nivel de confianza
+puede conducir a situaciones en las que una señal con menor confianza genere un beneficio mayor que otra con confianza superior. Para abordar este
+problema, se planteó el uso de Pyomo, una librería de optimización matemática en Python que permite formular y resolver problemas complejos mediante
+programación lineal, cuadrática o no lineal.
+
+Pyomo ofrece un marco flexible para definir modelos de optimización de forma declarativa, especificando variables, parámetros, restricciones y
+funciones objetivo. En este proyecto, su uso permitiría construir un optimizador de cartera cuyo objetivo fuese maximizar el Sharpe Ratio bajo
+restricciones realistas de riesgo y exposición.
+
+El proceso general para formular el problema en Pyomo seguiría los siguientes pasos:
+
+\begin{enumerate}
+\item \textbf{Definir el conjunto de activos} que componen la cartera.
+\item \textbf{Establecer los parámetros} del modelo: retornos esperados, volatilidades, matriz de covarianza, capital disponible, límites de
+exposición y restricciones de riesgo.
+\item \textbf{Definir las variables de decisión}, como la apertura o no de una posición, o el peso asignado a cada activo.
+\item \textbf{Incorporar las restricciones} necesarias: suma de pesos, límites de exposición, márgenes, restricciones operativas y de riesgo.
+\item \textbf{Formular la función objetivo}, en este caso la maximización del Sharpe Ratio.
+\item \textbf{Seleccionar un solver} adecuado para resolver el problema (por ejemplo, IPOPT, GLPK o CBC).
+\item \textbf{Interpretar la solución} y compararla con el método manual para evaluar mejoras en rendimiento y estabilidad.
+\end{enumerate}
+
+La integración de Pyomo permitiría obtener una asignación óptima de posiciones basada en criterios matemáticos y no únicamente en la confianza de las
+predicciones, lo que podría mejorar la consistencia del sistema y reducir situaciones subóptimas. Además, este enfoque abre la puerta a futuras
+extensiones, como optimización multiobjetivo, límites por grupo de activos o modelos específicos para distintos regímenes de mercado.
+
+\subsection{Resto de mejoras}
+
+Además de las líneas principales descritas anteriormente, existen diversas mejoras adicionales que podrían ampliar significativamente las capacidades del sistema y su aplicabilidad práctica. Estas propuestas abarcan desde aspectos de visualización e interacción hasta la incorporación de conceptos teóricos avanzados y mejoras en la calidad de los datos.
+
+\subsubsection{Interfaz gráfica personalizada}
+\subsubsection{Chatbot integrado (RASA o LLM)}
+\subsubsection{Incorporación de conceptos avanzados de la carrera}
+\subsubsection{Validación y calidad de datos}
+\subsubsection{Pipeline de datos más estructurado}
+\subsubsection{Nuevos productos financieros}
+\subsubsection{Mayor profundidad de datos}
