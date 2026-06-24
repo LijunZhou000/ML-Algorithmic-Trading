@@ -174,12 +174,88 @@ extensiones, como optimización multiobjetivo, límites por grupo de activos o m
 
 \subsection{Resto de mejoras}
 
-Además de las líneas principales descritas anteriormente, existen diversas mejoras adicionales que podrían ampliar significativamente las capacidades del sistema y su aplicabilidad práctica. Estas propuestas abarcan desde aspectos de visualización e interacción hasta la incorporación de conceptos teóricos avanzados y mejoras en la calidad de los datos.
+Además de las líneas principales descritas anteriormente, existen diversas mejoras adicionales que podrían ampliar significativamente las capacidades
+del sistema y su aplicabilidad práctica. Estas propuestas abarcan desde aspectos de visualización e interacción hasta la incorporación de conceptos
+teóricos avanzados y mejoras en la calidad de los datos.
 
 \subsubsection{Interfaz gráfica personalizada}
+
+Aunque Grafana ha sido útil para la monitorización inicial, una interfaz gráfica propia permitiría una personalización total del sistema. Gracias a la
+experiencia adquirida en asignaturas de desarrollo Front-End, sería posible construir una aplicación que:
+
+\begin{itemize}
+    \item muestre información más detallada que la disponible en Grafana,
+    \item permita interactuar directamente con el bot (arrancar, detener, seleccionar activos),
+    \item integre visualizaciones avanzadas y paneles específicos para cada módulo del sistema.
+\end{itemize}
+
+Esto proporcionaría una experiencia más completa y adaptada a las necesidades del usuario final.
+
 \subsubsection{Chatbot integrado (RASA o LLM)}
+
+La interfaz podría complementarse con un asistente conversacional capaz de responder preguntas sobre:
+
+\begin{itemize}
+    \item el estado del sistema,
+    \item métricas recientes,
+    \item señales generadas,
+    \item riesgos y exposición,
+    \item decisiones operativas.
+\end{itemize}
+
+RASA sería una solución más ligera y controlable, mientras que un LLM permitiría respuestas más flexibles y contextuales. A largo plazo, podría
+integrarse un MCP (Model Context Protocol) para conectar el chatbot con el resto de componentes del sistema.
+
 \subsubsection{Incorporación de conceptos avanzados de la carrera}
+
+Existen varias ideas teóricas que podrían enriquecer el sistema y aportar nuevas perspectivas analíticas:
+
+\begin{description}
+\item[Entropía de Shannon y teoría de la información] \hfill \\
+Permitiría medir la incertidumbre del mercado y detectar periodos de mayor desorden o imprevisibilidad.
+\item[Cadenas de Markov y FSM] \hfill \\
+Las cadenas de Markov modelan transiciones entre estados de mercado, mientras que las máquinas de estados finitos (FSM) pueden estructurar el comportamiento del bot en función de dichos estados.
+\item[Análisis de sentimientos] \hfill \\
+El uso de modelos NLP como BERT o MarIA permitiría incorporar información textual procedente de noticias y redes sociales, complementando los indicadores cuantitativos.
+\end{description}
+
 \subsubsection{Validación y calidad de datos}
+
+La integración de Great Expectations permitiría automatizar la validación de datos y detectar anomalías antes de alimentar los modelos. Esto
+reforzaría la fiabilidad del pipeline y reduciría errores derivados de datos corruptos o inconsistentes.
+
 \subsubsection{Pipeline de datos más estructurado}
+
+Durante mis prácticas pude observar el uso de pipelines altamente estructurados, donde cada paso es una función independiente que comparten un
+contexto común. Adoptar este enfoque permitiría:
+
+\begin{itemize}
+    \item mejorar la modularidad,
+    \item facilitar el mantenimiento,
+    \item simplificar la depuración,
+    \item y preparar el sistema para una futura orquestación completa.
+\end{itemize}
+
 \subsubsection{Nuevos productos financieros}
+Aunque el proyecto se ha centrado en futuros por razones justificadas, sería interesante explorar:
+
+\begin{itemize}
+    \item acciones,
+    \item opciones,
+    \item ETFs,
+    \item o incluso criptomonedas.
+\end{itemize}
+
+Estos productos podrían utilizarse tanto como activos operables pero también como fuentes adicionales de features, enriqueciendo el conjunto de
+señales disponibles.
+
 \subsubsection{Mayor profundidad de datos}
+
+Los datos históricos utilizados son OHLCV, pero Interactive Brokers ofrece información más detallada, especialmente la separación entre precios bid y
+ask. Incorporar esta información permitiría:
+
+\begin{itemize}
+    \item mejorar la precisión de las señales,
+    \item modelar mejor el spread,
+    \item y aproximar más fielmente las condiciones reales de mercado.
+\end{itemize}
