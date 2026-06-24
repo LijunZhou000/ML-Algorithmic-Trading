@@ -64,20 +64,6 @@ jornadas estando de prácticas
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{./img/grafana.jpeg}
-    \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
-    \label{fig_mlp_32}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{./img/slack.jpeg}
-    \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
-    \label{fig_mlp_33}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
     \includegraphics[width=\textwidth]{./img/airflow.jpeg}
     \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
     \label{fig_mlp_34}
@@ -89,3 +75,95 @@ jornadas estando de prácticas
     \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
     \label{fig_mlp_35}
 \end{figure}
+
+\subsection{Aprendizaje no supervisado}
+
+% Por otra parte como mi intención es obtener métricas de comparación entre activos decido recortar el número de filas disponibles en los diferentes
+% archivos para tener un conjunto homogéneo. Además para mejorar el rendimiento y disminuir el tamaño de los archivos convierto los datos que estaban
+% en formato csv a parquet. Una ventaja extra de parque es la habilidad de poder guardar los datos en diferentes particiones y poder leer las
+% particiones que uno necesite, en mi caso realizo las particiones por año y por mes.
+
+Además de usar modelos de aprendizaje supervisado tenía la idea de usar modelos no supervisados para varias tareas.
+
+En primer lugar, para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias, por ejemplo, todas las monedas
+juntas, dejo que el sistema decida cuales son los activos más parecidos. De este modo podría generar más características derivadas de la comparación
+de los activos, basandome en el concepto de \textit{Pairs Trading} donde se comparan un par de activos que se saben que están correlados y
+cointegrados, y si uno de ellos sube más que el otro se abre una posición en corto y si uno de ellos baja más que el otro se abre una posición en
+largo.
+
+El problema que le encuentro a este primer caso de uso es la disparidad de datos, por una parte, los datos históricos proporcionados no son de las
+mismas fechas, esto se soluciona fácilmente al recortar los datos más antiguos ya que además podrían causar problemas a los modelos. Pero donde
+existen más problemas es el tema de los horarios de las diferentes bolsas, la idea sería usar la función de rellenado hacia adelante para los
+momentos donde faltasen datos de alguno de los futuros. Otra opción sería comparar cada futuro con el centroide (el centro de cada cluster) del
+cluster al que pertenece cada futuro y el resto de centroides, de este modo se puede evitar problemas por la disparidad del número de futuros en cada
+cluster.
+
+Además de este problema está la necesidad de tomar la decisión de qué tipo de modelo no supervisado usar, si uno donde se predefine el número de
+clusters o uno donde el propio modelo decide el número (Decidir entre modelos paramétricos (k fijo) o modelos no paramétricos (k variable))
+
+Y el problema principal sería sobre qué agrupar qué características usar para la agrupación.
+
+El segundo uso es el de segmentar los régimenes de mercado. Con esta información hay dos opciones de acción, por una parte, usarlo como una
+característica más para complementar al resto, aunque puede no ser tan útil al usar modelos de aprendizaje supervisado profundo que al estar diseñados
+para manejar series temporales pueden inferir los régimenes de mercado por si solos. La segunda opción es usar la diferencia de régimenes para
+entrenar modelos dedicados para cada régimen consiguiendo modelos más especializados en cada régimen. Este uso tiene los mismos problemas que el
+primero.
+
+% Otra utilidad relacionada con la agrupación es poder comparar modelos entrenados para otros activos pero aplicados a un activo del mismo grupo para
+% ver si es mejor. Aunque tiene como problemas que el clustering no garantiza similitud operativa.
+
+% \todo{Decidir el algoritmo a usar para UL}
+% \review{Prueba cuadro \textbackslash review}
+
+\subsection{Pyomo}
+
+Una vez que tuve el sistema funcionando paso a implementar un optimizador usando Pyomo, para solvertar algunas limitaciones que tiene el método
+manual, principalmente el hecho de que una predicicón con menor confianza pueda generar mayor beneficio.
+
+\notes{Explicar qué es Pyomo}
+
+Para ello sigo los siguiente paso para una optimización de un objetivo, en este caso máximizar el \textit{Sharpe Ratio}
+
+\begin{enumerate}
+    \item Definir variables, conjunto de activos, 
+    \item Definir parámetros, retorno esperado, volatilidad, matriz de covarianza, capital disponible, límite de exposición, restricciones de riesgo
+    \item Definir variable de decisión, abrir o no una posición
+    \item Definir restricciones, suma de pesos, límite de exposición, restricciones de riesgo, restricciones operativas
+    \item Definir función opjetivo, Sharpe Ratio
+    \item Seleccionar solver
+    \item Interpretar solución
+\end{enumerate}
+
+Como mecanismo adicional de control, los modelos se actualizan semanalmente. Cada semana se reentrenan o afinan los modelos existentes y se comparan con los anteriores para seleccionar aquellos que mejor predicen los datos recientes. Este proceso garantiza que el sistema se mantenga adaptado a posibles cambios de régimen o variaciones en la estructura del mercado. La orquestación completa de este procedimiento se detalla en una sección posterior.
+
+En caso de haber continuado con el enfoque de agrupación mediante aprendizaje no supervisado, también sería posible definir límites de exposición por grupo. Esto permitiría evitar situaciones en las que múltiples señales positivas pertenecen a un mismo cluster y, si dicho grupo estuviera mal modelado, se concentraría demasiado riesgo en un único patrón de comportamiento.
+
+\subsection{Orquestación y MLOps}
+
+\notes{Tanto Airflow como MLflow, ver si hay tiempo para implementarlos}
+
+Una vez desplegado un sistema robusto que cuenta con un autómata funcional y con alertas tanto de seguridad como para mostrar información, decido
+implementar el uso de Airflow como orquestrador.
+
+En general el uso de Airflow está muy ligado al uso de MLflow ya que será el uso prinicpal de esta herramienta por mi parte.
+
+En MLflow 
+
+Apache Airflow es un orquestador de flujos de trabajo que permite programar, monitorizar y ejecutar tareas complejas de forma secuencial o paralela
+mediante DAGs (Directed Acyclic Graphs).
+
+MLflow es una plataforma para gestionar el ciclo de vida de modelos de Machine Learning: tracking, versionado, artefactos, modelos, comparaciones y
+despliegue.
+
+Los usos principales de MLflow para mí son el registro de experimentos, que en vez de realizar los entrenamiento manualmente se realicen aquí
+permitiendo guardar toda la información de cada entrenamiento, permite comprar diferentes modelos y de este modo decidir si es hora de cambiar un
+modelo por una versión actualizada o un nuevo modelo, permite llevar un registro de los modelos que se están utilizando, de los usados o los que están
+probandose. Facilita la búsqueda de parámetros de los modelos.
+
+Airflow por su parte sirve para orquestar muchas de las funcionalidades de MLflow, orquestración del ciclo de vida del modelo, entrenamientos
+semanales, fine tuning incremental con los datos, evaluación automática de nuevos modelos, comparación contra el modelo actual, promoción del mejor
+modelo a producción, también permite automatización del bot, que despliegue el bot los sábados por la tarde y lo pare el viernes por la tarde,
+reinicios controlados.
+
+El problema principal es que Airflow es muy pesado y consume mucha RAM por lo que algunas de las funcionalidades no se pueden realizar aún así se
+podría activar manualmente los fines de semana para poder realizar las tareas relacionadas con el ciclo de vida de los modelos.

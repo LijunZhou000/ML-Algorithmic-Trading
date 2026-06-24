@@ -260,50 +260,46 @@ es posible estandarizar todos los datos al formato UTC de manera fiable.
     \label{fig:utc}
 \end{figure}
 
-Después de un análisis inicial, se opta por filtrar los datos que claramente no deberían de estar, estos son los que aparecen en los fines de semana.
-% Los pedidos realizados en las horas de descanso las mantengo por que pueden haber sido retrasos en la ejecución por lo que son operaciones reales
-% no realizadas en el momento debido.
+Después del análisis preliminar, el primer paso consiste en eliminar aquellos registros que claramente no deberían aparecer en la serie temporal, en
+particular los correspondientes a fines de semana, ya que los futuros no cotizan durante esos periodos y cualquier dato presente suele deberse a
+errores del proveedor o desajustes en los timestamps.
+
 Los datos en horas de descanso si representan actividad real aunque sea mínima, pueden ser órdenes que llegan tarde, que se cruzan en el libro de
 órdenes aunque el mercado esté cerrado, actividad residual del Globex, ajustes del Exchange, ticks de apertura o cierre del libro. Además eliminarlos
 elimina la continuidad temporal, introduce gaps artificiales y puede afectar a diferentes métricas.
 
-Una vez estandarizado el tiempo aprovecho la función de inferencia y añado una primera columna derivada que indica el día de \textit{trading} aunque
-al ser una fecha no se usará directamente para el entrenamiento, pero sí me ayudará para calcular valores acumulados diarios, que a su vez servirán
-para calcular otras variables
+Una vez estandarizadas las marcas temporales, se incorpora una primera columna derivada que identifica el día de trading. Aunque esta variable no se
+utilizará directamente como entrada para los modelos, resulta útil para calcular agregados diarios que posteriormente servirán para construir otras
+características más avanzadas.
 
-% \notes{Creo que esto no me da tiempo a hacerlo}
+Con el objetivo de mejorar el rendimiento y reducir el tamaño de los archivos, los datos originalmente almacenados en formato CSV se convierten a
+formato Parquet. Además de ofrecer una compresión más eficiente y una lectura significativamente más rápida, Parquet permite organizar los datos en
+particiones independientes. Esto facilita cargar únicamente los segmentos necesarios, por ejemplo, por año o por mees, optimizando tanto el tiempo de
+acceso como el uso de memoria durante las fases de entrenamiento y análisis.
 
-Para mejorar el rendimiento y disminuir el tamaño de los archivos convierto los datos que estaban
-en formato csv a parquet. Una ventaja extra de parque es la habilidad de poder guardar los datos en diferentes particiones y poder leer las
-particiones que uno necesite, en mi caso realizo las particiones por año y por mes.
-
-% Por otra parte como mi intención es obtener métricas de comparación entre activos decido recortar el número de filas disponibles en los diferentes
-% archivos para tener un conjunto homogéneo. Además para mejorar el rendimiento y disminuir el tamaño de los archivos convierto los datos que estaban
-% en formato csv a parquet. Una ventaja extra de parque es la habilidad de poder guardar los datos en diferentes particiones y poder leer las
-% particiones que uno necesite, en mi caso realizo las particiones por año y por mes.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
-    \label{fig_mlp_2}
-\end{figure}
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[scale=0.45]{./img/ml_process.pdf}
+%     \caption{Añadir img con algunos plots de las características más usadas como modelos solos}
+%     \label{fig_mlp_2}
+% \end{figure}
 
 \subsection{Cálculo de características}
 
-Una vez con los datos OHLCV limpios, llega el momento de aplicar diferentes funciones de diversas librerías para obtener características derivadas
-que servirán para alimentar a los modelos.
+Una vez con los datos OHLCV limpios, se procede a generar el conjunto de características derivadas que servirán como entrada para los modelos de
+aprendizaje automático. Para ello se emplean funciones procedentes de distintas librerías.
 
-Hay características de diferentes tipos, momento, estructural, temporal, de tendencia, de volatilidad, de volumen y características derivadas de
-otras. Al ser una estratégia multidía también he hecho uso de los swing charts y de características derivadas de ellas, además de otras
-características obtenidas de comparar diferentes activos
+Las características generadas abarcan múltiples categorías: de momento, estructurales, temporales, de tendencia, de volatilidad, de volumen y otras
+derivadas de combinaciones entre ellas. Dado que la estrategia es de tipo multidía, se incorporan además \textit{swing charts} y un conjunto de
+variables construidas a partir de su estructura
 
-Para obtener estas características primero agrupo los datos que venían minuto a minuto a agrupaciones de 4 horas, de esto modo se evita tener el
-ruido de señales tan cortas y es un buen número para una estratégia interdía donde una posición puede estar abierta varios días
+Antes de calcular estas variables, los datos originales, registrados con una resolución de un minuto, se agregan en velas de 4 horas. Esta frecuencia
+reduce el ruido propio de las señales de muy corto plazo y resulta adecuada para una estrategia interdía, en la que las posiciones pueden permanecer
+abiertas durante varios días.
 
-% \notes{Explicar por qué ir a interdía en vez de intradía}
-
-Las características están divididas en subcarpetas dependiendo de su tipo, en algunos casos existe aún más división si hay demasiadas funciones
+Para mantener una organización clara y facilitar la extensibilidad del sistema, las características se agrupan en subcarpetas según su tipología. En
+aquellos casos donde existe un número elevado de funciones, se realiza una subdivisión adicional para mantener una estructura modular y fácilmente
+mantenible.
 
 \begin{description}
 
@@ -344,114 +340,124 @@ del volumen.
 
 \end{description}
 
-Una vez obtenidas todas las características se realiza una primera comprobación, donde se intenta ver si existen muchos valores nulos en las
-diferentes características, donde destacan la gran cantidad de valores nulos en los swings debido a la naturaleza de este dato, en este caso opto por
-rellenar los valores faltantes con el último valor disponible. Hay algunas características que requieren de cierto número de velas iniciales para su
-cálculo, estas primeras filas se puede eliminar sin problema ya que representan un porcentaje ínfimo del total de filas de datos. Debido a que algunos
-idicadores necesitan 12 o 14 velas para poder calcular el primer valor no me ha sido posible agrupar los datos por días ya que una de las ideas que
-tenía era reiniciar los inidcadores todos los días, además tampoco tiene tanto sentido al tener una estrategia multidía.
+Una vez generadas todas las características, se realiza una primera validación para identificar la presencia de valores nulos en cada una de ellas. En
+este análisis destacan especialmente los swings, que por su propia naturaleza presentan numerosos huecos: solo se actualizan cuando aparece un nuevo
+máximo o mínimo significativo. En estos casos se opta por aplicar un forward fill, propagando el último valor válido disponible, ya que esta
+aproximación mantiene la coherencia estructural del indicador sin introducir información futura.
 
-\notes{Hacer alusión al libro}
+Algunas características requieren un número mínimo de velas para poder calcularse, por ejemplo, indicadores que necesitan 12 o 14 observaciones
+iniciales, lo que genera un pequeño bloque de filas incompletas al comienzo de la serie. Estas primeras filas se eliminan sin impacto relevante, ya
+que representan una fracción insignificante del total de datos disponibles. Debido a esta dependencia de ventanas largas, no resulta viable reiniciar
+los indicadores al comienzo de cada día, una idea inicialmente considerada. Además, dado que la estrategia es multidía, reiniciar los cálculos diarios
+tampoco tendría sentido operativo, pues rompería la continuidad temporal necesaria para capturar movimientos prolongados.
 
-En un inicio añadí solo todas las features que aparecian en el libro de \cite{Trullas2024} pero decidí añadir más para tener mayor variedad con
-features más complejas.
+En una primera versión del proyecto se incluyeron únicamente las características propuestas en \cite{Trullas2024}. Sin embargo, con el objetivo de
+enriquecer la representación del mercado y mejorar la capacidad predictiva de los modelos, se decidió ampliar el conjunto incorporando características
+adicionales de mayor complejidad, incluyendo indicadores estructurales, relaciones entre activos y métricas derivadas de swing charts.
 
 \subsection{Selección de características}
 
-Una vez calculadas todas las características es necesario reducir ese número porque es posible que muchas de ellas estén interrelacionadas.
+Una vez calculadas todas las características, es necesario reducir su número, ya que muchas de ellas pueden estar altamente correlacionadas o aportar
+información redundante. Para ello se aplican varias técnicas complementarias.
 
-Para ello se aplican varias técnicas, empezando por la más básica, un filtro de alta correlación, además de eliminar las características que puedan
-predecir el futuro por data leakage, las no cíclicas o no estacionarias pueden confundir a los modelos indicando que un valor que quizás representaba
-el día de la semana sea considerado como más importante a mayor número.
+El primer paso consiste en eliminar las características con alta correlación entre sí, evitando así que el modelo reciba señales duplicadas que puedan
+inducir sobreajuste. También se descartan aquellas variables que, por su definición, podrían introducir data leakage, así como las características no
+cíclicas o no estacionarias que podrían confundir al modelo, por ejemplo, valores que aumentan con el tiempo y que podrían ser interpretados
+erróneamente como señales predictivas.
 
-También filtro usando el algorítmo de LASSO usando un modelo de aprendizaje automático clásico de sklearn que permité mayor explicabilidad, de este
-modo reduzco a la mitad el número de características al decidir quedame con el 50 por ciento de características más importantes.
+Posteriormente se aplica un filtrado mediante el algoritmo LASSO, utilizando un modelo clásico de scikit-learn que ofrece una mayor interpretabilidad.
+Este método permite identificar las características con mayor peso explicativo y seleccionar aproximadamente el 50\% más relevante, reduciendo de
+forma significativa la dimensionalidad del conjunto de datos.
 
-Todo esto ayuda a reducir el problema de la maldición de la dimensionalidad, que aunque no tiene el efecto negativo que sí tiene sobre modelos de
-aprendizaje automático clásicos sigue siendo útil para evitar sobreajuste y disminuye los tiempos de entrenamiento.
+En conjunto, estos pasos ayudan a mitigar la maldición de la dimensionalidad. Aunque este fenómeno afecta especialmente a los modelos clásicos de
+aprendizaje automático, también resulta beneficioso en arquitecturas más complejas, ya que reduce el riesgo de sobreajuste y disminuye los tiempos de
+entrenamiento.
 
 \subsection{Definición y cálculo de la clase objetivo}
 
-Para este proyecto se ha decidido usar el método de la triple barrera, las tres barreras son, SL (Stop Loss), TP (Take Profit) y la barrera temporal.
-A partir de un límite temporal se define qué pasa primero, salta SL en el caso en el que el precio alcance un nivel de pérdida predefinido, TP es lo
-mismo pero con beneficio, y en caso de no llegar en el tiempo definido se considera que ha tocado la barrera del tiempo, en el caso de que en una vela
-se haya llegado a SL y TP nos ponemos en el peor de los caso y decidimos que ha sido SL. Los umbrales se definen por el ATR multiplicado por un valor
-determinado.
+Para este proyecto se ha decidido usar el método de la \textit{triple barrera}. Este enfoque define tres posibles eventos que pueden ocurrir tras la
+apertura de una operación: la activación del \textit{Stop Loss} (SL), la activación del \textit{Take Profit} (TP) o el vencimiento de una barrera
+temporal. A partir de un horizonte fijo, se determina cuál de las tres barreras es alcanzada primero. Si el precio toca el nivel de pérdida
+predefinido, se clasifica como SL; si alcanza el nivel de beneficio, como TP; y si no se produce ninguno de los dos movimientos dentro del tiempo
+establecido, se asigna la clase correspondiente a la barrera temporal. En el caso de que en una misma vela se alcancen simultáneamente SL y TP, se
+adopta un criterio conservador asignando el peor de los dos escenarios, es decir, SL. Los umbrales de SL y TP se definen como múltiplos del ATR, lo
+que permite adaptarlos a la volatilidad del activo.
 
-Aunque en un inicio se esperaba realizar una predicción de patrones de swing durante el periodo de investigación me dí cuenta de que los swings tenían
-diferentes desventajas, partiendo por el hecho de que necesitan velas de confirmación, normalmente 2, lo que en mi caso se traducen a tener un retraso
-de 8 horas. Por ello he decidido optar por esta otra opción. Aún así los usaré como características para entrenar los modelos.
+Durante la fase inicial del proyecto se consideró la posibilidad de predecir directamente patrones de \textit{swings}. Sin embargo, estos presentan
+varias limitaciones, entre ellas la necesidad de velas de confirmación (habitualmente dos), lo que introduce un retraso operativo significativo, en
+este caso, aproximadamente ocho horas. Por este motivo se descartó su uso como objetivo de predicción, aunque sí se mantienen como características
+relevantes para el entrenamiento de los modelos.
 
-Además de generar una etiqueta discreta también se guarda información del retorno, en mi caso el retorno logarítmico, información que será útil para
-la capa de regresión, como se explicará más adelante en la próxima sección. Además, permite evaluar mejor la clasificación ya que no es lo mismo un
-retorno del 0.2\% que del 2\%. Se usa el retorno logarítmico porque ofrece aditividad temporal, simetría y normalidad aproximada y permite
-comparaciones entre activos con volatilidades distintas.
+Además de la etiqueta discreta derivada de la triple barrera, se calcula también el retorno asociado al movimiento, concretamente el retorno
+logarítmico. Esta información resulta útil para la capa de regresión descrita en la siguiente sección y permite evaluar con mayor precisión la calidad
+de las señales: no es equivalente un acierto con un retorno del 0.2\,\% que uno del 2\,\%. El retorno logarítmico se emplea por sus propiedades
+matemáticas: aditividad temporal, simetría, aproximación a la normalidad y comparabilidad entre activos con volatilidades distintas.
 
-\notes{definir el reto: lista de todos los targets posibles además de long short nada, otros de clasificación, regresión, etc y lo que conlleva cada
-uno}
-
-\notes{Definir los swings, y las estructuras que más se usan}
+En términos generales, el espacio de posibles objetivos es amplio: etiquetas binarias (sube/baja), ternarias (SL/TP/tiempo), regresión de retornos,
+clasificación de magnitud del movimiento, predicción de swings o incluso estimación de probabilidad de tocar cada barrera. Cada uno de estos enfoques
+implica distintos requisitos de modelado y diferentes riesgos de \textit{data leakage}.
 
 \subsection{Aprendizaje supervisado}
 
 Llegados al núcleo del proyecto, el siguiente paso consiste en definir las arquitecturas de los modelos de aprendizaje supervisado que se van a
-utilizar. La arquitectura se resume en un sistema de dos modelos paralelos con tres capas secuenciales y acoplados mediante un mecanismo de
-soft-voting que combina las predicciones de cada etapa.
+emplear. La arquitectura se resume en un sistema de dos modelos paralelos con tres capas secuenciales y acoplados mediante un mecanismo de
+soft-voting que combina las predicciones de cada etapa de clasificación.
 
 Las dos primeras etapas son de clasificación binaria y la tercera de regresión. Ambos modelos están definidos usando PyTorch. Cada uno de los modelos
-elegidos tienen una función, LSTM está orientado a capturar dependencias a largo plazo y patrones más suaves en al secuencia, mientras que GRU tiende
-a reaccionar mejor a cambios rápidos, transiciones de régimen y estructuras más volátiles.
+seleccionados tiene una función, LSTM está orientado a capturar dependencias a largo plazo y patrones más suaves en al secuencia, mientras que GRU
+tiende a reaccionar mejor a cambios rápidos, transiciones de régimen y estructuras más volátiles.
 
-En un inicio para las dos fases de clasificación se decide realizar una votación equitativa, y si la media supera un umbral indicado para cada fase se
-pasa a la siguiente. Pero después decidí añadir la tercera capa para dinamizar la votación, usando el retorno esperado como ponderación, por lo que si
-uno de los modelos considera que va a haber mayor retorno se le da mayor peso a su predicción. El retorno se calcula a X velas.
+En una primera versión con solo las dos fases de clasificación se opta por realizar una votación equitativa, y si la media supera un umbral indicado
+para cada fase se avanza a la siguiente. Posteriormente se incorporó la tercera capa de regresión para dinamizar la votación, usando el retorno
+esperado como ponderación. De este modo, si uno de los modelos estima un retorno significativamente mayor, su predicción adquiere más peso en la
+decisión final. El retorno se calcula a un horizonte de 12 velas.
 
-Había pensado también en usar modelos de aprendizaje automático clásicos porque pueden captar patrones que no tienen dependencias temporales, como
-XGBoost y Random Forest. Pero he querido centrarme en los modelos profundos porque se adaptan mejor a las secuencias.
+Inicialmente se consideró complementar estos modelos con algoritmos clásicos como XGBoost o Random Forest, capaces de capturar relaciones no
+temporales. Sin embargo, se decidió centrar el estudio en arquitecturas profundas recurrentes, más adecuadas para 
 
-\begin{table}[H]
-\caption{Tabla comparativa de parámetros de los modelos}
-\label{table1mufaf_1}
-\begin{center}
-\begin{tabular}{ | c | c | c | c | c | }
-\hline
-1 & 2 & 3 & 4 & 5 \\
-\hline
-\end{tabular}
-\end{center}
-\end{table}
+\subsubsection{Arquitectura de los modelos}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img de las capas de las redes LSTM}
-    \label{fig_mlp_11}
-\end{figure}
+Los tres modelos LSTM comparten la misma estructura general:
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img de las capas de las redes GRU}
-    \label{fig_mlp_12}
-\end{figure}
+\begin{itemize}
+    \item \textbf{Capa recurrente}: LSTM con 2 capas, 128 unidades ocultas, \texttt{batch\_first=True} y \texttt{dropout=0.3}.
+    \item \textbf{Extracción del estado}: se utiliza el último \textit{hidden state} $h_{t}$ de la última capa.
+    \item \textbf{Cabeza densa}:
+    \begin{itemize}
+        \item Lineal(128 → 64), GELU, Dropout(0.3)
+        \item Lineal(64 → 32), GELU, Dropout(0.2)
+        \item Lineal(32 → salida)
+    \end{itemize}
+\end{itemize}
 
-La decisión de usar dos etapas de clasificación es debido al desbalanceo de clases, al generar el valor a predecir me doy cuenta de que
-aproximadamente el 70\% de las velas terminan tocando la barrera del tiempo y los otros dos se reparten 15\% cada uno, en un inicio probé modelos con
-salida triple pero debido al desbalance no daba muy buenos resultados incluso modificando los pesos de los valores dando mayor peso a ambas barreras
-no temporales no habían resultados favorables por ello decidí pasar a dos fases binarias, una primera predice si hay movimiento, si toca cualquiera de
-las dos barreras laterales y en caso de superar un umbral que se establece después, se pasa a la siguiente fase donde se decide la dirección del
-movimiento, aquí también se decide más adelante el umbral a partir del cuál se considera valido, existen dos opciones de decisión, que exista un
-umbral mínimo o que con que uno supere al otro por más mínima diferencia se decanta por ese, al final después de probar me decanté por añadir un
-umbral mínimo del 0.55.
+Las salidas dependen del nivel:
+\begin{itemize}
+    \item \textbf{L1}: Clasificación binaria (HOLD / ACCIÓN)
+    \item \textbf{L2}: Clasificación binaria (SELL / BUY)
+    \item \textbf{L3}: Regresión (retorno logarítmico)
+\end{itemize}
 
-\notes{Se me ha olvidado qué queria poner de más}
+Los modelos GRU son análogos a los LSTM, sustituyendo la capa recurrente por una GRU con la misma configuración (2 capas, 128 unidades, dropout).
 
-\notes{Explicar el tema de los umbrales}
+\subsubsection{Motivación de las dos fases de clasificación}
 
-\notes{Explicar entrenamiento}
+La decisión de utilizar dos etapas de clasificación se debe al fuerte desbalanceo presente en el objetivo generado mediante la triple barrera.
+Aproximadamente el 60\% de las velas terminan tocando la barrera del tiempo y mientas que las otras dos barreras solo representan un 20\% cada una. En
+un inicio se probaron modelos con salida ternaria, pero incluso ajustando los pesos de las clases, los resultados no fueron satisfactorios.
 
-Antes de pasar al entrenamiento es necesario calcular los hiperparámetros idóneos para cada entrenamiento teniendo en cuenta el tamaño de cada dataset, el periodo de muestreo y el
-número de velas a futuro a predecir. Se obtienen así los siguiente hiperparámetros.
+Por ello se optó por dividir el problema en dos fases binarias:
+\begin{enumerate}
+    \item \textbf{L1}: ¿Existe movimiento significativo? (¿toca SL o TP?)
+    \item \textbf{L2}: En caso afirmativo, ¿en qué dirección ocurre el movimiento?
+\end{enumerate}
+
+En ambas fases se evalúa la probabilidad predicha y se compara con un umbral. Aunque inicialmente se utilizaron valores fijos, finalmente ambos
+umbrales se seleccionaron mediante un proceso de grid search diseñado para maximizar el \textit{F1-score} en cada nivel. También se evaluó la
+posibilidad de decidir la clase únicamente por diferencia relativa entre probabilidades, pero el uso de un umbral explícito, optimizado para cada
+fase, proporcionó una mayor estabilidad y un mejor equilibrio entre precisión y recall.
+
+Antes de pasar al entrenamiento es necesario calcular los hiperparámetros idóneos para cada entrenamiento teniendo en cuenta el tamaño de cada
+dataset, el periodo de muestreo y el número de velas a futuro a predecir. Se obtienen así los siguiente hiperparámetros.
 
 \begin{description}
     \item[\textbf{lookback}] \hfill \\
@@ -467,17 +473,20 @@ número de velas a futuro a predecir. Se obtienen así los siguiente hiperparám
     Número de velas de separación entre el final de una iteración y el comienzo de la siguiente. Sirve para evitar filtrado de datos
 \end{description}
 
-El entrenamiento de los modelos se hace para cada modelo por separado, entrenando las tres fases juntas, se usa un sistema de walk forward con moving
-window, que es la técnica requerida para entrenamiento con series temporales. A diferencia del entrenamiento normal este método respeta la estructura
-temporal de los datos y evita data leakage.
+\subsubsection{Entrenamiento de los modelos}
 
-El walk forward (rolling forecast origin) consiste en entrenar el modelo en un bloque de inicial de datos históricos y evaluarlo en el siguiente
-bloque inmediatamente posterior y después se avanza hacia el siguiente bloque dejando algunas velas de margen y se repite este proceso hasta completar
-el entrenamiento con todos los datos posibles. La variante con moving window define cuántos datos históricos se usan en cada entrenamiento, en mi caso
-es una ventana de tamaño fija, existe otra opción llamada expanding window donde la ventana va aumentando de tamaño.
+El entrenamiento de los modelos se realiza de forma independiente para cada arquitectura por separado, entrenando las tres fases juntas. Para ello, se
+emplea un sistema de \textit{walk forward} con \textit{moving window}, es la técnica estándar para entrenamiento con series temporales. A diferencia
+del entrenamiento normal este método respeta la estructura temporal de los datos y evita data leakage.
 
-En las series temporales no sirve el cross validation clásico porque mezcla aleatoriamente los datos, divide los folds sin respetar el orden temporal,
-esto provoca que el modelo pueda entrenar con datos del futuro introudciendo data leakage masivo.
+El método \textit{walk forward} (también conocido como \textit{rolling forecast origin}) consiste en entrenar el modelo en un bloque de inicial de
+datos históricos y evaluarlo en el siguiente bloque inmediatamente posterior. A continuación se avanza hacia el siguiente bloque dejando algunas
+velas de margen y se repite este proceso hasta completar el entrenamiento con todos los datos posibles. La variante utilizada, \textit{moving window},
+mantiene un tamaño fijo de ventana en cada iteración, a diferencia de la opción \textit{expanding window}, donde la ventana crece progresivamente.
+
+Este enfoque es imprescindible porque el \textit{cross-validation} clásico no es válido en series temporales: al mezclar aleatoriamente los datos y
+dividirlos en \textit{folds} sin respetar el orden temporal, permite que el modelo entrene con información futura, introduciendo un
+\textit{data leakage} masivo.
 
 \begin{figure}[H]
     \centering
@@ -486,574 +495,470 @@ esto provoca que el modelo pueda entrenar con datos del futuro introudciendo dat
     \label{fig_mlp_16}
 \end{figure}
 
-Una vez explicado el método a utilizar y después de obtener estos datos pasamos a crear los dataset que se van a usar en cada época teniendo en cuenta
-el lookback calculado en el paso anterior.
+\review{No olvidar}
 
-Pasamos al entrenamiento en sí, como se mencionaba antes, entrenamos todas las capas a la vez pero de manera independiente. Lo primero que se hace es
-para cada etapa separar los datos en train y test, acto seguido se usa un scaler para escalar los datos de entrenamiento, se hace en este orden para
-evitar leakage que ocurriria si se aplicase el scaler directamente a train y test. Se entrena primero L1 y después L2 y por último L3. El resultado
-del entrenamiento es un dataset con la predicción de cada capa y la confianza que tiene en dicha predicción.
+Una vez definidos los hiperparámetros, se generan los datasets correspondientes a cada iteración del walk forward, incorporando el \textit{lookback}
+calculado previamente. Para cada nivel del modelo se separan los datos en entrenamiento y prueba, y se aplica un \textit{scaler} ajustado
+exclusivamente con los datos de entrenamiento, evitando así cualquier fuga de información. El orden de entrenamiento es secuencial: primero L1,
+después L2 y finalmente L3. El resultado de cada iteración es un conjunto de predicciones y probabilidades asociadas a cada nivel.
 
-Depués de entrenar se decide primero buscar los umbrales de confianza adecuados para las dos primeras capas, ya que la tercera al ser una capa de
-regresión no cuenta con una confianza. Se usa la métrica de aprendizaje automático de f1 macro ya que no se ve afectada por el desbalance de clases
-como sí ocurre con accuray, precision o recall.
+Tras completar el entrenamiento, se procede a seleccionar los umbrales óptimos para las dos primeras capas de clasificación. Dado que la tercera capa
+es de regresión, no dispone de probabilidad asociada. Los umbrales se determinan mediante un proceso de \textit{grid search} orientado a maximizar el
+\textit{F1-score macro}, métrica adecuada para escenarios con fuerte desbalanceo de clases, a diferencia de \textit{accuracy}, \textit{precision} o
+\textit{recall}, que pueden resultar engañosas en este contexto.
 
-Se guardan los modelos en archivos pth, junto al último scaler, ya que el scaler se actualiza en cada ventana, y por lo tanto sus parámetros cambian
-(media, desviación estandar, etc). Además, se guardan las features usadas para poder filtrar después durante el backtest y la operación, y los
-parámetros del modelo usado, como el umbral de confianza. 
+Los modelos entrenados se guardan en archivos \texttt{.pth}, junto con el último \textit{scaler} utilizado en la ventana correspondiente. Esto es
+necesario porque el \textit{scaler} se recalcula en cada iteración y sus parámetros (mediana, IQR, etc.) cambian con el tiempo. También se almacenan
+las características empleadas, para poder reproducir el filtrado durante el backtest y la operativa real, así como los parámetros del modelo,
+incluyendo los umbrales seleccionados.
 
-El scaler que he decidido usar es el RobustScaler, ya que ofrece varias ventajas, usa la mediana y el rango intercuartil (IQR) para escalar los datos,
-lo que lo hace resistente a valores atípicos conocidos como cisnes negros, y a cambios bruscos del mercado. Existen otras opciones como StandarScaler
-y MinMaxScaler, el primero produce escalados inestables y el segundo usa un rango fijo.
+El \textit{scaler} elegido es \textbf{RobustScaler}, debido a que utiliza la mediana y el rango intercuartil (IQR), lo que lo hace resistente a
+valores atípicos y a movimientos extremos del mercado, conocidos como \textit{cisnes negros}. Alternativas como \textit{StandardScaler} o
+\textit{MinMaxScaler} presentan desventajas: el primero es sensible a outliers y el segundo fija un rango que puede volverse inestable ante cambios de
+régimen.
 
-La votación solo ocurre si ambos modelos pasan a la segunda fase y predicen la misma dirección si no no se hace nada.
+La votación entre modelos solo se realiza si ambos superan la primera fase y coinciden en la dirección predicha en la segunda. En caso contrario, no
+se genera señal. La ponderación final incorpora el retorno estimado por la capa de regresión, de modo que predicciones con mayor retorno esperado
+tienen mayor peso.
 
-Una de mis ideas es que a futuro se puedan ir actualizando tanto el modelo como el scaler de manera semanal, pero esto se explicará más adelante. La
-idea es poder adaptarse mejor a los cambios de régimen del mercado.
+Una posible extensión futura consiste en actualizar tanto el modelo como el \textit{scaler} de manera periódica (por ejemplo, semanalmente),
+permitiendo que el sistema se adapte mejor a cambios de régimen del mercado. Esta actualización no solo implicaría volver a entrenar desde cero, sino
+aplicar un proceso de \textit{fine tuning} sobre los modelos ya existentes. El \textit{fine tuning} permite ajustar los pesos previamente aprendidos
+utilizando únicamente los datos más recientes, reduciendo el coste computacional y acelerando la adaptación del modelo a nuevas condiciones de
+volatilidad, liquidez o comportamiento direccional. De este modo, el sistema podría mantener la estabilidad de los patrones aprendidos a largo plazo
+mientras incorpora información fresca del mercado, logrando un equilibrio entre memoria histórica y capacidad de reacción.
 
-\notes{Faltan cosas por explicar}
+\subsubsection{Análisis del entrenamiento}
 
-Anteriormente se ha mencionado el uso de modelos clásicos para permitir mayor explicabilidad, en deep learning existe la opción de usar Shap
-DeepExplainer para ver el peso de las diferentes características en la predicción de un modelo pero aunque sea una herramienta potente para evitar que
-las redes neuronales sean cajas negras, Shap asume que las características son independientes entre sí. Además, Shap es costoso y proporciona
-explicaciones locales, por cada predicicón, por lo que no necesariamente da una visión global.
+Una vez finalizado el entrenamiento de los modelos, es necesario evaluar su rendimiento utilizando métricas tanto de clasificación como de regresión.
+El objetivo es comprobar no solo la capacidad predictiva de cada nivel, sino también la estabilidad del entrenamiento y la coherencia de las
+predicciones.
 
-\subsection{Aprendizaje no supervisado}
+En el caso de las dos primeras capas, correspondientes a problemas de clasificación binaria, se emplean métricas estándar como el
+\textit{classification report}, que incluye precisión, recall y F1-score por clase. Además, se calculan métricas adicionales que permiten evaluar
+distintos aspectos del comportamiento del modelo:
 
-Además de usar modelos de aprendizaje supervisado tenía la idea de usar modelos no supervisados para varias tareas.
+\begin{itemize}
+    \item \textbf{AUC-ROC}: mide la capacidad del modelo para separar ambas clases en distintos umbrales.
+    \item \textbf{Curva de fiabilidad (reliability curve)}: evalúa el grado de calibración de las probabilidades predichas.
+    \item \textbf{Matriz de confusión con conteo}: permite analizar los aciertos y errores por clase.
+    \item \textbf{Recall y F1-score por clase}: especialmente relevantes en escenarios con fuerte desbalanceo.
+    \item \textbf{Pérdida de entrenamiento y prueba por fold}: se registra la pérdida de la última época para cada ventana del \textit{walk forward},
+    lo que permite detectar sobreajuste o inestabilidad.
+\end{itemize}
 
-En primer lugar, para agrupar los diferentes activos en diferentes grupos. En vez de realizar agrupaciones arbitrarias, por ejemplo, todas las monedas
-juntas, dejo que el sistema decida cuales son los activos más parecidos. De este modo podría generar más características derivadas de la comparación
-de los activos, basandome en el concepto de \textit{Pairs Trading} donde se comparan un par de activos que se saben que están correlados y
-cointegrados, y si uno de ellos sube más que el otro se abre una posición en corto y si uno de ellos baja más que el otro se abre una posición en
-largo.
+Para la tercera capa, dedicada a la regresión del retorno logarítmico, se emplea un conjunto de visualizaciones y métricas que permiten evaluar la
+calidad de las predicciones:
 
-El problema que le encuentro a este primer caso de uso es la disparidad de datos, por una parte, los datos históricos proporcionados no son de las
-mismas fechas, esto se soluciona fácilmente al recortar los datos más antiguos ya que además podrían causar problemas a los modelos. Pero donde
-existen más problemas es el tema de los horarios de las diferentes bolsas, la idea sería usar la función de rellenado hacia adelante para los
-momentos donde faltasen datos de alguno de los futuros. Otra opción sería comparar cada futuro con el centroide (el centro de cada cluster) del
-cluster al que pertenece cada futuro y el resto de centroides, de este modo se puede evitar problemas por la disparidad del número de futuros en cada
-cluster.
+\begin{itemize}
+    \item \textbf{Gráfico predicción vs. valor real (scatter plot)}: muestra la relación entre el retorno predicho y el observado.
+    \item \textbf{Distribución del error}: permite analizar la simetría y dispersión de los residuos.
+    \item \textbf{Densidad conjunta}: evalúa la concentración de predicciones en distintas zonas del espacio real-predicho.
+    \item \textbf{Residual vs. fitted}: ayuda a detectar patrones no capturados por el modelo o heterocedasticidad.
+\end{itemize}
 
-Además de este problema está la necesidad de tomar la decisión de qué tipo de modelo no supervisado usar, si uno donde se predefine el número de
-clusters o uno donde el propio modelo decide el número (Decidir entre modelos paramétricos (k fijo) o modelos no paramétricos (k variable))
-
-Y el problema principal sería sobre qué agrupar qué características usar para la agrupación.
-
-El segundo uso es el de segmentar los régimenes de mercado. Con esta información hay dos opciones de acción, por una parte, usarlo como una
-característica más para complementar al resto, aunque puede no ser tan útil al usar modelos de aprendizaje supervisado profundo que al estar diseñados
-para manejar series temporales pueden inferir los régimenes de mercado por si solos. La segunda opción es usar la diferencia de régimenes para
-entrenar modelos dedicados para cada régimen consiguiendo modelos más especializados en cada régimen. Este uso tiene los mismos problemas que el
-primero.
-
-% Otra utilidad relacionada con la agrupación es poder comparar modelos entrenados para otros activos pero aplicados a un activo del mismo grupo para
-% ver si es mejor. Aunque tiene como problemas que el clustering no garantiza similitud operativa.
-
-% \todo{Decidir el algoritmo a usar para UL}
-% \review{Prueba cuadro \textbackslash review}
-
-\subsection{Análisis de resultados de entrenamiento}
-
-\begin{figure}[H]
-\centering
-
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_LSTM.png}
-    
-    (a) Classification report
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_LSTM.png}
-    
-    (b) ROC y reliability curve
-\end{minipage}
-
-\vspace{0.3cm}
-
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_LSTM.png}
-    
-    (c) MAE y regresión
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_LSTM.png}
-    
-    (d) Loss
-\end{minipage}
-
-\caption{Resultados obtenidos por el modelo LSTM.}
-\label{fig:lstm_results}
-
-\end{figure}
-
-\begin{figure}[H]
-\centering
-
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_GRU.png}
-    
-    (a) Classification report
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_GRU.png}
-    
-    (b) ROC y reliability curve
-\end{minipage}
-
-\vspace{0.3cm}
-
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_GRU.png}
-    
-    (c) MAE y regresión
-\end{minipage}
-\hfill
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_GRU.png}
-    
-    (d) Loss
-\end{minipage}
-
-\caption{Resultados obtenidos por el modelo GRU.}
-\label{fig:gru_results}
-
-\end{figure}
-
-\todo{Añadir curva auc roc para las dos capas de clasificación}
-
-\todo{Añadir curva loss por fold}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con evolución de las métricas dependiendo de los umbrales}
-    \label{fig_mlp_18}
-\end{figure}
-
-% \begin{figure}[H]
-%     \centering
-%     \includegraphics[width=\textwidth]{./img/loss.png}
-%     \caption{Evolución de la función de pérdida en la última época de cada fold}
-%     \label{fig_mlp_21}
-% \end{figure}
-
-Tras el entrenamiento de los modelos es necesario analizar qué tan buenos son usando métricas tanto de clasificación como de regresión.
-
-En el primero caso, para clasificación, existe el classification report que nos da un conjunto de las métricas más populares. Para regresión
-calculamos las métricas.
+En conjunto, estas métricas permiten obtener una visión completa del rendimiento del sistema: desde la capacidad de clasificación en las dos primeras
+fases hasta la calidad de la estimación del retorno en la tercera. Además, el análisis por \textit{folds} del \textit{walk forward} proporciona
+información sobre la estabilidad temporal del modelo y su capacidad para generalizar en distintos periodos del histórico.
 
 \subsection{Backtest de las predicciones}
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con una simulación del Backtest}
-    \label{fig_mlp_5}
-\end{figure}
+Una vez verificados los resultados del entrenamiento, se procede a realizar el \textit{backtest} con el objetivo de evaluar el comportamiento del
+sistema en condiciones lo más cercanas posible a la operativa real. Aunque esta simulación no incorpora ciertos elementos propios del mercado, como la
+latencia, constituye un punto de partida sólido para analizar la robustez de las señales generadas por los modelos.
 
-Después de comprobar que nos convencen los resultados pasamos al backtest, la idea es tener unas condiciones lo más parecido a simular una operación
-real con los modelos solo que carece de algunas desventajas como la latencia o el spread. Aún así es un muy punto de partida para ver qué tal se
-deselvuenve el modelo. En este caso las métricas a usar son Max Drawdown, Sharpe Ratio y Alpha
+El backtest se ejecuta utilizando datos con resolución de 4 horas debido a limitaciones de la API empleada para la descarga. Sobre estos datos se
+prueban cuatro estrategias operativas:
 
-\notes{Ver si se puede meter un contador con racha de victorias y derrotas}
+\subsubsection{Fase 1: Selección de predicciones válidas y cálculo de PnL teórico}
 
-\begin{description}
-    \item[Max Drawdown] 
-    \item[Sharpe Ratio] 
-    \item[Alpha] 
-\end{description}
+En esta fase se generan las predicciones finales y se calcula el PnL teórico de cada una. A partir de esta información se definen cuatro criterios
+alternativos para decidir qué predicciones se consideran válidas:
 
-El backtest se hace con datos con intervalo de 30 mins porque la API tiene limitaciones de timeout
+\setlength{\LTleft}{-20cm plus 1fill}
+\setlength{\LTright}{-20cm plus 1fill}
 
-Se han probado cuatro estratégias de operación
-
-\begin{itemize}
-    \item Una única posición abierta como máximo y de tamaño 1
-    \item Se pueden varias posiciones seguidas hasta 5 pero sigue siendo de tamaño 1
-    \item Una única posición abierta como máximo y de tamaño variable hasta 5
-    \item Se pueden varias posiciones seguidas hasta 25 y de tamaño variable hasta 5
-\end{itemize}
-
-\begin{table}[H]
-\centering
-\begin{tabular}{|c|c|c|}
-\hline
-& \begin{tabular}{c}
-\textbf{Scale-in:} \\
-\textbf{No}
-\end{tabular} & \begin{tabular}{c}
-\textbf{Scale-in:} \\
-\textbf{Sí}
-\end{tabular} \\ \hline
-
-\begin{tabular}{c}
-\textbf{Sizing dinámico:} \\
-\textbf{No}
-\end{tabular}
-& 
-\begin{tabular}{c}
-Modalidad 1 \\ 
-1 posición \\ 
-tamaño fijo (1)
-\end{tabular}
-&
-\begin{tabular}{c}
-Modalidad 2 \\ 
-hasta 5 posiciones \\ 
-tamaño fijo (1)
-\end{tabular}
-\\ \hline
-
-\begin{tabular}{c}
-\textbf{Sizing dinámico:} \\
-\textbf{Sí}
-\end{tabular}
-&
-\begin{tabular}{c}
-Modalidad 3 \\ 
-1 posición \\ 
-tamaño variable (<=5)
-\end{tabular}
-&
-\begin{tabular}{c}
-Modalidad 4 \\ 
-hasta 25 posiciones \\ 
-tamaño variable (<=5)
-\end{tabular}
-\\ \hline
-
-\end{tabular}
-\caption{Cuadrícula de modalidades operativas según uso de scale-in y sizing dinámico.}
-\end{table}
-
-Hay dos fasses en el Backtest, primero se decide qué considerar buena predicción, hay 4 casos
-
-\begin{table}[H]
-\centering
-\begin{tabular}{|c|c|c|}
+\begin{longtable}{|c|c|c|}
 \hline
 & \textbf{Long y Short} & \textbf{Solo Long} \\ \hline
+\endfirsthead
+
+\hline
+& \textbf{Long y Short} & \textbf{Solo Long} \\ \hline
+\endhead
 
 \textbf{Todas las predicciones}  & 
 \begin{tabular}{c}
-Modalidad 1 \\ 
-todas las predicciones que han \\ 
-superado los umbrales definidos en \\
-el entrenamiento
+Caso 1 \\ 
+Se aceptan todas las predicciones \\ 
+que superan los umbrales de L1 y L2
 \end{tabular}
 &
 \begin{tabular}{c}
-Modalidad 2 \\ 
-hasta 5 posiciones \\ 
-tamaño fijo (1)
+Caso 2 \\ 
+Igual que el Caso 1, pero \\ 
+solo se permiten operaciones long
 \end{tabular}
 \\ \hline
+
 \begin{tabular}{c}
-\textbf{Predicciones que superar} \\
+\textbf{Predicciones que superan} \\
 \textbf{un umbral más estricto}
 \end{tabular}
 &
 \begin{tabular}{c}
-Modalidad 3 \\ 
-1 posición \\ 
-tamaño variable (<=5)
+Caso 3 \\ 
+Solo se aceptan predicciones \\ 
+con retorno esperado $|L3|$ superior \\ 
+al percentil 70 (quantile 0.7)
 \end{tabular}
 &
 \begin{tabular}{c}
-Modalidad 4 \\ 
+Caso 4 \\ 
+Igual que el Caso 3, pero \\ 
+solo se permiten operaciones long
+\end{tabular}
+\\ \hline
+
+\caption{Criterios de selección de predicciones válidas en la Fase 1 del backtest.}
+\end{longtable}
+
+El percentil 70 se calcula como:
+
+\[
+\text{threshold}_{L3} = \left| \text{L3} \right|_{0.7}
+\]
+
+Con estos cuatro criterios se calcula el Sharpe Ratio teórico de cada conjunto de predicciones antes de pasar a la fase operativa.
+
+\subsubsection{Fase 2: Backtest operativo con cuatro modalidades}
+
+Una vez seleccionadas las predicciones válidas, se ejecuta el backtest operativo. En esta fase sí se simula la apertura y cierre de posiciones,
+aplicando cuatro modalidades distintas:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+& \textbf{Scale-in: No} & \textbf{Scale-in: Sí} \\ \hline
+
+\textbf{Sizing dinámico: No}
+& 
+\begin{tabular}{c}
+Estrategia 1 \\ 
+1 posición máxima \\ 
+tamaño fijo (1)
+\end{tabular}
+&
+\begin{tabular}{c}
+Estrategia 2 \\ 
+hasta 5 posiciones \\ 
+tamaño fijo (1)
+\end{tabular}
+\\ \hline
+
+\textbf{Sizing dinámico: Sí}
+&
+\begin{tabular}{c}
+Estrategia 3 \\ 
+1 posición máxima \\ 
+tamaño variable ($\leq$5)
+\end{tabular}
+&
+\begin{tabular}{c}
+Estrategia 4 \\ 
 hasta 25 posiciones \\ 
-tamaño variable (<=5)
+tamaño variable ($\leq$5)
 \end{tabular}
 \\ \hline
 
 \end{tabular}
-\caption{Cuadrícula de modalidades operativas según uso de scale-in y sizing dinámico.}
+\caption{Modalidades operativas utilizadas en la Fase 2 del backtest.}
 \end{table}
 
-% \begin{table}[h]
-% \begin{tabularx}{\textwidth}{|c|X|X|}
-% \textbf{Todas las predicciones}          & Opret Server & Hola\\
-% \begin{tabular}{c}
-% \textbf{Predicciones que superar} \\
-% \textbf{un umbral más estricto}
-% \end{tabular}               & At oprette en server med bestemte regler som tillader folk at spille sammen. More Text more text More Text & Adiós\\
-% \end{tabularx}
-% \end{table}
+\subsubsection{Métricas de evaluación}
+
+Para evaluar el rendimiento se utilizan las siguientes métricas:
+
+\begin{description}  
+    \item[\textbf{Max Drawdown}]  \hfill \\
+    El \textit{Max Drawdown} mide la mayor caída relativa del capital desde un máximo histórico hasta un mínimo posterior. Es una métrica fundamental
+    para evaluar el riesgo, ya que cuantifica la peor racha de pérdidas acumuladas que puede experimentar la estrategia. Un drawdown elevado indica
+    periodos prolongados de pérdidas y menor estabilidad operativa.
+
+    \[\text{MDD} = \max_{t} \left( \frac{\max_{s \le t} \text{Equity}(s) - \text{Equity}(t)}{\max_{s \le t} \text{Equity}(s)} \right)\]
+
+    \item[\textbf{Sharpe Ratio}]   \hfill \\
+    El \textit{Sharpe Ratio} mide el retorno ajustado por riesgo, comparando el rendimiento medio del sistema con la volatilidad de sus retornos. Un
+    Sharpe alto indica que la estrategia genera beneficios consistentes con una variabilidad relativamente baja. En este proyecto, el Sharpe se
+    calcula utilizando como capital inicial un valor equivalente a \textbf{10 veces el \textit{initial margin}} del activo, lo que permite normalizar
+    la métrica entre activos con diferentes requisitos de margen.
+
+    \[\text{Sharpe} = \frac{E[R_p]}{\sigma_p}\]
+
+    \item[\textbf{Calmar Ratio}]   \hfill \\
+    El \textit{Calmar Ratio} relaciona el retorno anualizado con el riesgo máximo asumido (Max Drawdown). A diferencia del Sharpe, que se basa en la
+    volatilidad, el Calmar penaliza directamente las caídas profundas del capital. Es especialmente útil en estrategias con drawdowns prolongados o
+    distribuciones de retornos no gaussianas.
+
+    \[\text{Calmar} = \frac{\text{Retorno anualizado}}{\text{Max Drawdown}}\]
+
+    \item[\textbf{CAGR (Compound Annual Growth Rate)}] \hfill \\
+    El \textit{CAGR} representa la tasa de crecimiento anualizada del capital, suponiendo que los beneficios se reinvierten y que el crecimiento es
+    compuesto. Es una métrica clave para comparar estrategias con diferentes duraciones, ya que resume el rendimiento total en una única tasa anual
+    equivalente. A diferencia del retorno total, el CAGR suaviza la variabilidad temporal y ofrece una visión más estable del crecimiento a largo
+    plazo.
+
+    \[\text{CAGR} = \left( \frac{\text{Equity}_{\text{final}}}{\text{Equity}_{\text{inicial}}} \right)^{\frac{1}{\text{años}}} - 1\]
+\end{description}
+
+Opcionalmente, se puede incluir un contador de rachas de victorias y derrotas para analizar la estabilidad operativa del sistema.
 
 \subsection{Simulación de Monte Carlo}
 
-Como paso siguiente al backtest pasamos a una simulación de Monte Carlo sencilla. Existen dos posibilidades, reordenar las predicciones ya hechas o
-intentar generar nuevos datos OHLCV con los que alimentar los modelos, los datos se generarian a aprtir de medias y varianzas.
+\subsection{Simulación de Monte Carlo}
 
-Para este proyecto he preferido quedarme con la versión simple porque se puede obtener una aproximación fiable de la dispersión de las métricas sin la
-necesidad de generar nuevos datos.
+Como paso posterior al backtest se realiza una simulación de Monte Carlo con el objetivo de estimar la dispersión de las métricas de rendimiento y
+evaluar la robustez del sistema frente a diferentes secuencias posibles de resultados. Existen dos enfoques principales para aplicar Monte Carlo en
+este contexto. El primero consiste en reordenar o remuestrear las predicciones ya generadas por los modelos durante el backtest. El segundo, más
+complejo, implica generar nuevos datos OHLCV sintéticos a partir de estadísticas como medias, varianzas o correlaciones, y volver a alimentar los
+modelos para obtener predicciones completamente nuevas.
 
-La versión de Monte Carlo utilizada en este proyecto se basa en un block bootstrap con solapamiento, consiste en remuestrear por bloques en vez de por
-valores sueltes para mantener parte de la relación temporal, y tiene solapamiento para garantizar que todos los posibles segmentos de la serie
-original puedan aparecer en la simulación y no solo bloques fijos de x observaciones. En mi caso uso bloques de 24 velas, aproximadamente una semana
-de predicciones.
+En este proyecto se opta por la primera aproximación, ya que permite obtener una estimación fiable de la variabilidad de las métricas sin necesidad de
+generar datos sintéticos ni volver a entrenar los modelos. Además, este método es computacionalmente más eficiente y evita introducir supuestos adicionales sobre la dinámica de precios.
 
-Aunque la estratégia es interdía, al realizar un backtest de como mucho 5 meses se ha decidido agrupar los PnL por día ya que si se hacía por semanas
-para algunos activos solo habría de 2 a 4 PnL mientras que si se agrupa por días en el peor de los casos habrían mínimo más de una decena de días con
-actividad
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con una simulación de Monte Carlo con los percentiles}
-    \label{fig_mlp_19}
-\end{figure}
-
-Valor nocional por futuro y de la cartera al completi, porcentaje máximo de riesgo por operación, hay un cambio muy grande que se explica al final
-
-Gestión de cartera más estricto porque es la intención desde el inicio, por futuros individuales menos restricciones para ver en general qué tal va la
-cosa
+La técnica utilizada es un \textit{overlapping block bootstrap}. A diferencia del bootstrap clásico, que remuestrea observaciones individuales, el
+block bootstrap remuestrea bloques completos de la serie para preservar parte de la estructura temporal, como autocorrelaciones de corto plazo o
+patrones locales. El uso de solapamiento garantiza que todos los segmentos posibles de la serie original puedan aparecer en las simulaciones, evitando
+limitarse únicamente a bloques fijos y disjuntos. En este caso la idea inicial era la de emplear bloques de 24 velas, lo que equivale aproximadamente
+a una semana de predicciones, pero al contar con solo 5 meses de datos para el backtest y teniendo filtros bastantes restrictivos se optó al final por
+agrupar por días y así pasar en muchso casos de solo tener dos semanas a tener varios días con movimientos, haciendo más efectivo la simulación.
 
 \subsection{Gestión de cartera}
 
-Una vez entrenados los modelos para cada futuro es necesario coordinarlos todos para que no hayan problemas de liquidez. Para ello en un primer
-momento decidí usar un método más rudimentario y manual para después pasar a la optimización de la cartera usando Pyomo
+Una vez entrenados los modelos para cada futuro, es necesario coordinar sus señales para evitar problemas de liquidez, sobreexposición o conflictos
+entre activos. Para ello, en esta versión del proyecto se emplea un método de gestión de cartera sencillo y manual, cuyo objetivo es garantizar que
+las operaciones se ejecutan de forma coherente con las restricciones de capital y riesgo.
 
-En el primer caso se realizan los siguientes pasos
-
-\begin{enumerate}
-    \item Realizar todas las predicciones para todos los futuros disponibles en el momento temporal
-    \item Ordenar por nivel de confianza total todos los que hayan pasado de la primera capa
-    \item Iterar sobre cada predicción por este orden e ir comprobando si cumple con los requisitos para poder operar como la disponibilidad de
-    capital suficiente y las restricciones como el Value at Risk, exposición máxima
-    \item Ejecutar las diferentes operaciones
-\end{enumerate}
-
-Una vez que tuve el sistema funcionando paso a implementar un optimizador usando Pyomo, para solvertar algunas limitaciones que tiene el método
-manual, principalmente el hecho de que una predicicón con menor confianza pueda generar mayor beneficio.
-
-\notes{Explicar qué es Pyomo}
-
-Para ello sigo los siguiente paso para una optimización de un objetivo, en este caso máximizar el \textit{Sharpe Ratio}
+El procedimiento seguido es el siguiente:
 
 \begin{enumerate}
-    \item Definir variables, conjunto de activos, 
-    \item Definir parámetros, retorno esperado, volatilidad, matriz de covarianza, capital disponible, límite de exposición, restricciones de riesgo
-    \item Definir variable de decisión, abrir o no una posición
-    \item Definir restricciones, suma de pesos, límite de exposición, restricciones de riesgo, restricciones operativas
-    \item Definir función opjetivo, Sharpe Ratio
-    \item Seleccionar solver
-    \item Interpretar solución
+    \item Se generan las predicciones para todos los futuros disponibles en el instante temporal considerado.
+    \item Se filtran aquellas predicciones que superan los umbrales definidos en las capas L1 y L2.
+    \item Las predicciones válidas se ordenan por nivel de confianza total, de mayor a menor.
+    \item Se recorre esta lista ordenada y, para cada predicción, se comprueba si cumple las restricciones operativas: disponibilidad de capital,
+    límites de exposición por activo y restricciones de riesgo.
+    \item Si la predicción cumple las condiciones, se ejecuta la operación correspondiente; en caso contrario, se descarta y se pasa a la siguiente.
 \end{enumerate}
 
-\review{Implementar la gestión de cartera}
+Este enfoque permite controlar la asignación de capital de manera simple y transparente, evitando situaciones en las que múltiples activos compitan
+por recursos limitados o generen niveles de riesgo excesivos. Aunque se trata de un método básico, resulta adecuado para una primera versión del
+sistema y permite evaluar el comportamiento conjunto de los modelos en un entorno multiactivo.
 
-\begin{table}[H]
-\caption{Tabla comparativa de gestión de riesgo}
-\label{table1mufaf_2}
-\begin{center}
-\begin{tabular}{ | c | c | c | c | c | }
-\hline
-1 & 2 & 3 & 4 & 5 \\
-\hline
-\end{tabular}
-\end{center}
-\end{table}
+En esta fase se realiza además un \textit{backtest} específico para la cartera completa. A diferencia del backtest individual por activo, cuyo
+objetivo era comprobar el funcionamiento general de los modelos y la coherencia de las señales, este backtest es más restrictivo, ya que incorpora
+todas las limitaciones reales de operativa además de márgenes iniciales y de mantenimiento que ya se tenían en cuenta antes: capital inicial de
+1\,000\,000 USD, valor nocional por contrato y para la cartera completa, porcentaje máximo de riesgo por operación y una exposición total máxima del
+25\% del capital disponible.
 
-\subsection{Análisis de resultados de optimización y Backtest de las optimizaciones y Simulación de Monte Carlo}
+Del mismo modo, se ejecuta una nueva simulación de Monte Carlo a nivel de cartera, utilizando los PnL diarios resultantes de este backtest más estricto. La metodología es la misma que en la simulación individual, pero aplicada ahora a la serie conjunta de beneficios de toda la cartera, lo que permite analizar la dispersión de las métricas bajo un escenario multiactivo y con restricciones reales de riesgo.
 
-\notes{Comparar respecto a usar todo el capital en un solo activo}
+La optimización formal de la cartera mediante técnicas matemáticas más avanzadas (por ejemplo, programación lineal o cuadrática) se considera una línea de trabajo futura, ya que no se ha implementado en esta versión del proyecto.
 
-Pasamos a realizar otro backtest, además de comparar con la operaciónde un solo activo.
+% \subsection{Análisis de resultados de optimización y Backtest de las optimizaciones y Simulación de Monte Carlo}
 
-Realizamos otra simulación de Monte Carlo
+% \notes{Comparar respecto a usar todo el capital en un solo activo}
 
-Para realizar el backtest y la simulación de Monte Carlo se ha hecho lo siguiente, se cargan todos los trades de todos los futuros usando la
-estratégia óptima obtenida anteriormente, se crea un DataFrame y se agrupan por fechas, se simula usando una cuenta con 1M para poder simular también
-los límites de margen inicial y de mantenimiento. Se ordenan las predicciones por confianza total y se comprueba que no se exceden los márgenes.
+% Pasamos a realizar otro backtest, además de comparar con la operaciónde un solo activo.
 
-% Existen dos grandes grupos de simulaciones de Monte Carlo, basados en los resultados del backtest y los que alteran los valores de entrada de los
-% modelos.
+% Realizamos otra simulación de Monte Carlo
 
-% En el primer grupo
+% Para realizar el backtest y la simulación de Monte Carlo se ha hecho lo siguiente, se cargan todos los trades de todos los futuros usando la
+% estratégia óptima obtenida anteriormente, se crea un DataFrame y se agrupan por fechas, se simula usando una cuenta con 1M para poder simular también
+% los límites de margen inicial y de mantenimiento. Se ordenan las predicciones por confianza total y se comprueba que no se exceden los márgenes.
 
-% En el segundo grupo
+% % Existen dos grandes grupos de simulaciones de Monte Carlo, basados en los resultados del backtest y los que alteran los valores de entrada de los
+% % modelos.
 
-% En mi caso veo a usar una de las variantes del primer grupo denominado Bootstraping Monte Carlo donde se permutan grupos pequeños de
-% resutlados en vez de uno solo
+% % En el primer grupo
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con Backtest}
-    \label{fig_mlp_20}
-\end{figure}
+% % En el segundo grupo
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con una simulación de Monte Carlo}
-    \label{fig_mlp_3}
-\end{figure}
+% % En mi caso veo a usar una de las variantes del primer grupo denominado Bootstraping Monte Carlo donde se permutan grupos pequeños de
+% % resutlados en vez de uno solo
 
-% Como complemento de los backtest he decidido realizar una simulación de Monte Carlo
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[scale=0.45]{./img/ml_process.pdf}
+%     \caption{Añadir img con Backtest}
+%     \label{fig_mlp_20}
+% \end{figure}
+
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[scale=0.45]{./img/ml_process.pdf}
+%     \caption{Añadir img con una simulación de Monte Carlo}
+%     \label{fig_mlp_3}
+% \end{figure}
+
+% % Como complemento de los backtest he decidido realizar una simulación de Monte Carlo
+
+% Valor nocional por futuro y de la cartera al completi, porcentaje máximo de riesgo por operación, hay un cambio muy grande que se explica al final
+
+% Gestión de cartera más estricto porque es la intención desde el inicio, por futuros individuales menos restricciones para ver en general qué tal va la
+% cosa
 
 \subsection{Manejo del riesgo}
 
-Una vez entrenados los modelos y antes de pasar a la operación es necesario definir el riesgo que uno está dispuesto a tener. La métrica más
-importante en este sentido es el \textit{Max Drawdown}, que define la mayor caida del valor neto de la cartera que estamos dispuestos a aceptar, si se
-llega a ese límite, se cierran todas las posiciones del resto de activos. En mi caso lo defino como un valor porcentual. Relacionado con esto está el
-porcentaje máximo de activo en posiciones abiertas que estoy dispuesto a mantener simultáneamente, es decir, el porcentaje máximo del equity expuesto.
-Esta métrica define el límite superior de capital que puede estar comprometido en operaciones abiertas en un momento dado, independientemente del
-apalancamiento implícito de cada instrumento \textit{Exposure Limit}.
+Una vez entrenados los modelos y antes de pasar a la operativa, es necesario definir el nivel de riesgo que se está dispuesto a asumir. La métrica
+principal utilizada en este proyecto es el \textit{Max Drawdown}. Este valor actúa como límite superior de pérdidas aceptables: si la curva de capital
+alcanza dicho umbral, se cierran todas las posiciones abiertas para evitar un deterioro mayor del capital.
 
-Por otra parte a la hora de operar hay que tener en cuenta que el spread al inicio y al final de las sesiones puede ser mayor que durante el resto del
-tiempo, por ello al tener información de las horas de mercado es posible decidir que para esos instantes temporales en vez de operar a en punto,
-decido atrasar la toma de decisiones a 15 minutos después o una vez que se supere un umbral de volumen en la apertura y adelantar 15 minutos o más si
-el volumen disminuye. El volumen puede servir en todas las horas para evitar slippage.
+Además del drawdown, se establece un porcentaje máximo del equity que puede estar simultáneamente expuesto en posiciones abiertas. Este
+\textit{Exposure Limit} define el capital máximo que puede quedar comprometido en operaciones activas, independientemente del apalancamiento implícito
+de cada instrumento. De este modo se evita que un conjunto de señales coincidentes genere un nivel de riesgo agregado excesivo.
 
-Por último como medida para estar al día con los datos de los futuros, cada semana se entrenan nuevos modelos o se afinan los modelos actuales y se
-comparan con los modelos actuales para comprobar cuales son mejores predictores de los datos de la última semana o mes. Esto se explicará en más
-detalle en la sección de orquestración.
+Otro aspecto relevante es la gestión operativa en torno a la apertura y cierre de las sesiones. Durante estos periodos el \textit{spread} suele
+ampliarse y la liquidez puede ser menor, lo que incrementa el riesgo de \textit{slippage}. Para mitigar este efecto, se incorporan reglas basadas en
+la hora y el volumen: en la apertura se retrasa la toma de decisiones hasta 15 minutos después o hasta que el volumen supere un umbral mínimo,
+mientras que en el cierre se adelanta la ejecución si el volumen comienza a disminuir. Estas reglas permiten operar únicamente en condiciones de
+mercado más estables.
 
-% \notes{Ver donde colocar mejor el último parrafo}
-
-En el caso de haber seguido con el clustering usando aprendizaje no supervisado también se podría indicar un umbral máximo de exposición por grupo,
-evitando así que en el caso de que las señales positivas pertenezcan todas a un único grupo y este haya sido predicho incorrectamente perder demasiado
-capital.
-
-También se realizan comprobación para la integridad de los datos, por ejemplo que Open y Close estén entre Low y High, que Low sea menor o igual a
-High, volumen no negativo, que no hayan duplicados.
+Finalmente, se realizan comprobaciones de integridad de los datos antes de alimentar los modelos: verificar que los precios \textit{Open} y
+\textit{Close} se encuentran entre \textit{Low} y \textit{High}, que \textit{Low} es menor o igual que \textit{High}, que el volumen no es negativo y
+que no existen duplicados. Estas validaciones son esenciales para evitar errores silenciosos que puedan afectar tanto al entrenamiento como a la
+operativa.
 
 \subsection{Operación}
 
-Una vez con todo preparado llega el momento de unir todo en un único código que será el que se conecte a la API de Interactive Brokers para realizar
-las operaciones.
+Una vez completado el entrenamiento de los modelos, la configuración del sistema y la definición de las reglas de riesgo, el último paso consiste en
+integrar todos los componentes en un único módulo operativo capaz de conectarse a la API de Interactive Brokers y ejecutar las operaciones en tiempo
+real.
 
-La operación tendrá los siguientes pasos de manera resumida
+El flujo general de la operación es el siguiente:
 
 \begin{enumerate}
     \item Conexión a la API de Interactive Brokers
     \item Lectura de los futuros sobre los que se van a operar y obtener los contratos específicos a operar
     \item Descarga de los datos históricos necesarios para realizar las predicciones iniciales
     \item Carga de la información de configuración del sistema
-    \item Carga de los modelos, los escaladores, y la configuración individual de cada futuro
-    \item Cada X minutos realizar las predicciones de cada futuro
-    \item Tener watchdog de vigilancia para control del riesgo
+    \item Carga de los modelos, los \textit{scalers}, y la configuración individual de cada futuro
+    \item Ejecución periódica de predicciones cada 4 horas
+    \item Activación de un \textit{watchdog} encargado del control de riesgo y del estado del sistema.
 \end{enumerate}
 
-Como los futuros tienen fecha de caducidad obtengo una lista para cada futuro con el número de contratos activos y los ordeno para obtener el contrato
-con mayor volumen, minimizando el spread. En el caso de estar corriendo el código durante varios días seguidos el sistema realiza esta consulta una
-vez al día. En caso de que sigan habiendo contratos abiertos existen dos posibilidad dependiendo de cómo esté configurado, en el primer caso cierra
-esos contratos directamente, en el segundo caso comprueba la diferencia de volumen y si es menor de un umbral decide seguir con el contrato anterior
-aunque las predicciones futuras ya se realizan sobre el contrato con mayor volumen, si se supera el umbral, hace como en el primer caso y cierra
-las posiciones.
+Dado que los futuros tienen fecha de vencimiento, el sistema obtiene diariamente la lista de contratos activos para cada símbolo y los ordena por
+volumen con el fin de seleccionar el contrato más líquido, minimizando así el \textit{spread}. Si existen posiciones abiertas en un contrato que deja
+de ser el más líquido, el comportamiento depende de la configuración: o bien se cierran las posiciones inmediatamente, o bien se compara la diferencia
+de volumen con un umbral. Si la diferencia es pequeña, se mantiene la posición abierta aunque las predicciones futuras se realicen sobre el nuevo
+contrato principal; si la diferencia supera el umbral, se cierran las posiciones y se migra al contrato más líquido.
 
-Existe la posibilidad de elegir el comportamiento a la hora de comprar un activo, la opción más sencilla es que si sale que hay movimiento se hace
-long o short abriendo una sola posición, podría usarse el log return o la volatilidad para decidir abrir más posiciones siempre respetando los límites
-de capital impuestos por el brocker y por uno mismo. Otra opción es a la hora de una segunda y sucesivas predicciones, como se ha mencionado antes se
-puede decidir no hacer nada en caso de seguir con la misma predicción pero también se puede decidir añadir más posiciones ya sea usando el mismo
-umbral de confianza o pidiendo un umbral mayor, y que en este caso si no supera el nuevo umbral pero si el original mantener la posición. En el caso
-de que la señal sea la opuesta que la original se cierra la posición anteriormente abierta y se abre una posición opuesta, en el caso de una
-predicción neutra se puede elegir si cerrar o dejar que siga hasta llegar a alguna de las tres barreras o a alguna predicción diferente, todo esto se
-configura en un json.
+Es posible configurar el comportamiento antes una predicción HOLD tras una predicción LONG o SHORT, existen dos configuraciones. En el primer caso, se
+decide seguir con la posición abierta, mientras que en el segundo caso, se cierra la posición. Algo parecido ocurre con predicicones sucesivas
+opuestas, se puede decidir cerrar la posición o cerrar la posición y abrir una nueva posición opuesta a la anterior.
 
-En otro json se guardan todas las operaciones que se realizan
+Toda esta lógica se controla mediante un archivo de configuración en formato JSON. Además, cada operación ejecutada se almacena en un archivo JSON
+que registra toda la información relevante de la operación.
 
-\begin{minted}[fontsize=\small]{json}
-    {
-        "id": 1248,
-        "symbol": "GC",
-        "status": "closed",
-        "side": "long",
-        "quantity": 1,
-        "timestamp_open": "2024-03-12T10:40:00Z",
-        "timestamp_close": "2024-03-13T14:00:00Z",
-        "entry_price": 2145.3,
-        "exit_price": 2162.7,
-        "stop_loss": 2138.0,
-        "take_profit": 2170.0,
-        "pnl": 174.0,
-        "pnl_pct": 0.81,
-        "return": 0.0081,
-        "max_favorable_excursion": 0.0124,
-        "max_adverse_excursion": -0.0048,
-        "model_signal": "BUY",
-        "model_confidence_l1": 0.87,
-        "model_confidence_l2": 0.72,
-        "model_reg_value": 0.0045,
-        "thresholds_used": {
-            "threshold_move": 0.55,
-            "threshold_dir": 0.60
-        },
-        "commission": 2.5,
-        "slippage": 0.0,
-        "equity_before": 10234.5,
-        "equity_after": 10408.5,
-        "bar_index_open": 58291,
-        "bar_index_close": 58347,
-        "duration_bars": 56,
-        "duration_minutes": 1344
-    }
-\end{minted}
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{0.9\linewidth}
+    \begin{minted}[fontsize=\small]{json}
+{
+    "id": 1248,
+    "symbol": "GC",
+    "status": "closed",
+    "side": "long",
+    "quantity": 1,
+    "timestamp_open": "2024-03-12T10:40:00Z",
+    "timestamp_close": "2024-03-13T14:00:00Z",
+    "entry_price": 2145.3,
+    "exit_price": 2162.7,
+    "stop_loss": 2138.0,
+    "take_profit": 2170.0,
+    "pnl": 174.0,
+    "pnl_pct": 0.81,
+    "return": 0.0081,
+    "max_favorable_excursion": 0.0124,
+    "max_adverse_excursion": -0.0048,
+    "model_signal": "BUY",
+    "model_confidence_l1": 0.87,
+    "model_confidence_l2": 0.72,
+    "model_reg_value": 0.0045,
+    "thresholds_used": {
+        "threshold_move": 0.55,
+        "threshold_dir": 0.60
+    },
+    "commission": 2.5,
+    "slippage": 0.0,
+    "equity_before": 10234.5,
+    "equity_after": 10408.5,
+    "bar_index_open": 58291,
+    "bar_index_close": 58347,
+    "duration_bars": 56,
+    "duration_minutes": 1344
+}
+    \end{minted}
+    \end{minipage}
+    \caption{Ejemplo de registro JSON generado por el sistema para cada operación ejecutada.}
+\end{figure}
+
 
 \subsection{Logging}
 
-No es una fase per se, es algo que se debe implementar en las diferentes etapas del flujo para saber qué está pasando en cada parte y para poder
-llevar un registro de todo.
+El sistema incorpora un módulo de \textit{logging} que actúa de forma transversal en todas las fases del flujo. Aunque no constituye una etapa
+independiente, es un componente esencial para garantizar la trazabilidad, la depuración y la supervisión del sistema.
 
-Por ejemplo, en la fase de entrenamiento se pueden mostrar mensajes sobre qué futuros se están entrenando y los resultados que se están obteniendo,
-lo mismo con los backtest y simulaciones.
+Durante el entrenamiento se registran mensajes informativos sobre los activos procesados, los resultados obtenidos y posibles incidencias en los
+datos. En las fases de backtesting y simulación se almacenan métricas, configuraciones utilizadas y cualquier anomalía detectada.
 
-El punto más importante donde tener logs es durante la operación, donde se muestran información como el número de posiciones abiertas, el estado de
-conexión con la API, qué contrato se ha seleccionado, si se han descargado bien los datos, si se han cargado los datos, información de las
-configuraciones cargadas, las predicciones realizadas, las órdenes de ejecución, el watchdog.
+El punto más crítico para el \textit{logging} es la fase de operación. En este contexto se registran, entre otros:
 
+\begin{itemize}
+    \item el estado de la conexión con la API,
+    \item el contrato seleccionado para cada futuro,
+    \item la correcta descarga y carga de datos,
+    \item las configuraciones activas,
+    \item las predicciones generadas,
+    \item las órdenes enviadas y su estado,
+    \item el número de posiciones abiertas,
+    \item las alertas del \textit{watchdog} de riesgo.
+\end{itemize}
+
+Este sistema de registro permite auditar cualquier operación, reproducir escenarios pasados y detectar rápidamente fallos o comportamientos
+inesperados.
 \section{Despliegue usando contenedores de Docker}
 
-Una vez que se ha desarrollado el autómata y se ha comprobado que su funcionamiento es correcto, he decidido añadir el proyecto a un contenedor de
-docker para facilitar el despliegue en otros equipos
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img con el diagrama de cómo funciona todo, los puertos usados, etc}
-    \label{fig_mlp_8}
-\end{figure}
+Una vez desarrollado el autómata y verificado su funcionamiento, se ha optado por empaquetar el proyecto dentro de un contenedor Docker con el
+objetivo de facilitar su despliegue en otros equipos y garantizar la reproducibilidad del entorno. El uso de contenedores permite aislar las
+dependencias, fijar versiones concretas de los paquetes utilizados y asegurar que el sistema se ejecuta de forma idéntica independientemente de la
+máquina anfitriona.
 
 \subsection{Configuración del contenedor principal}
 
-Por cómo he desarrollado el sistema y por velocidad todo va a estar incluido en un único contenedor.
+Dado el diseño modular del sistema y por motivos de simplicidad y velocidad, todo el flujo de operación se ejecuta dentro de un único contenedor. Este
+contenedor incluye el código desarrollado, las dependencias necesarias y la lógica de operación.
 
-No requiere demasiados cambios ya que voy a copiar los códigos desarrollados a dentro del contenedor.
+El proceso de construcción del contenedor es sencillo: se copian los módulos del proyecto al interior de la imagen y se instalan las versiones
+específicas de las librerías utilizadas. De este modo se obtiene un entorno estático y controlado, evitando incompatibilidades entre versiones o
+diferencias entre entornos locales.
 
-De este modo se logra tener un entorno estático donde se han seleccionado todas las versiones de los diferentes paquetes usados en el proyecto.
-
-Además, esto permite agrupar todas las funcionalidades que quiero implementar en un mismo lugar, en lugar de tener diferentes contenedores con
-funciones dedicadas.
-
-El contenedor ejecuta el código de operación que se encarga de todo.
-
-Solo es necesario tener P5Operation.py en el contenedor y el paquete desarrollado para poder acceder a todas las funciones necesarias. El
-entrenamiento se puede hacer directamente desde local.
+El contenedor ejecuta directamente el módulo principal de operación, encargado de la conexión con la API de Interactive Brokers, la descarga de datos,
+la generación de predicciones y la ejecución de órdenes. Para ello únicamente es necesario incluir en la imagen el archivo \texttt{P5Operation.py} y
+el paquete desarrollado, ya que el entrenamiento de los modelos se realiza desde el entorno local y no forma parte del flujo operativo en tiempo 
 
 \subsection{Bases de datos}
 
-Al tener el proyecto dentro de un contenedor veo lógico tener una base de datos con diferentes tablas para guardar diferentes métricas. 
+Al ejecutar el sistema dentro de un contenedor, resulta natural incorporar también una base de datos para almacenar de forma persistente las métricas
+generadas durante la operación, el historial de operaciones y otros datos relevantes. Aunque inicialmente se utilizaban archivos JSON para registrar
+las operaciones, el uso de una base de datos relacional permite una gestión más estructurada, consultas más eficientes y una integración más sencilla
+con herramientas de visualización.
 
-Uso una base de datos relacional para guardar métricas de la operación y el historial de operaciones, además de guardarlo como archivos json como lo
-hacia antes. En este caso uso PostgreSQL y para poder visualizar con mayor facilidad los datos uso PgAdmin aunque también se puede ver parte de la
-información desde grafana, contenedor que se explica en el siguiente apartado.
+En este proyecto se utiliza PostgreSQL como motor de base de datos, acompañado de PgAdmin para facilitar la inspección manual de los datos. Parte de
+la información también puede visualizarse desde Grafana, descrito en la siguiente sección.
 
-Como he mencionado anteriormente voy a guardar varios tipos de datos, por ello necesito diferentes tablas
-
-\notes{Detallar las tablas}
+Dado que se almacenan distintos tipos de información, métricas, señales, riesgo, operaciones, etc, se han definido varias tablas especializadas, cada
+una con su propia estructura. Estas tablas se detallan a continuación:
 
 \input{tables/sqlmetrics.tex}
 
@@ -1065,69 +970,41 @@ Como he mencionado anteriormente voy a guardar varios tipos de datos, por ello n
 
 \subsection{Visualización}
 
-Por último, una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
-directo y en diferido.
+Una vez que todo el sistema está desplegado en contenedores, se incorpora un módulo de visualización que permite monitorizar en tiempo real y en
+diferido toda la información generada durante la operación. Para ello se utilizan varios contenedores adicionales: \textit{Pushgateway},
+\textit{Prometheus}, \textit{Loki}, \textit{Promtail} y \textit{Grafana}.
 
-Para ello uso varios contenedores, pushgateway, prometheus, loki, promtail, y grafana.
-
-Prometheus y Pushgateway gestionan métricas; Promtail y Loki gestionan logs. Pushgateway y Promtail son los recolectores, mientras que Prometheus y
-Loki son los motores de almacenamiento y consulta. Por parte de SQL, Grafana tiene conexión directa con el contenedor de Docker que lo alberga.
+Prometheus y Pushgateway se encargan de la gestión y recolección de métricas, mientras que Promtail y Loki gestionan los logs del sistema. Pushgateway
+y Promtail actúan como recolectores, y Prometheus y Loki como motores de almacenamiento y consulta. Por su parte, Grafana se conecta tanto a
+Prometheus como a Loki y también directamente al contenedor de PostgreSQL, lo que permite visualizar métricas, logs y datos almacenados en la base de
+datos desde un único panel.
 
 Toda la información se consume después en un \textit{dashboard} en grafana donde se agrupa toda la información.
 
-En la visualización se observan diferentes métricas empezando por las relacionadas con el rendimiento del sistema, Equity curve, max drawdown, sharpe
-ratio, volatilidad diaria, profit factor, win rate, rendimiento por futuro. Por otra parte están
+Toda esta información se integra en un \textit{dashboard} de Grafana donde se agrupan las métricas más relevantes. Entre ellas se incluyen indicadores
+de rendimiento como la \textit{equity curve}, el \textit{max drawdown}, el \textit{Sharpe ratio}, la volatilidad diaria, el \textit{profit factor}, el
+\textit{win rate} y el rendimiento por futuro. También se muestran métricas operativas, logs del sistema y estadísticas de riesgo.
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img dashboard grafana}
-    \label{fig_mlp_1}
+    \includegraphics[width=0.75\textwidth]{./img/grafana.jpeg}
+    \caption{Ejemplo de un \textit{Dashboard} en Grafana}
+    \label{fig:grafana}
 \end{figure}
 
 \subsection{Alertas y avisos}
 
-% Por último una vez que todo funciona en contenedores he decidido añadir un sistema de visualización de toda la información que se recopila en
-% directo y en diferido
+Además de la visualización en Grafana, se incorpora un sistema de alertas para recibir notificaciones ante eventos relevantes. Estas alertas se
+definen mediante reglas en \textit{Alertmanager}, que forma parte del ecosistema de Prometheus. Cuando alguna de las reglas se activa, por ejemplo, un
+error en la conexión con la API, un aumento inesperado del riesgo, un fallo en la descarga de datos o un comportamiento anómalo del sistema,
+Alertmanager envía una notificación al dispositivo móvil del usuario.
 
-% Uso Prometheus, Grafana y Alertmanager este último conectado a otro servicio que se conecta a la API de whatsapp
+En este proyecto las alertas se envían a través de Slack, utilizando una API key configurada previamente. Esto permite recibir avisos en tiempo real
+incluso cuando el sistema está ejecutándose de forma desatendida.
 
-Además de grafana consideraba buena idea tener un sistema de alerta para recibir notificaciones de grandes eventos, estos se definer por reglas en
-Alertmanager. Cuando salta alguna de las reglas el sistema envia una notificación al móvil a través de Slack que se ha configurado usando una API key.
-
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[scale=0.45]{./img/ml_process.pdf}
-    \caption{Añadir img Alertmanager o Slack}
-    \label{fig_mlp_4}
+    \includegraphics[width=0.75\textwidth]{./img/slack.jpeg}
+    \caption{Ejemplo con alertas recibidas en Slack}
+    \label{fig:slack}
 \end{figure}
-
-\subsection{Orquestación y MLOps}
-
-\notes{Tanto Airflow como MLflow, ver si hay tiempo para implementarlos}
-
-Una vez desplegado un sistema robusto que cuenta con un autómata funcional y con alertas tanto de seguridad como para mostrar información, decido
-implementar el uso de Airflow como orquestrador.
-
-En general el uso de Airflow está muy ligado al uso de MLflow ya que será el uso prinicpal de esta herramienta por mi parte.
-
-En MLflow 
-
-Apache Airflow es un orquestador de flujos de trabajo que permite programar, monitorizar y ejecutar tareas complejas de forma secuencial o paralela
-mediante DAGs (Directed Acyclic Graphs).
-
-MLflow es una plataforma para gestionar el ciclo de vida de modelos de Machine Learning: tracking, versionado, artefactos, modelos, comparaciones y
-despliegue.
-
-Los usos principales de MLflow para mí son el registro de experimentos, que en vez de realizar los entrenamiento manualmente se realicen aquí
-permitiendo guardar toda la información de cada entrenamiento, permite comprar diferentes modelos y de este modo decidir si es hora de cambiar un
-modelo por una versión actualizada o un nuevo modelo, permite llevar un registro de los modelos que se están utilizando, de los usados o los que están
-probandose. Facilita la búsqueda de parámetros de los modelos.
-
-Airflow por su parte sirve para orquestar muchas de las funcionalidades de MLflow, orquestración del ciclo de vida del modelo, entrenamientos
-semanales, fine tuning incremental con los datos, evaluación automática de nuevos modelos, comparación contra el modelo actual, promoción del mejor
-modelo a producción, también permite automatización del bot, que despliegue el bot los sábados por la tarde y lo pare el viernes por la tarde,
-reinicios controlados.
-
-El problema principal es que Airflow es muy pesado y consume mucha RAM por lo que algunas de las funcionalidades no se pueden realizar aún así se
-podría activar manualmente los fines de semana para poder realizar las tareas relacionadas con el ciclo de vida de los modelos.

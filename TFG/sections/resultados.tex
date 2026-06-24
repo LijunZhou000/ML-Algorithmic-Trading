@@ -144,3 +144,127 @@ ZS   & 50k  & \negcolor{-2k}           &  &  \\ \hline
 \end{table}
 
 En ganancias absolutas séptimo/noveno en la competición de 58 personas.
+
+\subsection{Análisis de resultados de entrenamiento}
+
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_LSTM.png}
+    
+    (a) Classification report
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_LSTM.png}
+    
+    (b) ROC y reliability curve
+\end{minipage}
+
+\vspace{0.3cm}
+
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_LSTM.png}
+    
+    (c) MAE y regresión
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_LSTM.png}
+    
+    (d) Loss
+\end{minipage}
+
+\caption{Resultados obtenidos por el modelo LSTM.}
+\label{fig:lstm_results}
+
+\end{figure}
+
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/classification_report_GRU.png}
+    
+    (a) Classification report
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/auc_roc_reliability_GRU.png}
+    
+    (b) ROC y reliability curve
+\end{minipage}
+
+\vspace{0.3cm}
+
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/regression_GRU.png}
+    
+    (c) MAE y regresión
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../TradingBots/Models/ad/loss_GRU.png}
+    
+    (d) Loss
+\end{minipage}
+
+\caption{Resultados obtenidos por el modelo GRU.}
+\label{fig:gru_results}
+
+\end{figure}
+
+\todo{Añadir curva auc roc para las dos capas de clasificación}
+
+\todo{Añadir curva loss por fold}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con evolución de las métricas dependiendo de los umbrales}
+    \label{fig_mlp_18}
+\end{figure}
+
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=\textwidth]{./img/loss.png}
+%     \caption{Evolución de la función de pérdida en la última época de cada fold}
+%     \label{fig_mlp_21}
+% \end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[scale=0.45]{./img/ml_process.pdf}
+    \caption{Añadir img con una simulación de Monte Carlo con los percentiles}
+    \label{fig_mlp_19}
+\end{figure}
+
+\subsection{Análisis de resultados de optimización, Backtest de la cartera y Simulación de Monte Carlo}
+
+Una vez obtenidas las señales optimizadas para cada futuro, se realiza un análisis conjunto del comportamiento de la cartera completa. El objetivo es evaluar si la combinación de activos mejora el rendimiento respecto a operar únicamente un activo individual, así como estudiar la robustez del sistema bajo diferentes secuencias de resultados.
+
+Para ello se lleva a cabo un nuevo backtest a nivel de cartera. En este proceso se cargan todos los \textit{trades} generados por cada futuro utilizando la estrategia operativa óptima obtenida previamente. A continuación, se construye un único \textit{DataFrame} que agrupa todas las operaciones por fecha, lo que permite simular la evolución conjunta del capital.
+
+La simulación se realiza sobre una cuenta con un capital inicial de 1\,000\,000 USD, lo que permite incorporar restricciones realistas de riesgo y liquidez. En particular, se tienen en cuenta:
+
+\begin{itemize}
+    \item los márgenes iniciales y de mantenimiento de cada futuro,
+    \item el valor nocional de cada contrato,
+    \item el porcentaje máximo de capital que puede arriesgarse por operación,
+    \item la exposición total máxima permitida, fijada en un 25\% del capital inicial.
+\end{itemize}
+
+Las predicciones se ordenan por nivel de confianza total y se procesan secuencialmente, verificando en cada caso que la operación no exceda los límites de margen ni las restricciones de exposición. Solo las operaciones que cumplen estas condiciones se ejecutan en la simulación.
+
+Además del backtest, se realiza una simulación de Monte Carlo adicional para evaluar la dispersión de las métricas de la cartera completa. Para ello se agrupan los PnL diarios de todos los activos y se aplica un \textit{overlapping block bootstrap}, remuestreando bloques solapados de la serie diaria de beneficios. Este enfoque permite preservar parte de la estructura temporal y generar múltiples trayectorias alternativas del rendimiento de la cartera.
+
+El análisis conjunto del backtest y de la simulación de Monte Carlo permite comparar el rendimiento de la cartera diversificada frente a la operativa de un único activo, así como evaluar la estabilidad del sistema bajo diferentes escenarios de mercado.
